@@ -119,6 +119,7 @@ const COMMANDS = new Set([
   "login",
   "logout",
   "whoami",
+  "new",
   "projects",
   "explore",
   "select",
@@ -165,6 +166,10 @@ async function main() {
   }
   if (options.command === "whoami") {
     await whoami(options);
+    return;
+  }
+  if (options.command === "new") {
+    await newBuild(options);
     return;
   }
   if (options.command === "projects") {
@@ -312,6 +317,26 @@ async function whoami(options) {
     `Logged in as ${session.username || auth.username || "unknown"} ` +
       `(userId=${session.userId || auth.userId || "unknown"})`,
   );
+}
+
+async function newBuild(options) {
+  const title = await resolveNewBuildTitle(options);
+  const description = await resolveNewBuildDescription(options);
+  const auth = await ensureAuth(options);
+  await assertAuthScope({ options, auth, scope: "build:write" });
+  const createResult = await createBuild({
+    options,
+    auth,
+    title,
+    description,
+  });
+  const buildId = Number(createResult.build?.id || 0);
+  if (!buildId) {
+    throw new Error("Twinkle did not return a created Build.");
+  }
+  const result = await pullBuildFiles({ options, auth, buildId });
+  await saveSelectedBuild({ options, auth, build: result.build });
+  printNewBuildResult({ createResult, pullResult: result });
 }
 
 async function workspace(options) {
@@ -770,6 +795,19 @@ async function forkBuild({ options, auth, buildId }) {
     url: `${options.apiUrl}/build/${buildId}/fork`,
     authToken: auth.token,
     body: {},
+    timeoutMs: options.timeoutMs,
+  });
+}
+
+async function createBuild({ options, auth, title, description }) {
+  return await requestJson({
+    method: "POST",
+    url: `${options.apiUrl}/build/create`,
+    authToken: auth.token,
+    body: {
+      title,
+      ...(description ? { description } : {}),
+    },
     timeoutMs: options.timeoutMs,
   });
 }
@@ -1517,6 +1555,9 @@ function printPullResult(result) {
     }
     return;
   }
+  if (result.fileCount === 0) {
+    console.log("No project files yet. Create /index.html before your first save.");
+  }
   console.log('Codex: codex "Read AGENTS.md, then make the requested change."');
   console.log(
     'Claude Code: claude "Read CLAUDE.md, then make the requested change."',
@@ -1527,6 +1568,12 @@ function printPullResult(result) {
   } else {
     console.log("Run `lumine check` or `lumine launch --save` when ready.");
   }
+}
+
+function printNewBuildResult({ createResult, pullResult }) {
+  const build = pullResult.build || createResult.build || {};
+  console.log(`Created ${formatBuildTitle(build)}.`);
+  printPullResult(pullResult);
 }
 
 function printReferenceResult(result) {
@@ -1868,6 +1915,7 @@ function parseArgs(args) {
   const booleanFlags = new Set([
     "noOpen",
     "open",
+    "noDescription",
     "publish",
     "save",
     "noUpdateCheck",
@@ -1898,6 +1946,20 @@ function parseArgs(args) {
   return {
     command,
     target: raw.url || raw.target || positional[0] || "",
+    title:
+      String(
+        raw.title ||
+          (command === "new" ? positional.join(" ") : ""),
+      ).trim() || "",
+    description:
+      Object.prototype.hasOwnProperty.call(raw, "description")
+        ? String(raw.description || "").trim()
+        : null,
+    descriptionProvided: Object.prototype.hasOwnProperty.call(
+      raw,
+      "description",
+    ),
+    noDescription: parseBoolean(raw.noDescription, false),
     searchQuery:
       String(
         raw.search ||
@@ -1988,6 +2050,40 @@ async function resolveRequiredBuildIdOrSelected(
   throw new Error(
     "Choose a project with `lumine select`, run `lumine`, or pass a Twinkle build URL.",
   );
+}
+
+async function resolveNewBuildTitle(options) {
+  const title = String(options.title || "").trim();
+  if (title) return title;
+  if (!input.isTTY || !output.isTTY) {
+    throw new Error('Pass a title: `lumine new "My Build"` or `lumine new --title "My Build"`.');
+  }
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = await rl.question("Build title: ");
+    const normalized = String(answer || "").trim();
+    if (!normalized) {
+      throw new Error("Title is required.");
+    }
+    return normalized;
+  } finally {
+    rl.close();
+  }
+}
+
+async function resolveNewBuildDescription(options) {
+  if (options.noDescription) return null;
+  if (options.descriptionProvided) {
+    return String(options.description || "").trim() || null;
+  }
+  if (!input.isTTY || !output.isTTY) return null;
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = await rl.question("Description (optional): ");
+    return String(answer || "").trim() || null;
+  } finally {
+    rl.close();
+  }
 }
 
 function resolveRequiredBuildId(value) {
@@ -2170,6 +2266,7 @@ function printHelp() {
   lumine login
   lumine whoami
   lumine logout
+  lumine new [title]
   lumine projects
   lumine explore [search terms]
   lumine select [twinkle-build-url]
@@ -2186,6 +2283,8 @@ function printHelp() {
 Examples:
   npx @stage5/lumine@latest
   npx @stage5/lumine@latest login
+  npx @stage5/lumine@latest new "Daily Reflection App"
+  npx @stage5/lumine@latest new --title "Daily Reflection App" --description "Private journal with streaks"
   npx @stage5/lumine@latest explore --sort forks
   npx @stage5/lumine@latest reference https://www.twin-kle.com/app/123
   npx @stage5/lumine@latest fork https://www.twin-kle.com/app/123
@@ -2203,6 +2302,9 @@ Options:
   --auth-file <path>    Saved login path
   --auth-token <token>  Override saved login
   --dir <path>          Directory for pulled project files
+  --title <text>        New Build title
+  --description <text>  Optional New Build description
+  --no-description      Skip the New Build description prompt
   --summary <text>      Save summary
   --search <text>       Search public open-source Builds
   --sort <sort>         Sort open-source Builds: forks, popular, recent

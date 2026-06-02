@@ -5,6 +5,8 @@ Launch Twinkle Lumine builds from any terminal.
 ```bash
 npx @stage5/lumine@latest
 npx @stage5/lumine@latest login
+npx @stage5/lumine@latest new "Daily Reflection App"
+npx @stage5/lumine@latest new --title "Daily Reflection App" --description "Private journal with streaks"
 npx @stage5/lumine@latest projects
 npx @stage5/lumine@latest explore --sort forks
 npx @stage5/lumine@latest reference https://www.twin-kle.com/app/123
@@ -18,6 +20,13 @@ npx @stage5/lumine@latest launch https://www.twin-kle.com/app/123
 Run `lumine` with no subcommand for the easiest flow: sign in when needed,
 choose one of your owned or team projects, and pull the saved project files into
 a local folder.
+
+Use `lumine new` to create a new Twinkle Build with the same website create
+route used by Build Studio. The CLI asks for a title when one is not passed and
+asks for an optional description. It creates the Build and pulls an editable
+local workspace, but it does not auto-start a Lumine greeting or prompt run, so
+creating a project from the CLI does not spend AI battery. Add project files
+locally, including `/index.html`, then run `lumine save`.
 
 For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and
