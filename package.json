@@ -1,0 +1,21 @@
+{
+  "name": "@stage5/lumine",
+  "version": "0.1.7",
+  "description": "Command line tools for launching Lumine builds on Twinkle.",
+  "type": "module",
+  "bin": {
+    "lumine": "bin/lumine.js"
+  },
+  "files": [
+    "bin",
+    "sdk",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
