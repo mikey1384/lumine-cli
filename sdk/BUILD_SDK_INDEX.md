@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.25.1
-Updated: 2026-05-28
-Generated: 2026-05-28T10:24:18.784Z
+Version: 1.26.1
+Updated: 2026-06-08
+Generated: 2026-06-08T05:37:13.752Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -14,7 +14,7 @@ Generated: 2026-05-28T10:24:18.784Z
 - Use Twinkle.sharedDb for custom shared multi-user structured data, guestbooks, votes, and append-only run history.
 - Use Twinkle.subjects.search for in-app subject pickers. Twinkle.mount remains an optional host-provided preselection/context shortcut, not a data API.
 - Use Twinkle.aiCards for read-only existing public AI Card words and example texts, including word levels for typing games.
-- Use Twinkle.aiStories for read-only existing AI Story galleries, readers, quizzes, and remix tools.
+- Use Twinkle.aiStories for read-only existing AI Story galleries, readers, quizzes, topic chapter indexes, and remix tools.
 - Use Twinkle.grammarbles for public Grammarbles question-bank trainer apps and optional signed-in viewer attempt-history filtering.
 - Use Twinkle.chess for chess engine play and analysis; app code still owns chess rules, legal moves, board state, and UI.
 - Use Twinkle.world for realtime multiplayer rooms, avatar presence, movement, emotes, and lightweight actions; keep durable MMO state in sharedDb/privateDb.
@@ -93,10 +93,18 @@ files:read, user:read, users:read, dailyReflections:read, content:read, sharedDb
   - Returns: { subscription }
   - Subscribe the current viewer to an app-defined notification channel target.
   - Example: await Twinkle.notifications.subscribe('room.message', { targetKey: 'room:lobby', launchTarget: { view: 'room', roomId: 'lobby' } });
+- async subscribeMany([{ channelKey, targetKey, launchTarget }]) | scopes: notifications:write
+  - Returns: { subscriptions }
+  - Subscribe the current viewer to multiple app-defined notification channel targets in one request.
+  - Example: await Twinkle.notifications.subscribeMany([{ channelKey: 'room.message', targetKey: 'room:lobby', launchTarget: { view: 'room', roomId: 'lobby' } }]);
 - async unsubscribe(channelKey, { targetKey }) | scopes: notifications:write
   - Returns: { subscription: null }
   - Unsubscribe the current viewer from an app-defined notification channel target.
   - Example: await Twinkle.notifications.unsubscribe('room.message', { targetKey: 'room:lobby' });
+- async unsubscribeMany([{ channelKey, targetKey }]) | scopes: notifications:write
+  - Returns: { subscriptions: [], removed }
+  - Unsubscribe the current viewer from multiple app-defined notification channel targets in one request.
+  - Example: await Twinkle.notifications.unsubscribeMany([{ channelKey: 'room.message', targetKey: 'room:lobby' }]);
 - async notifySubscribers(channelKey, { targetKey, eventKey, label, summary, launchTarget, payload }) | scopes: notifications:emit
   - Returns: { sent }
   - Notify viewers who opted into an app-defined channel target, without requiring a sharedDb write.
@@ -216,14 +224,18 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Example: const { card } = await Twinkle.aiCards.get(cardId);
 
 ### Twinkle.aiStories
-- async list({ limit, cursor, difficulty, type, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
+- async list({ limit, cursor, order, difficulty, type, topicKey, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
   - Returns: { stories: [{ id, contentType, contentId, topic, topicKey, type, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }
-  - List completed existing user-generated AI Stories newest first for galleries, quiz apps, readers, passage typing, and image/story collections.
-  - Example: const { stories } = await Twinkle.aiStories.list({ hasImage: true, hasQuestions: true, limit: 12 });
-- async search({ query, limit, cursor, difficulty, type, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
+  - List completed existing user-generated AI Stories, optionally filtered by exact level/type/topicKey book and ordered newest or oldest first.
+  - Example: const { stories } = await Twinkle.aiStories.list({ difficulty: 1, type: 'science', topicKey: 'Astronomy', order: 'oldest', limit: 20 });
+- async chapters({ limit, cursor, difficulty, type, topicKey, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
+  - Returns: { chapters: [{ difficulty, type, topicKey, title, sampleTopic, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }
+  - List server-built AI Story books grouped by level, type, and topic, with counts and navigation metadata but no story bodies.
+  - Example: const page = await Twinkle.aiStories.chapters({ limit: 200 });
+- async search({ query, limit, cursor, order, difficulty, type, topicKey, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
   - Returns: { stories: [{ id, contentType, contentId, topic, topicKey, type, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }
-  - Search completed existing user-generated AI Stories by topic or story text for galleries, quizzes, readers, and passage typing games.
-  - Example: const { stories } = await Twinkle.aiStories.search({ query: searchText, hasQuestions: true, limit: 12 });
+  - Search completed existing user-generated AI Stories by topic or story text, optionally within an exact level/type/topicKey book.
+  - Example: const { stories } = await Twinkle.aiStories.search({ query: searchText, difficulty: 2, type: 'history', topicKey: 'Ancient Rome', order: 'oldest', limit: 12 });
 - async get(storyId) | scopes: content:read
   - Returns: { story: { id, contentType, contentId, topic, topicKey, type, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp } }
   - Fetch one completed existing AI Story by id, including story text for passage typing, media URLs, and normalized questions when available.
