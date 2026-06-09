@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.26.1
-Updated: 2026-06-08
-Generated: 2026-06-08T05:37:13.752Z
+Version: 1.26.2
+Updated: 2026-06-09
+Generated: 2026-06-09T01:00:18.637Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -17,7 +17,7 @@ Generated: 2026-06-08T05:37:13.752Z
 - Use Twinkle.aiStories for read-only existing AI Story galleries, readers, quizzes, topic chapter indexes, and remix tools.
 - Use Twinkle.grammarbles for public Grammarbles question-bank trainer apps and optional signed-in viewer attempt-history filtering.
 - Use Twinkle.chess for chess engine play and analysis; app code still owns chess rules, legal moves, board state, and UI.
-- Use Twinkle.world for realtime multiplayer rooms, avatar presence, movement, emotes, and lightweight actions; keep durable MMO state in sharedDb/privateDb.
+- Use Twinkle.world for realtime multiplayer rooms, avatar presence, movement, emotes, and lightweight actions; world sessions are disposable and durable MMO state belongs in sharedDb/privateDb.
 - Use Twinkle.characters.chat for real Zero/Ciel NPC dialogue with shared room context and AI Energy-aware thinking modes.
 - Twinkle.ai.chat history entries must use { role, content }; map local message.text fields to content before passing history.
 
@@ -316,6 +316,28 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Example: const world = await Twinkle.world.join({ roomKey: 'town-square', presence: { x: 0, y: 0, z: 0, facing: 'south' }, player: { name: avatarName } });
 world.subscribe((event) => updateRemotePlayers(event.players));
 world.updatePresence({ x, y, z, facing });
+- isRecoverableSessionError(error) | scopes: none
+  - Returns: boolean
+  - Return true when a world request error is expected to be handled by app code instead of crashing.
+  - Example: try {
+  await world.updatePresence({ x, y, z, facing });
+} catch (error) {
+  if (Twinkle.world.isSessionEndedError(error)) {
+    world = null;
+    scheduleReconnect();
+  } else if (Twinkle.world.isRecoverableSessionError(error)) {
+    // Drop this transient presence update and keep the current handle.
+  } else {
+    throw error;
+  }
+}
+- isSessionEndedError(error) | scopes: none
+  - Returns: boolean
+  - Return true when a world request error means the current session handle is stale and app code should reconnect with a fresh Twinkle.world.join call.
+  - Example: if (Twinkle.world.isSessionEndedError(error)) {
+  world = null;
+  scheduleReconnect();
+}
 - leaveAll() | scopes: none
   - Returns: void
   - Leave every active world session in the current iframe.
@@ -542,27 +564,64 @@ await Twinkle.chat.sendMessage('lobby', 'hello');
 ```
 
 ### Realtime MMO town room
-Use Twinkle.world for live avatar presence and lightweight room actions, while durable state like inventory and quests stays in sharedDb/privateDb.
+Use Twinkle.world for live avatar presence and lightweight room actions, recover stale session handles, and keep durable state like inventory and quests in sharedDb/privateDb.
 Keywords: multiplayer, mmo, town, presence, avatars, movement, three.js, realtime
 
 ```js
-const world = await Twinkle.world.join({
-  worldKey: 'town',
-  roomKey: 'square',
-  presence: { x: 0, y: 0, z: 0, facing: 'south', animation: 'idle' },
-  player: { name: avatarName }
-});
+let world = null;
+let reconnectTimer = 0;
 
-world.subscribe((event) => {
-  renderPlayers(event.players);
-  if (event.type === 'action.received' && event.action?.type === 'emote') {
-    showEmote(event.sessionId, event.action.data.emote);
+async function connectWorld() {
+  if (world) return world;
+  world = await Twinkle.world.join({
+    worldKey: 'town',
+    roomKey: 'square',
+    presence: { x: 0, y: 0, z: 0, facing: 'south', animation: 'idle' },
+    player: { name: avatarName }
+  });
+
+  world.subscribe((event) => {
+    renderPlayers(event.players);
+    if (event.type === 'session.ended') {
+      handleWorldDrop();
+    }
+    if (event.type === 'action.received' && event.action?.type === 'emote') {
+      showEmote(event.sessionId, event.action.data.emote);
+    }
+  });
+  return world;
+}
+
+function handleWorldDrop() {
+  world = null;
+  if (!reconnectTimer) {
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = 0;
+      connectWorld().catch(handleWorldDrop);
+    }, 1000);
   }
-});
+}
 
-// Throttle this in the game loop, for example 5-15 times per second.
-await world.updatePresence({ x: player.x, y: player.y, z: player.z, facing });
-await world.send('emote', { emote: 'wave' });
+async function syncPresence() {
+  try {
+    const session = await connectWorld();
+    // Throttle this in the game loop, for example 5-15 times per second.
+    await session.updatePresence({ x: player.x, y: player.y, z: player.z, facing });
+  } catch (error) {
+    if (Twinkle.world.isSessionEndedError(error)) {
+      handleWorldDrop();
+      return;
+    }
+    if (Twinkle.world.isRecoverableSessionError(error)) {
+      // Drop this transient presence update and keep the current handle.
+      return;
+    }
+    throw error;
+  }
+}
+
+await connectWorld();
+await syncPresence();
 ```
 
 ### Play chess against the computer
