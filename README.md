@@ -58,6 +58,25 @@ Reference folders are marked `readOnly` in `.twinkle/lumine-project.json`.
 Running `lumine save` from a reference folder is blocked; fork the source Build
 first if you want an editable workspace.
 
+## Inspecting Build SDK data
+
+`lumine sdk call <namespace.method> '<jsonArgs>'` calls a build's data SDK
+endpoint with your login and prints the response, so you can inspect real data
+and measure latency while building. Run `lumine sdk list` to see callable
+methods. The JSON args are sent as the request body (shapes follow
+`TWINKLE_BUILD_SDK.md`).
+
+```bash
+lumine sdk call aiStories.chapters '{"limit": 5}'
+lumine sdk call aiStories.list '{"difficulty": 1}' --repeat 5 --build 1374
+```
+
+It targets the build in the current workspace, or pass `--build <id>`. Add
+`--repeat <n>` for min/avg/max latency. Output is the raw endpoint response,
+which can differ from a method's `Twinkle.*` SDK return shape — check
+`TWINKLE_BUILD_SDK.md` for SDK return shapes. Methods that change data require
+`--allow-write`.
+
 The CLI checks npm for the latest `@stage5/lumine` version on normal commands.
 If the installed copy is outdated, it prints an update warning and records the
 version state in `.twinkle/lumine-project.json` so local agents can tell when
