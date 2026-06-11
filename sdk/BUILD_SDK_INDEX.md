@@ -2,7 +2,7 @@
 
 Version: 1.26.2
 Updated: 2026-06-09
-Generated: 2026-06-10T15:30:59.710Z
+Generated: 2026-06-11T01:12:56.894Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -375,21 +375,22 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Example: const { card } = await Twinkle.aiCards.get(cardId);
 
 ### Twinkle.aiStories
-- async list({ limit, cursor, order, difficulty, type, topicKey, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
-  - Returns: { stories: [{ id, contentType, contentId, topic, topicKey, type, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }
-  - List completed existing user-generated AI Stories, optionally filtered by exact level/type/topicKey book and ordered newest or oldest first.
+- async list({ limit, cursor, order, difficulty, type, topicKey, storyBy, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
+  - Returns: { stories: [{ id, contentType, contentId, topic, topicKey, type, storyBy, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }
+  - List completed existing user-generated AI Stories, optionally filtered by exact level/type/topicKey book, by storyBy (the generating model, i.e. the story's author), and ordered newest or oldest first.
   - Lists completed existing AI Stories newest first by default; order:'oldest' is allowed only with difficulty, type, and topicKey for chronological book pages.
   - Use difficulty with type and topicKey to load one exact AI Story book without scanning the full corpus in the iframe.
   - Filter with hasImage or hasQuestions when building visual galleries or quiz apps.
   - Example: const { stories } = await Twinkle.aiStories.list({ difficulty: 1, type: 'science', topicKey: 'Astronomy', order: 'oldest', limit: 20 });
-- async chapters({ limit, cursor, groupBy, difficulty, type, topicKey, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
-  - Returns: Default (groupBy:'topicKey'): { chapters: [{ difficulty, type, topicKey, title, sampleTopic, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }. With groupBy:'type': { books: [{ difficulty, type, title, sampleTopic, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination, filters } — one row per (level, topic) book.
-  - List the AI Story topic index. Default groups by (level, type, topicKey) for per-subtopic chapter rows. Pass groupBy:'type' for one row per (level, topic) book (a bounded set, ideal for a library landing); filter by difficulty/type to scope. Counts and navigation metadata only, no story bodies.
-  - groupBy:'type' returns one row per (level, topic) book under a books key — a bounded set, far cheaper than paging every subtopic; default groupBy:'topicKey' returns per-subtopic chapter rows under a chapters key.
-  - Returns book/chapter metadata only; use Twinkle.aiStories.list({ difficulty, type, topicKey, order:'oldest', cursor }) to load story pages inside a book.
+- async chapters({ limit, cursor, groupBy, difficulty, type, topicKey, storyBy, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
+  - Returns: Default (groupBy:'topicKey'): { chapters: [{ difficulty, type, topicKey, title, sampleTopic, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination, filters }. groupBy:'type': { books: [{ difficulty, type, title, sampleTopic, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], ... } — one row per (level, topic) book. groupBy:'author': { authors: [{ storyBy, title, bookCount, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, minDifficulty, maxDifficulty, latestStoryId, latestTimeStamp }], ... } — one row per generating model (the story's author).
+  - List the AI Story library index. Default groups by (level, type, topicKey) for per-subtopic chapter rows. groupBy:'type' returns one row per (level, topic) book; groupBy:'author' returns one row per generating model (storyBy = the author) — a tiny top-level set. Filter by storyBy to scope books/chapters/stories to one author, and by difficulty/type to scope further. Counts and navigation metadata only, no story bodies.
+  - groupBy:'author' returns one row per generating model under an authors key (the library's authors); groupBy:'type' returns (level, topic) books under a books key; default groupBy:'topicKey' returns per-subtopic chapter rows under a chapters key.
+  - storyBy is the generating model id (e.g. 'gpt-5.1', 'gpt-4o') and acts as the story's author. Pass a single id, or an array of ids to scope to a model family (e.g. fold gpt-4o snapshots into one author). Scopes books, chapters, and stories.
+  - Returns book/chapter metadata only; use Twinkle.aiStories.list({ difficulty, type, topicKey, storyBy, order:'oldest', cursor }) to load story pages inside a book.
   - Use cursor pagination for large chapter indexes instead of loading every story record.
-  - Example: const { books } = await Twinkle.aiStories.chapters({ groupBy: 'type' });
-- async search({ query, limit, cursor, order, difficulty, type, topicKey, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
+  - Example: const { authors } = await Twinkle.aiStories.chapters({ groupBy: 'author' });
+- async search({ query, limit, cursor, order, difficulty, type, topicKey, storyBy, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
   - Returns: { stories: [{ id, contentType, contentId, topic, topicKey, type, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp }], cursor?, pagination: { limit, hasMore, nextCursor }, filters }
   - Search completed existing user-generated AI Stories by topic or story text, optionally within an exact level/type/topicKey book.
   - Searches completed existing AI Stories by topic/story text.
