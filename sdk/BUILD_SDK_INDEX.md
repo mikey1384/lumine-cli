@@ -2,7 +2,7 @@
 
 Version: 1.26.2
 Updated: 2026-06-09
-Generated: 2026-06-11T01:12:56.894Z
+Generated: 2026-06-11T01:44:12.338Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -383,7 +383,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Filter with hasImage or hasQuestions when building visual galleries or quiz apps.
   - Example: const { stories } = await Twinkle.aiStories.list({ difficulty: 1, type: 'science', topicKey: 'Astronomy', order: 'oldest', limit: 20 });
 - async chapters({ limit, cursor, groupBy, difficulty, type, topicKey, storyBy, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
-  - Returns: Default (groupBy:'topicKey'): { chapters: [{ difficulty, type, topicKey, title, sampleTopic, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination, filters }. groupBy:'type': { books: [{ difficulty, type, title, sampleTopic, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], ... } — one row per (level, topic) book. groupBy:'author': { authors: [{ storyBy, title, bookCount, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, minDifficulty, maxDifficulty, latestStoryId, latestTimeStamp }], ... } — one row per generating model (the story's author).
+  - Returns: Default (groupBy:'topicKey'): { chapters: [{ difficulty, type, topicKey, title, sampleTopic, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination, filters }. groupBy:'type': { books: [{ difficulty, type, title, sampleTopic, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], ... } — one row per (level, topic) book. groupBy:'author': { authors: [{ storyBy, title, bookCount, chapterCount, storyCount, minDifficulty, maxDifficulty, latestStoryId }], ... } — one row per generating model (the story's author); an index-only landing, so it omits media counts (use a scoped books/chapters call for those).
   - List the AI Story library index. Default groups by (level, type, topicKey) for per-subtopic chapter rows. groupBy:'type' returns one row per (level, topic) book; groupBy:'author' returns one row per generating model (storyBy = the author) — a tiny top-level set. Filter by storyBy to scope books/chapters/stories to one author, and by difficulty/type to scope further. Counts and navigation metadata only, no story bodies.
   - groupBy:'author' returns one row per generating model under an authors key (the library's authors); groupBy:'type' returns (level, topic) books under a books key; default groupBy:'topicKey' returns per-subtopic chapter rows under a chapters key.
   - storyBy is the generating model id (e.g. 'gpt-5.1', 'gpt-4o') and acts as the story's author. Pass a single id, or an array of ids to scope to a model family (e.g. fold gpt-4o snapshots into one author). Scopes books, chapters, and stories.

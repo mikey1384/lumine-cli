@@ -96,7 +96,7 @@ lumine save --summary "Describe the change"
 - Use local project files with relative or root-local imports only. Do not add package imports, CDN scripts, external network calls, or app-local /api/* routes.
 - Build apps run in sandboxed iframes without allow-forms. Do not use <form> elements, native form submission, requestSubmit(), or browser form navigation. Build input flows with JavaScript-handled inputs and buttons instead.
 - For canvas, WebGL, Three.js, fullscreen, or game builds, use Twinkle.preview for layout. Do not size roots from 100vh, 100vw, 100dvh, 100dvw, window.innerWidth, window.innerHeight, visualViewport, or document viewport dimensions.
-- For Three.js, use import * as THREE from '/build/vendor/three/0.160.0/three.module.min.js';.
+- For Three.js, use import * as THREE from '/build/vendor/three/0.184.0/three.module.min.js';. Addons (OrbitControls, GLTFLoader, ...) live under /build/vendor/three/0.184.0/addons/, e.g. import { OrbitControls } from '/build/vendor/three/0.184.0/addons/controls/OrbitControls.js';. Builds saved with the older /build/vendor/three/0.160.0/ path keep working.
 - Do not invent or guess Twinkle.* SDK method names. Use ${SDK_REFERENCE_FILE} as the local SDK reference and prefer Twinkle.capabilities checks for gated features.
 
 ## Completion Report
