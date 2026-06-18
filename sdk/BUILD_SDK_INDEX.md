@@ -2,16 +2,17 @@
 
 Version: 1.26.2
 Updated: 2026-06-09
-Generated: 2026-06-11T01:44:12.338Z
+Generated: 2026-06-18T12:26:29.648Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
 - Widgets call SDK methods; the parent proxies to the API.
 - Data API methods require scoped tokens handled by the parent; some namespaces include write methods.
-- Use Twinkle.privateDb as the default private per-user persistence layer for preferences, drafts, settings, and small JSON state.
+- Use Twinkle.privateDb for LOW-frequency durable private per-user state such as preferences, drafts, settings, inventory checkpoints, and saved progress. It is NOT for high-frequency or per-frame/per-tick writes; the server rate-limits writes and returns 429.
+- Match storage to update frequency: privateDb and sharedDb are for LOW-frequency durable state that changes on a user action. NEVER write per-frame/per-tick state to them (camera or cursor position, animation, live movement, presence, autosave every frame/tick). Keep live state in client memory, broadcast realtime/presence via Twinkle.world, and flush only occasional durable snapshots (on an interval or on exit, never per frame). The server enforces per-key write rate limits and returns 429 on excess; never retry-loop a 429.
 - Use Twinkle.userDb only for advanced private SQLite needs such as tables, indexes, many rows, filtered queries, or aggregates.
 - Use Twinkle.leaderboards for public Build scoreboards. Signed-in viewers are ranked by Twinkle username; guests can submit with a display name.
-- Use Twinkle.sharedDb for custom shared multi-user structured data, guestbooks, votes, and append-only run history.
+- Use Twinkle.sharedDb for LOW-frequency durable shared multi-user state such as guestbooks, votes, room settings, submitted records, and append-only run history. It is NOT for high-frequency or per-frame/per-tick writes; keep live/realtime state in Twinkle.world or client memory. The server rate-limits writes and returns 429.
 - Use Twinkle.subjects.search for in-app subject pickers. Twinkle.mount remains an optional host-provided preselection/context shortcut, not a data API.
 - Use Twinkle.aiCards for read-only existing public AI Card words and example texts, including word levels for typing games.
 - Use Twinkle.aiStories for read-only existing AI Story galleries, readers, quizzes, topic chapter indexes, and remix tools.
@@ -567,7 +568,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Returns: { sessionId, session, room, players, snapshot, subscribe(listener), updatePresence(patch), send(actionOrType, data), leave() }
   - Join a realtime Build world room and receive a snapshot plus a session handle for presence updates, actions, and room events.
   - Always available in the build iframe.
-  - World state is ephemeral and heartbeat/TTL based. Use sharedDb/privateDb for durable inventory, XP, quests, ownership, and saved progress.
+  - World state is ephemeral and heartbeat/TTL based. Use sharedDb/privateDb for durable inventory, XP, quests, ownership, and saved progress — but write those LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick); per-frame/live state stays in world presence or client memory. The server rate-limits sharedDb/privateDb writes and returns 429.
   - Events are room-scoped and include serverTime, seq, eventId, schemaVersion, sessionId, player, and room metadata.
   - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles and reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
   - Use updatePresence for live avatar snapshots and send for lightweight actions such as emotes, interactions, and chat bubbles.
@@ -581,7 +582,7 @@ world.updatePresence({ x, y, z, facing });
   - Return true when a world request error is expected to be handled by app code instead of crashing.
   - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, preview-updating, and timed-out world session requests.
   - Only session-ended errors prove that the current handle should be discarded. Timed-out or preview-updating presence requests can be dropped without reconnecting.
-  - For durable game state, write through sharedDb/privateDb instead of relying on world presence.
+  - For durable game state, write through sharedDb/privateDb instead of relying on world presence — but LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick).
   - Example: try {
   await world.updatePresence({ x, y, z, facing });
 } catch (error) {
@@ -852,7 +853,7 @@ await Twinkle.chat.sendMessage('lobby', 'hello');
 ```
 
 ### Realtime MMO town room
-Use Twinkle.world for live avatar presence and lightweight room actions, recover stale session handles, and keep durable state like inventory and quests in sharedDb/privateDb.
+Use Twinkle.world for live avatar presence and lightweight room actions, recover stale session handles, and keep durable state like inventory and quests in sharedDb/privateDb — written low-frequency (never per frame/tick).
 Keywords: multiplayer, mmo, town, presence, avatars, movement, three.js, realtime
 
 ```js
