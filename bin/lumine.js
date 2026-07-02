@@ -33,6 +33,8 @@ const LUMINE_AGENT_INSTRUCTIONS_MARKER =
 const LUMINE_SDK_REFERENCE_MARKER = "<!-- Lumine CLI SDK Reference -->";
 const LUMINE_REFERENCE_INSTRUCTIONS_MARKER =
   "<!-- Lumine CLI Reference Instructions -->";
+const LUMINE_MAIN_CHECKOUT_INSTRUCTIONS_MARKER =
+  "<!-- Lumine CLI Main Checkout Instructions -->";
 const BUNDLED_SDK_REFERENCE_URL = new URL(
   "../sdk/BUILD_SDK_INDEX.md",
   import.meta.url,
@@ -70,6 +72,7 @@ Lumine CLI as the source of truth for saving this workspace back to Twinkle.
 - Read ${SDK_REFERENCE_FILE} before adding, removing, or changing any Twinkle.* SDK calls.
 - If build.canWrite is false, do not save changes.
 - If build.canPublish is false or contributionRootBuildId is set, this checkout is a contribution branch. Save only to this branch and do not run lumine launch or lumine save --publish.
+- On a contribution branch, main may have moved since the branch was created. Before starting large edits, run \`lumine update-from-main\` to three-way-merge main into the branch (resolve any <<<<<<< conflict markers it reports, then save). \`lumine pull --main\` gives a read-only checkout of main for comparison (created alongside your workspace, never inside it).
 - Do not edit another local checkout to bypass branch rules.
 
 ## Workflow
@@ -100,6 +103,14 @@ lumine save --summary "Describe the change"
 - Do not invent or guess Twinkle.* SDK method names. Use ${SDK_REFERENCE_FILE} as the local SDK reference and prefer Twinkle.capabilities checks for gated features.
 - Match storage to update frequency. Twinkle.privateDb and Twinkle.sharedDb are for LOW-frequency durable state only — things that change on a user action (settings, inventory checkpoints, completed quests, saved progress; comments, votes, room settings, submitted records). NEVER write high-frequency or per-frame/per-tick state to them (camera or cursor position, animation state, live movement, presence, autosave every frame/tick). Keep live state in client memory, broadcast realtime/presence via Twinkle.world, and for durable per-user state flush an occasional snapshot on an interval or on exit (never per frame) — e.g. the viewer/user DB or a single latest-snapshot key. The server rate-limits these writes per key and returns 429 on excess; never retry-loop a 429.
 
+## Local Testing (Playwright / browser probes)
+
+- Serve the workspace with a tiny local HTTP server and drive it with Playwright. NEVER copy probe/vendor files into the workspace dir — lumine save uploads everything here (and binary files fail validation). Build a sibling probe dir that symlinks the workspace files instead.
+- Vendored imports like /build/vendor/three/0.184.0/... are absolute paths: mirror that directory under your probe dir's root and fetch the files from the LIVE SITE (e.g. https://www.twin-kle.com/build/vendor/three/0.184.0/three.webgpu.min.js). Do NOT use npm/CDN copies — the platform's vendored builds have rewritten import specifiers (npm three.tsl.min.js still imports bare "three/webgpu" and breaks the module graph).
+- The three WebGPU renderer falls back to WebGL2 in headless Chromium automatically. Headless software rendering runs at ~2-5fps, so anything time-based (walking a character, timers) takes ~10-20x longer than real time — loop with generous waits instead of fixed short sleeps, and bump navigation timeouts.
+- To inspect module-scope game state, append debug getters when SERVING main.js (e.g. body += "window.__dbg = () => ({...})") rather than editing workspace files.
+- SDK calls are absent when serving locally; well-written builds optional-chain window.Twinkle and fall back to localStorage. Seed localStorage in the probe to fake saves.
+
 ## Completion Report
 
 Report the changed files, any SDK methods used, the lumine save result, the
@@ -120,7 +131,32 @@ the workspace to save.
 - To start from this Build, run lumine fork with the source build id and edit the forked workspace.
 - Do not edit another local checkout to bypass reference read-only semantics.
 `;
+const LUMINE_MAIN_CHECKOUT_INSTRUCTIONS = `${LUMINE_MAIN_CHECKOUT_INSTRUCTIONS_MARKER}
+# Lumine Main Checkout (Read-Only)
+
+This directory is a read-only snapshot of a team project's MAIN workspace,
+pulled with \`lumine pull --main\`. Use it to inspect what main currently looks
+like; it is not the workspace to edit or save.
+
+## Source Of Truth
+
+- Read .twinkle/lumine-project.json before using these files.
+- metadata.mainCheckout is true here: do not run lumine save from this directory.
+- Make changes in your contribution-branch workspace (lumine pull <buildId>).
+- Bring main's latest changes into your branch with lumine update-from-main.
+- Do not edit another local checkout to bypass read-only semantics.
+`;
 const AGENT_INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"];
+// Commands allowed to resolve a read-only `pull --main` checkout's build id.
+// Everything else (launch/save/merge/…) mutates and must not run from one.
+const MAIN_CHECKOUT_READONLY_COMMANDS = new Set([
+  "pull",
+  "check",
+  "diff",
+  "sdk",
+  "select",
+  "workspace",
+]);
 const COMMANDS = new Set([
   "workspace",
   "login",
@@ -136,6 +172,7 @@ const COMMANDS = new Set([
   "diff",
   "merge",
   "replace-main",
+  "update-from-main",
   "save",
   "push",
   "check",
@@ -214,6 +251,10 @@ async function main() {
   }
   if (options.command === "replace-main") {
     await replaceMainWithBranch(options);
+    return;
+  }
+  if (options.command === "update-from-main") {
+    await updateBranchFromMain(options);
     return;
   }
   if (options.command === "save" || options.command === "push") {
@@ -408,12 +449,23 @@ async function selectProject(options) {
 
 async function pull(options) {
   const auth = await resolveAuth(options);
-  const requestedBuildId = await resolveRequiredBuildIdOrSelected(options, auth);
+  const localProject = await findLocalProjectMetadata(
+    path.resolve(options.dir || process.cwd()),
+  );
+  const requestedBuildId = await resolveRequiredBuildIdOrSelected(
+    options,
+    auth,
+    options.pullMain ? { localProject } : {},
+  );
   const selectedBuild = await loadBuildMetadata({
     options,
     auth,
     buildId: requestedBuildId,
   });
+  if (options.pullMain) {
+    await pullMainBuildFiles({ options, auth, build: selectedBuild });
+    return;
+  }
   const build = await resolveEditableWorkspaceBuild({
     options,
     auth,
@@ -422,6 +474,65 @@ async function pull(options) {
   const result = await pullBuildFiles({ options, auth, buildId: build.id });
   await saveSelectedBuild({ options, auth, build: result.build });
   printPullResult(result);
+}
+
+// Sync a contribution branch with its team project's main: the server runs a
+// three-way merge (auto-merging where it can, writing git-style conflict
+// markers where it cannot) and saves the result to the branch. When run inside
+// the branch's workspace, local edits are sent along as the branch's pending
+// state and the merged files are written back to disk.
+async function updateBranchFromMain(options) {
+  const auth = await resolveAuth(options);
+  await assertAuthScope({ options, auth, scope: "build:write" });
+  const localProject = await findLocalProjectMetadata(
+    path.resolve(options.dir || process.cwd()),
+  );
+  const buildId = await resolveRequiredBuildIdOrSelected(options, auth, {
+    localProject,
+  });
+  const build = await loadBuildMetadata({ options, auth, buildId });
+  const rootBuildId = Number(build?.contributionRootBuildId || 0);
+  const contributionBuildId = Number(build?.id || 0);
+  if (!rootBuildId || !contributionBuildId) {
+    throw new Error(
+      "update-from-main only applies to contribution branches of a team project. Pull the team project first so your branch workspace exists.",
+    );
+  }
+  let dir = null;
+  let projectFiles = null;
+  if (Number(localProject?.metadata?.buildId || 0) === contributionBuildId) {
+    dir = resolveProjectDirForSave({ options, localProject });
+    projectFiles = await collectProjectFiles(dir);
+  }
+  const result = await requestJson({
+    method: "POST",
+    url: `${options.apiUrl}/build/${rootBuildId}/contributions/${contributionBuildId}/update-from-main`,
+    authToken: auth.token,
+    body: projectFiles ? { projectFiles } : {},
+    timeoutMs: options.timeoutMs,
+  });
+  const mergedFiles = Array.isArray(result.projectFiles)
+    ? result.projectFiles
+    : [];
+  if (dir && mergedFiles.length > 0) {
+    await writeProjectFiles({ dir, files: mergedFiles });
+    await removeLocalProjectFilesNotIn({ dir, files: mergedFiles });
+    const refreshed = await loadBuildMetadata({
+      options,
+      auth,
+      buildId: contributionBuildId,
+    }).catch(() => null);
+    if (refreshed) {
+      await writeProjectMetadata({
+        dir,
+        options,
+        build: refreshed,
+        manifest: localProject?.metadata?.manifest || null,
+        pulledAt: new Date().toISOString(),
+      });
+    }
+  }
+  printUpdateFromMainResult({ result, build, dir, mergedFiles });
 }
 
 async function reference(options) {
@@ -1579,33 +1690,95 @@ async function pullReferenceFiles({ options, auth, buildId }) {
   };
 }
 
-async function writeAgentInstructions({ dir }) {
-  for (const fileName of AGENT_INSTRUCTION_FILES) {
-    const filePath = path.join(dir, fileName);
-    try {
-      const existing = await fs.readFile(filePath, "utf8");
-      if (!existing.includes(LUMINE_AGENT_INSTRUCTIONS_MARKER)) {
-        continue;
-      }
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
-    await fs.writeFile(filePath, LUMINE_AGENT_INSTRUCTIONS, "utf8");
+// Read-only checkout of a team project's MAIN workspace. Collaborators edit on
+// their contribution branch; this exists so branch work can consult what main
+// currently looks like without the pull auto-redirecting to the branch.
+async function pullMainBuildFiles({ options, auth, build }) {
+  const rootBuildId =
+    Number(build?.contributionRootBuildId || 0) || Number(build?.id || 0);
+  if (!rootBuildId) {
+    throw new Error("Could not resolve the team project for --main.");
   }
+  const result = await loadBuildFiles({
+    options,
+    auth,
+    buildId: rootBuildId,
+    includeContent: true,
+  });
+  const rootBuild = result.build || { id: rootBuildId, title: `Build ${rootBuildId}` };
+  const files = Array.isArray(result.projectFiles) ? result.projectFiles : [];
+  // Never nest a main checkout inside another Lumine workspace (a later save
+  // there would upload it as project files) — default to a sibling instead.
+  // Running from a main checkout of this same build refreshes it in place,
+  // and the refresh prunes files main has deleted (a snapshot must not lie).
+  const enclosing = options.dir
+    ? null
+    : await findLocalProjectMetadata(process.cwd());
+  const enclosingIsThisMain =
+    enclosing?.metadata?.mainCheckout === true &&
+    Number(enclosing.metadata.buildId || 0) === rootBuildId;
+  const dir = path.resolve(
+    options.dir ||
+      (enclosingIsThisMain
+        ? enclosing.rootDir
+        : enclosing
+          ? path.join(path.dirname(enclosing.rootDir), defaultMainCheckoutDir(rootBuild))
+          : defaultMainCheckoutDir(rootBuild)),
+  );
+  await writeProjectFiles({ dir, files });
+  if (files.some((file) => isIndexHtmlPath(String(file.path)))) {
+    await removeLocalProjectFilesNotIn({ dir, files });
+  }
+  await writeInstructionFiles({
+    dir,
+    marker: LUMINE_MAIN_CHECKOUT_INSTRUCTIONS_MARKER,
+    content: LUMINE_MAIN_CHECKOUT_INSTRUCTIONS,
+  });
+  await writeSdkReference({ dir });
+  await writeMainCheckoutMetadata({
+    dir,
+    options,
+    build: rootBuild,
+    manifest: result.projectManifest || null,
+    pulledAt: new Date().toISOString(),
+  });
+  console.log(`Pulled main for ${formatBuildTitle(rootBuild)} (read-only).`);
+  console.log(`Pulled ${files.length} file${files.length === 1 ? "" : "s"} to ${dir}`);
+  console.log(
+    `Edits belong on your branch: \`lumine pull ${rootBuildId}\`, and \`lumine update-from-main\` brings main's changes into it.`,
+  );
+}
+
+async function writeAgentInstructions({ dir }) {
+  await writeInstructionFiles({
+    dir,
+    marker: LUMINE_AGENT_INSTRUCTIONS_MARKER,
+    content: LUMINE_AGENT_INSTRUCTIONS,
+  });
 }
 
 async function writeReferenceInstructions({ dir }) {
+  await writeInstructionFiles({
+    dir,
+    marker: LUMINE_REFERENCE_INSTRUCTIONS_MARKER,
+    content: LUMINE_REFERENCE_INSTRUCTIONS,
+  });
+}
+
+// Write AGENTS.md/CLAUDE.md, but never clobber a file the user customized:
+// only (re)write when the file is absent or still carries our marker.
+async function writeInstructionFiles({ dir, marker, content }) {
   for (const fileName of AGENT_INSTRUCTION_FILES) {
     const filePath = path.join(dir, fileName);
     try {
       const existing = await fs.readFile(filePath, "utf8");
-      if (!existing.includes(LUMINE_REFERENCE_INSTRUCTIONS_MARKER)) {
+      if (!existing.includes(marker)) {
         continue;
       }
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    await fs.writeFile(filePath, LUMINE_REFERENCE_INSTRUCTIONS, "utf8");
+    await fs.writeFile(filePath, content, "utf8");
   }
 }
 
@@ -1660,6 +1833,14 @@ async function collectProjectFilesFromDir({ root, dir, files }) {
     if (entry.isFile() && EXCLUDED_UPLOAD_FILES.has(entry.name)) continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      // A nested Lumine checkout (its own .twinkle metadata) is another
+      // project that happens to sit here — never upload it as project files.
+      if (await isNestedLumineCheckout(fullPath)) {
+        console.error(
+          `lumine: skipping nested Lumine checkout ${path.relative(root, fullPath)}/ (not part of this project)`,
+        );
+        continue;
+      }
       await collectProjectFilesFromDir({ root, dir: fullPath, files });
       continue;
     }
@@ -1678,6 +1859,15 @@ async function collectProjectFilesFromDir({ root, dir, files }) {
       path: localFilePathToProjectPath({ root, filePath: fullPath }),
       content: buffer.toString("utf8"),
     });
+  }
+}
+
+async function isNestedLumineCheckout(dir) {
+  try {
+    await fs.access(path.join(dir, PROJECT_METADATA_DIR, PROJECT_METADATA_FILE));
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -1761,6 +1951,19 @@ async function writeProjectFiles({ dir, files }) {
     });
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, String(file.content || ""), "utf8");
+  }
+}
+
+// After update-from-main, files that main deleted must also leave the local
+// workspace — otherwise the next save would resurrect them on the branch.
+async function removeLocalProjectFilesNotIn({ dir, files }) {
+  const keep = new Set(files.map((file) => String(file.path)));
+  const localFiles = await collectProjectFiles(dir);
+  for (const file of localFiles) {
+    if (keep.has(file.path)) continue;
+    await fs.unlink(
+      resolveLocalProjectFilePath({ rootDir: dir, projectPath: file.path }),
+    );
   }
 }
 
@@ -1864,6 +2067,50 @@ async function writeReferenceMetadata({
   );
 }
 
+// Metadata for a read-only `pull --main` checkout: canWrite is forced false
+// (the files endpoint reports token scope, not role) and mainCheckout marks it
+// so save can explain where edits belong.
+async function writeMainCheckoutMetadata({
+  dir,
+  options,
+  build,
+  manifest,
+  pulledAt,
+}) {
+  const metadataDir = path.join(dir, PROJECT_METADATA_DIR);
+  await fs.mkdir(metadataDir, { recursive: true });
+  const rootBuildId = Number(build?.id || 0) || null;
+  await fs.writeFile(
+    path.join(metadataDir, PROJECT_METADATA_FILE),
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        buildId: rootBuildId,
+        readOnly: true,
+        mainCheckout: true,
+        build: {
+          id: rootBuildId,
+          title: build?.title || (rootBuildId ? `Build ${rootBuildId}` : ""),
+          role: build?.role || "collaborator",
+          ownerUsername: build?.ownerUsername || null,
+          contributionStatus: "none",
+          contributionRootBuildId: null,
+          canWrite: false,
+          canPublish: false,
+        },
+        apiUrl: options.apiUrl,
+        siteUrl: options.siteUrl,
+        lumineCli: serializeLumineCliMetadata(options),
+        manifest,
+        pulledAt,
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
+
 async function findLocalProjectMetadata(startDir) {
   let current = path.resolve(startDir || process.cwd());
   while (true) {
@@ -1893,6 +2140,13 @@ function resolveProjectDirForSave({ options, localProject }) {
 function assertLocalProjectCanBeSaved(localProject) {
   const metadata = localProject?.metadata;
   if (!metadata) return;
+  if (metadata.mainCheckout === true) {
+    const rootBuildId =
+      Number(metadata.buildId || 0) || Number(metadata.build?.id || 0) || 0;
+    throw new Error(
+      `This is a read-only checkout of main${rootBuildId ? ` for Build ${rootBuildId}` : ""}. Make edits in your branch workspace (\`lumine pull${rootBuildId ? ` ${rootBuildId}` : ""}\`), and run \`lumine update-from-main\` there to bring main's changes into it.`,
+    );
+  }
   if (isReadOnlyReferenceMetadata(metadata)) {
     const sourceBuildId =
       Number(metadata.reference?.sourceBuildId || 0) ||
@@ -2156,6 +2410,40 @@ function printContributionDiff({ result, build }) {
   for (const file of files) {
     const mergeStatus = file.mergeStatus ? ` (${file.mergeStatus})` : "";
     console.log(`- ${file.status || "changed"} ${file.path}${mergeStatus}`);
+  }
+}
+
+function printUpdateFromMainResult({ result, build, dir, mergedFiles }) {
+  const branchNumber = Number(build?.contributionBranchNumber || 0) || 0;
+  const branchLabel = branchNumber
+    ? `branch ${branchNumber}`
+    : `branch #${build?.id}`;
+  const autoMerged = Array.isArray(result.autoMergedPaths)
+    ? result.autoMergedPaths
+    : [];
+  const conflicts = Array.isArray(result.conflicts) ? result.conflicts : [];
+  console.log(
+    `Updated ${branchLabel} from main (${mergedFiles.length} file${mergedFiles.length === 1 ? "" : "s"}).`,
+  );
+  if (autoMerged.length > 0) {
+    console.log(`Auto-merged: ${autoMerged.join(", ")}`);
+  }
+  if (conflicts.length > 0) {
+    const conflictPaths = conflicts.map((conflict) =>
+      typeof conflict === "string" ? conflict : conflict?.path || "unknown",
+    );
+    console.log(`CONFLICTS (markers written): ${conflictPaths.join(", ")}`);
+    console.log(
+      dir
+        ? "Resolve the <<<<<<< / >>>>>>> markers in the files above, then run `lumine save`."
+        : "Pull the branch, resolve the <<<<<<< / >>>>>>> markers, then run `lumine save`.",
+    );
+  } else if (!dir) {
+    console.log(
+      "The branch was updated on Twinkle. Run `lumine pull` to refresh your local workspace.",
+    );
+  } else {
+    console.log(`Local workspace updated: ${dir}`);
   }
 }
 
@@ -2430,6 +2718,7 @@ function parseArgs(args) {
     "save",
     "noUpdateCheck",
     "allowWrite",
+    "main",
   ]);
 
   for (let i = 0; i < rest.length; i += 1) {
@@ -2508,6 +2797,7 @@ function parseArgs(args) {
       null,
     clientName: String(raw.clientName || "Lumine CLI").slice(0, 120),
     dir: raw.dir ? String(raw.dir) : "",
+    pullMain: parseBoolean(raw.main, false),
     summary: raw.summary ? String(raw.summary) : "",
     publish: parseBoolean(raw.publish, false),
     saveFirst: parseBoolean(raw.save, false),
@@ -2550,6 +2840,22 @@ async function resolveRequiredBuildIdOrSelected(
     (await findLocalProjectMetadata(
       path.resolve(options.dir || process.cwd()),
     ));
+  // A `pull --main` checkout is read-only but still knows its root build id.
+  // Read-only commands run from it (check, diff, a refreshing `pull --main`)
+  // resolve that id instead of bouncing off the reference/fork error — but
+  // mutating commands (launch would PUBLISH main, save, merge, …) stay blocked
+  // with main-checkout-specific guidance.
+  if (resolvedLocalProject?.metadata?.mainCheckout === true) {
+    const mainBuildId =
+      Number(resolvedLocalProject.metadata.buildId || 0) ||
+      Number(resolvedLocalProject.metadata.build?.id || 0);
+    if (!MAIN_CHECKOUT_READONLY_COMMANDS.has(options.command)) {
+      throw new Error(
+        `This is a read-only checkout of main${mainBuildId ? ` for Build ${mainBuildId}` : ""}; \`lumine ${options.command}\` isn't available here. Run it from your branch workspace or the canonical checkout, or pass an explicit Build URL.`,
+      );
+    }
+    if (mainBuildId > 0) return mainBuildId;
+  }
   if (
     resolvedLocalProject?.metadata &&
     isReadOnlyReferenceMetadata(resolvedLocalProject.metadata)
@@ -2768,6 +3074,12 @@ function defaultReferenceDir(build) {
   return `twinkle-reference-${titleSlug || "build"}-${buildId}`;
 }
 
+function defaultMainCheckoutDir(build) {
+  const titleSlug = slugify(build?.title || "");
+  const buildId = Number(build?.id || 0) || "build";
+  return `twinkle-main-${titleSlug || "build"}-${buildId}`;
+}
+
 function slugify(value) {
   return String(value || "")
     .toLowerCase()
@@ -2791,11 +3103,13 @@ function printHelp() {
   lumine explore [search terms]
   lumine select [twinkle-build-url]
   lumine pull [twinkle-build-url]
+  lumine pull [twinkle-build-url] --main
   lumine reference <twinkle-build-url>
   lumine fork <twinkle-build-url>
   lumine diff <twinkle-branch-url>
   lumine merge <twinkle-branch-url>
   lumine replace-main <twinkle-branch-url>
+  lumine update-from-main [twinkle-branch-url]
   lumine save
   lumine check [twinkle-build-url]
   lumine launch [twinkle-build-url]
@@ -2812,6 +3126,8 @@ Examples:
   npx @stage5/lumine@latest fork https://www.twin-kle.com/app/123
   npx @stage5/lumine@latest diff https://www.twin-kle.com/build/884/4
   npx @stage5/lumine@latest merge https://www.twin-kle.com/build/884/4
+  npx @stage5/lumine@latest pull 884 --main
+  npx @stage5/lumine@latest update-from-main
   npx @stage5/lumine@latest pull
   npx @stage5/lumine@latest save
   npx @stage5/lumine@latest save --publish
@@ -2827,6 +3143,7 @@ Options:
   --auth-file <path>    Saved login path
   --auth-token <token>  Override saved login
   --dir <path>          Directory for pulled project files
+  --main                With pull: read-only checkout of the team project's main
   --title <text>        New Build title
   --description <text>  Optional New Build description
   --no-description      Skip the New Build description prompt
