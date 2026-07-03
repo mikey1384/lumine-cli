@@ -8,9 +8,13 @@
   },
   "files": [
     "bin",
+    "lib",
     "sdk",
     "README.md"
   ],
+  "scripts": {
+    "test": "node --test"
+  },
   "publishConfig": {
     "access": "public"
   },

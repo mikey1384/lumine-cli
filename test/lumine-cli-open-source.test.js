@@ -9,11 +9,18 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const cliSource = fs.readFileSync(
-  path.resolve(__dirname, "../bin/lumine.js"),
-  "utf8",
-);
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
+const libDir = path.resolve(__dirname, "../lib");
+const cliSource = [
+  cliPath,
+  ...fs
+    .readdirSync(libDir)
+    .filter((name) => name.endsWith(".js"))
+    .sort()
+    .map((name) => path.join(libDir, name)),
+]
+  .map((filePath) => fs.readFileSync(filePath, "utf8"))
+  .join("\n");
 
 test("CLI exposes open-source explore, reference, and fork commands", () => {
   assert.match(cliSource, /"explore"/);
