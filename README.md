@@ -77,6 +77,32 @@ which can differ from a method's `Twinkle.*` SDK return shape — check
 `TWINKLE_BUILD_SDK.md` for SDK return shapes. Methods that change data require
 `--allow-write`.
 
+## Assets and AI image generation
+
+Binary media never lives in the workspace — assets are uploaded to Twinkle and
+referenced from code by URL. `lumine assets upload <file...>` uploads images or
+audio; `lumine assets list` prints your uploads and refreshes
+`.twinkle/assets.json`.
+
+`lumine assets generate "<prompt>" --model <gpt-image-2|nano-banana>` creates
+an AI-generated image asset instead of uploading one. `--model` is required
+(gpt-image-2 = best quality, slower, pricier; nano-banana = Gemini, faster,
+cheaper). Generation spends your Twinkle AI Battery, so the CLI shows the
+estimated cost and asks for confirmation first — non-interactive runs must pass
+`--yes` to consent. `--quality low|medium|high` applies to gpt-image-2 only.
+
+## Thumbnails
+
+`lumine thumbnail set <file>` uploads a jpg/png/webp (max 8MB) as the build's
+thumbnail. `lumine thumbnail capture` screenshots the running app server-side
+and sets the result (add `--out <file>` to keep a local copy).
+`lumine thumbnail generate ["<prompt>"] --model <gpt-image-2|nano-banana>`
+generates an AI image and sets it as the thumbnail (the image is also kept as a
+normal reusable asset); without a prompt the server composes one from the build
+title and description. Replacing an existing thumbnail asks for confirmation;
+pass `--yes` for non-interactive runs. Thumbnail commands are blocked in
+read-only `pull --main` checkouts.
+
 The CLI checks npm for the latest `@stage5/lumine` version on normal commands.
 If the installed copy is outdated, it prints an update warning and records the
 version state in `.twinkle/lumine-project.json` so local agents can tell when
