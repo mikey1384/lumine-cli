@@ -1,8 +1,8 @@
 # Build SDK Index
 
 Version: 1.26.2
-Updated: 2026-06-09
-Generated: 2026-06-18T12:26:29.648Z
+Updated: 2026-07-05
+Generated: 2026-07-05T06:47:32.349Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -21,6 +21,7 @@ Generated: 2026-06-18T12:26:29.648Z
 - Use Twinkle.world for realtime multiplayer rooms, avatar presence, movement, emotes, and lightweight actions; world sessions are disposable and durable MMO state belongs in sharedDb/privateDb.
 - Use Twinkle.characters.chat for real Zero/Ciel NPC dialogue with shared room context and AI Energy-aware thinking modes.
 - Twinkle.ai.chat history entries must use { role, content }; map local message.text fields to content before passing history.
+- Interface text must not be selectable on touch devices: apply user-select: none plus -webkit-user-select: none and -webkit-touch-callout: none to interface text (HUD, buttons, labels, menus, scores, game controls) so mobile long-press does not highlight UI. Keep text inputs and genuinely user-copyable content selectable.
 
 ## Token Scopes
 files:read, user:read, users:read, dailyReflections:read, content:read, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
@@ -48,6 +49,22 @@ files:read, user:read, users:read, dailyReflections:read, content:read, sharedDb
 - async refresh() | scopes: none
   - Returns: Viewer info
   - Forces a fresh fetch from the parent.
+
+### Twinkle.app
+- async getInfo() | scopes: none
+  - Returns: App info object from the parent (includes appUrl) or null
+  - Cached after the first call for the iframe session.
+- async getShareUrl(pathSegment) | scopes: none
+  - Returns: Canonical shareable deep-link URL string, or null when app info is unavailable
+  - Builds a canonical shareable deep link into this app, e.g. https://www.twin-kle.com/app/884/432-the-great-gatsby.
+  - Example: await Twinkle.app.getShareUrl('432-the-great-gatsby');
+- async navigate(target) | scopes: none
+  - Returns: { success, src }
+  - Navigate to another Build preview route through the parent bridge without dropping Twinkle SDK access.
+  - Use this for in-app Build preview/world switches instead of window.location.assign, location.replace, or setting location.href.
+  - The parent validates that the target is still a Build preview URL before navigating.
+  - External URLs are rejected and do not receive the Build bridge nonce.
+  - Example: await Twinkle.app.navigate('./arena.html');
 
 ### Twinkle.preview
 - getLayout() | scopes: none
