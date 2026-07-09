@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.26.2
-Updated: 2026-07-05
-Generated: 2026-07-05T06:47:32.349Z
+Version: 1.26.3
+Updated: 2026-07-08
+Generated: 2026-07-08T09:25:17.959Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -22,11 +22,26 @@ Generated: 2026-07-05T06:47:32.349Z
 - Use Twinkle.characters.chat for real Zero/Ciel NPC dialogue with shared room context and AI Energy-aware thinking modes.
 - Twinkle.ai.chat history entries must use { role, content }; map local message.text fields to content before passing history.
 - Interface text must not be selectable on touch devices: apply user-select: none plus -webkit-user-select: none and -webkit-touch-callout: none to interface text (HUD, buttons, labels, menus, scores, game controls) so mobile long-press does not highlight UI. Keep text inputs and genuinely user-copyable content selectable.
+- Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
 
 ## Token Scopes
 files:read, user:read, users:read, dailyReflections:read, content:read, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
 
 ## Namespaces
+
+### Twinkle
+- isAudioMuted() | scopes: none
+  - Returns: boolean
+  - Returns whether the host runtime currently has this Build app tab muted.
+  - The host automatically mutes standard <audio>/<video> elements and Web Audio nodes connected to AudioContext.destination.
+  - Use this only when your app manages audio outside those standard paths.
+  - Example: if (Twinkle.isAudioMuted()) pauseCustomMixerOutput();
+- onAudioMuteChange(listener, options?) | scopes: none
+  - Returns: unsubscribe function
+  - Subscribe to host tab mute changes for custom audio engines.
+  - The listener receives the current muted boolean immediately by default.
+  - Pass { immediate: false } to skip the initial callback.
+  - Example: const unsubscribe = Twinkle.onAudioMuteChange((muted) => customMixer.setMuted(muted));
 
 ### Twinkle.capabilities
 - async get() | scopes: none
