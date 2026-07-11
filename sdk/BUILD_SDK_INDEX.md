@@ -1,8 +1,8 @@
 # Build SDK Index
 
 Version: 1.26.3
-Updated: 2026-07-08
-Generated: 2026-07-08T09:25:17.959Z
+Updated: 2026-07-10
+Generated: 2026-07-10T05:52:15.007Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -277,7 +277,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Returns: { text, response, model, aiUsagePolicy }
   - Generate text with the default Lumine text model, optionally streaming text updates through onText.
   - Signed-in viewers only.
-  - Uses gpt-5.4 by default.
+  - Uses Grok 4.5 by default.
   - Each successful text generation consumes AI Energy from the signed-in viewer.
   - history must be an array of { role: 'user' | 'assistant', content: string }. Twinkle.ai.chat does not read a text field.
   - The server keeps the latest 12 valid history entries.
@@ -294,9 +294,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - thinkingMode low uses GPT nano and records free low-energy usage.
-  - thinkingMode medium uses GPT mini and normal AI Energy while AI Energy remains.
-  - thinkingMode high uses the full GPT model and high AI Energy while AI Energy remains.
+  - thinkingMode low uses GPT-5.6 Luna and records free low-energy usage.
+  - thinkingMode medium uses GPT-5.6 Luna and normal AI Energy while AI Energy remains.
+  - thinkingMode high uses Grok 4.5 with high reasoning and high AI Energy while AI Energy remains.
   - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
   - The SDK validates shape and retries malformed JSON, but app code should still validate business-specific enum values.
   - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'medium', prompt: 'Classify the player intent from: ' + playerText, expectedStructure: { action: 'string', targetCharacter: 'string', confidence: 0, shouldAskFollowUp: false } });
@@ -335,10 +335,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - The character route also accepts text or message fields for compatibility, but generated apps should use content.
   - The server keeps the latest 16 valid character history entries.
   - Pass onText/onStatus for streaming dialogue. Omit callbacks for non-streaming dialogue where the promise resolves with the final response.
-  - thinkingMode low uses Lite Mode and records free low-energy usage.
-  - thinkingMode medium uses normal AI Energy: Zero uses GPT mini and Ciel uses Claude Sonnet while AI Energy remains.
-  - thinkingMode high uses high AI Energy: Zero uses the full GPT model and Ciel uses Claude Opus 4.8 while AI Energy remains.
-  - Zero maps low/medium/high to GPT nano/GPT mini/full GPT. Ciel maps low/medium/high to Claude Haiku/Claude Sonnet/Claude Opus 4.8.
+  - thinkingMode low uses Lite Mode: Zero uses Grok 4.5 with low reasoning and Ciel uses Claude Haiku 4.5; usage is recorded as free low-energy usage.
+  - thinkingMode medium uses normal AI Energy: Zero uses Grok 4.5 with medium reasoning and Ciel uses Claude Sonnet 5 while AI Energy remains.
+  - thinkingMode high uses high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses Claude Opus 4.8 with extended thinking while AI Energy remains.
   - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.

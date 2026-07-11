@@ -71,7 +71,10 @@ test("assets upload runs prepare -> S3 PUT -> complete and writes the manifest",
       ],
     });
   const assetFile = path.join(tmpDir, "sprite.png");
-  fs.writeFileSync(assetFile, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]));
+  fs.writeFileSync(
+    assetFile,
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]),
+  );
 
   const result = await runCli([
     "assets",
@@ -92,17 +95,27 @@ test("assets upload runs prepare -> S3 PUT -> complete and writes the manifest",
     result.stdout,
     /https:\/\/cdn\.example\/attachments\/build-runtime\/123\/7\/9\/sprite\.png/,
   );
-  const prepare = requests.find((r) => r.url.endsWith("/api/files/prepare-upload"));
+  const prepare = requests.find((r) =>
+    r.url.endsWith("/api/files/prepare-upload"),
+  );
   assert.ok(prepare, "prepare-upload was called");
   assert.deepEqual(JSON.parse(prepare.body), {
     fileName: "sprite.png",
     fileSize: 6,
     mimeType: "image/png",
   });
-  const s3Put = requests.find((r) => r.method === "PUT" && r.url === "/s3/part/1");
+  const s3Put = requests.find(
+    (r) => r.method === "PUT" && r.url === "/s3/part/1",
+  );
   assert.ok(s3Put, "S3 part URL received a PUT");
-  assert.equal(s3Put.headers.authorization, undefined, "no auth header sent to S3");
-  const complete = requests.find((r) => r.url.endsWith("/api/files/complete-upload"));
+  assert.equal(
+    s3Put.headers.authorization,
+    undefined,
+    "no auth header sent to S3",
+  );
+  const complete = requests.find((r) =>
+    r.url.endsWith("/api/files/complete-upload"),
+  );
   assert.ok(complete, "complete-upload was called");
   const completeBody = JSON.parse(complete.body);
   assert.equal(completeBody.assetId, 9);
@@ -220,8 +233,161 @@ test("assets upload rejects unsupported types before any network call", async ()
   assert.match(result.stderr, /Unsupported asset type for movie\.mp4/);
 });
 
+test("assets upload rejects root-relative glTF companion URIs", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-assets-gltf-"));
+  const gltfFile = path.join(tmpDir, "scene.gltf");
+  fs.writeFileSync(
+    gltfFile,
+    JSON.stringify({
+      asset: { version: "2.0" },
+      images: [{ uri: "/textures/albedo.png" }],
+    }),
+  );
+  const result = await runCli([
+    "assets",
+    "upload",
+    gltfFile,
+    "--build",
+    "123",
+    "--api-url",
+    "http://127.0.0.1:9",
+    "--auth-file",
+    path.join(tmpDir, "missing-auth.json"),
+    "--no-update-check",
+  ]);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /unsupported glTF URI/);
+  assert.match(result.stderr, /\/textures\/albedo\.png/);
+});
+
+test("assets upload rejects external HTTP glTF companion URIs", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-assets-gltf-"));
+  const gltfFile = path.join(tmpDir, "scene.gltf");
+  fs.writeFileSync(
+    gltfFile,
+    JSON.stringify({
+      asset: { version: "2.0" },
+      images: [{ uri: "https://example.com/textures/albedo.png" }],
+    }),
+  );
+  const result = await runCli([
+    "assets",
+    "upload",
+    gltfFile,
+    "--build",
+    "123",
+    "--api-url",
+    "http://127.0.0.1:9",
+    "--auth-file",
+    path.join(tmpDir, "missing-auth.json"),
+    "--no-update-check",
+  ]);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /unsupported glTF URI/);
+  assert.match(result.stderr, /https:\/\/example\.com/);
+});
+
+test("assets upload accepts verified Twinkle asset URLs in glTF manifests", async (t) => {
+  const referencedAssetUrl =
+    "https://d3jvoamd2k4p0s.cloudfront.net/attachments/build-runtime/123/7/5/albedo.png";
+  const referencedThumbUrl =
+    "https://d3jvoamd2k4p0s.cloudfront.net/attachments/optimized/build-runtime/5/albedo.webp";
+  const { apiUrl, requests, tmpDir, authFile, workspaceDir } =
+    await startMockApi(t, {
+      assets: [
+        {
+          id: 5,
+          buildId: 123,
+          userId: 7,
+          fileName: "albedo.png",
+          originalFileName: "albedo.png",
+          filePath: "123/7/5",
+          url: referencedAssetUrl,
+          thumbUrl: referencedThumbUrl,
+        },
+      ],
+    });
+  const gltfFile = path.join(tmpDir, "scene.gltf");
+  fs.writeFileSync(
+    gltfFile,
+    JSON.stringify({
+      asset: { version: "2.0" },
+      images: [
+        {
+          uri: referencedAssetUrl,
+        },
+        { uri: referencedThumbUrl },
+      ],
+    }),
+  );
+
+  const result = await runCli([
+    "assets",
+    "upload",
+    gltfFile,
+    "--dir",
+    workspaceDir,
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+  ]);
+
+  assert.equal(result.code, 0, result.stderr);
+  const prepare = requests.find((request) =>
+    request.url.endsWith("/api/files/prepare-upload"),
+  );
+  assert.ok(prepare, "prepare-upload was called");
+  assert.equal(JSON.parse(prepare.body).mimeType, "model/gltf+json");
+});
+
+test("assets upload rejects unverified Twinkle asset URLs", async (t) => {
+  const { apiUrl, requests, tmpDir, authFile, workspaceDir } =
+    await startMockApi(t);
+  const gltfFile = path.join(tmpDir, "scene.gltf");
+  fs.writeFileSync(
+    gltfFile,
+    JSON.stringify({
+      asset: { version: "2.0" },
+      images: [
+        {
+          uri: "https://d3jvoamd2k4p0s.cloudfront.net/attachments/build-runtime/999/8/5/albedo.png",
+        },
+      ],
+    }),
+  );
+
+  const result = await runCli([
+    "assets",
+    "upload",
+    gltfFile,
+    "--dir",
+    workspaceDir,
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+  ]);
+
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /do not belong to this Build/);
+  assert.equal(
+    requests.some((request) =>
+      request.url.endsWith("/api/files/prepare-upload"),
+    ),
+    false,
+  );
+});
+
 test("save fails fast on UTF-16 files and on effective-line violations", async (t) => {
-  const { apiUrl, requests, authFile, workspaceDir } = await startMockApi(t, {});
+  const { apiUrl, requests, authFile, workspaceDir } = await startMockApi(
+    t,
+    {},
+  );
   fs.writeFileSync(
     path.join(workspaceDir, "notes.js"),
     Buffer.from("﻿let a = 1;", "utf16le"),
@@ -240,7 +406,9 @@ test("save fails fast on UTF-16 files and on effective-line violations", async (
   assert.match(utf16Result.stderr, /notes\.js: it is UTF-16 encoded/);
   fs.rmSync(path.join(workspaceDir, "notes.js"));
 
-  const longFile = Array.from({ length: 501 }, (_, i) => `// line ${i}`).join("\n");
+  const longFile = Array.from({ length: 501 }, (_, i) => `// line ${i}`).join(
+    "\n",
+  );
   fs.writeFileSync(path.join(workspaceDir, "big.js"), longFile);
   const limitResult = await runCli([
     "save",
@@ -253,7 +421,10 @@ test("save fails fast on UTF-16 files and on effective-line violations", async (
     "--no-update-check",
   ]);
   assert.notEqual(limitResult.code, 0);
-  assert.match(limitResult.stderr, /big\.js" exceeds the per-file limit of 500 effective lines/);
+  assert.match(
+    limitResult.stderr,
+    /big\.js" exceeds the per-file limit of 500 effective lines/,
+  );
   assert.equal(
     requests.some((r) => r.method === "PUT" && r.url.includes("project-files")),
     false,
@@ -328,9 +499,7 @@ test("assets prune spares published-referenced assets, plans without --yes, dele
   assert.doesNotMatch(planResult.stdout, /published-only\.png/);
   assert.match(planResult.stdout, /privateDb\/sharedDb\/user DBs/);
   assert.match(planResult.stdout, /re-run with --yes/);
-  const listRequest = requests.find((r) =>
-    r.url.endsWith("/api/files/list"),
-  );
+  const listRequest = requests.find((r) => r.url.endsWith("/api/files/list"));
   assert.equal(JSON.parse(listRequest.body).includeReferences, true);
   assert.equal(
     requests.some((r) => r.url.endsWith("/api/files/delete")),
@@ -461,7 +630,12 @@ async function startMockApi(
   let apiUrl = "";
   const server = http.createServer(async (req, res) => {
     const body = await readRequestBody(req);
-    requests.push({ method: req.method, url: req.url, body, headers: req.headers });
+    requests.push({
+      method: req.method,
+      url: req.url,
+      body,
+      headers: req.headers,
+    });
     if (req.method === "PUT" && req.url.startsWith("/s3/part/")) {
       res.setHeader("ETag", '"mock-etag"');
       res.end();
@@ -494,7 +668,10 @@ async function startMockApi(
     }
     if (req.url === "/build/123/api/token") {
       res.end(
-        JSON.stringify({ token: "build-api-token", scopes: JSON.parse(body).scopes }),
+        JSON.stringify({
+          token: "build-api-token",
+          scopes: JSON.parse(body).scopes,
+        }),
       );
       return;
     }
@@ -592,7 +769,11 @@ async function startMockApi(
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   apiUrl = `http://127.0.0.1:${server.address().port}`;
-  fs.writeFileSync(authFile, JSON.stringify({ token: "test-token", apiUrl }), "utf8");
+  fs.writeFileSync(
+    authFile,
+    JSON.stringify({ token: "test-token", apiUrl }),
+    "utf8",
+  );
   fs.mkdirSync(path.join(workspaceDir, ".twinkle"), { recursive: true });
   fs.writeFileSync(
     path.join(workspaceDir, ".twinkle", "lumine-project.json"),
