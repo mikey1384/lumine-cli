@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { formatBatteryPercent } from "../lib/assets.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
@@ -37,6 +38,24 @@ test("CLI exposes asset commands wired to the runtime-files endpoints", () => {
   // S3 part PUTs must never carry the Twinkle auth header and must retry.
   assert.match(cliSource, /putAssetPartWithRetry/);
   assert.match(cliSource, /response\.status >= 400 && response\.status < 500/);
+});
+
+test("CLI formats battery percentages from confirmed server capacity", () => {
+  assert.equal(formatBatteryPercent(425_000, 850_000), "~50%");
+  assert.equal(formatBatteryPercent(425_000, 1_000_000), "~43%");
+  assert.equal(formatBatteryPercent(425_000, undefined), "unavailable");
+  assert.equal(formatBatteryPercent(0, 850_000), "~0%");
+
+  const successCapacityReads =
+    cliSource.match(
+      /result\?\.aiUsagePolicy\?\.baseEnergyUnitsPerDay/g,
+    ) || [];
+  assert.equal(successCapacityReads.length, 2);
+  assert.doesNotMatch(
+    cliSource,
+    /result\?\.aiUsagePolicy\?\.fullBatteryUnits/,
+  );
+  assert.doesNotMatch(cliSource, /\|\| 1_000_000/);
 });
 
 test("CLI validates encodings and mirrors project limits locally", () => {
