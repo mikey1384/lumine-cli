@@ -40,7 +40,14 @@ to pull source files into a read-only reference folder, or
 `lumine fork <build-url-or-id>` to create your own editable fork and pull it
 locally.
 
-After editing pulled files, run `lumine save` from that folder. The CLI saves
+After editing pulled files, run `lumine save` from that folder. Workspaces record
+a `filesHash` in `.twinkle/lumine-project.json` when you pull or save; the next
+save sends that hash so the server can reject a stale checkout instead of
+silently overwriting newer files. Saves from a folder with no `filesHash` are
+refused unless you pass `--force` (intentional overwrite). Prefer
+`lumine pull` to resync before saving if the folder might be out of date.
+
+The CLI saves
 through Twinkle's normal workspace project-file route, creates a project artifact
 version, records the same save metadata, and marks public builds as having
 unpublished changes. For projects you own, run `lumine launch` to publish the

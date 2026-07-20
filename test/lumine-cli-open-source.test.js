@@ -264,6 +264,19 @@ test("stale CLI saves recover through canonical pull, not update-from-main", () 
   assert.doesNotMatch(staleSaveMessage, /update-from-main/);
 });
 
+test("CLI refuses saves without filesHash unless --force", () => {
+  assert.match(
+    cliSource,
+    /Save refused: this workspace has no filesHash \(server snapshot token\)\./,
+  );
+  assert.match(cliSource, /force: Boolean\(options\.force\)/);
+  assert.match(
+    cliSource,
+    /\.\.\.\(force \? \{ force: true \} : \{\}\)/,
+  );
+  assert.match(cliSource, /build_project_files_base_required/);
+});
+
 test("update-from-main persists the returned file hash when metadata refresh fails", async (t) => {
   const tmpDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "lumine-update-main-test-"),
