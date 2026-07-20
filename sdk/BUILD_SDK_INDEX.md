@@ -2,7 +2,7 @@
 
 Version: 1.26.3
 Updated: 2026-07-10
-Generated: 2026-07-10T05:52:15.007Z
+Generated: 2026-07-20T11:23:30.608Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -25,7 +25,7 @@ Generated: 2026-07-10T05:52:15.007Z
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
 
 ## Token Scopes
-files:read, user:read, users:read, dailyReflections:read, content:read, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
+files:read, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
 
 ## Namespaces
 
@@ -382,6 +382,19 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Returns: { comments: [{ id, content, filePath, fileName, fileSize, thumbUrl, timeStamp }], cursor? }
   - Returns only the current viewer's own comments on the given subject.
   - Supports cursor-based pagination. Pass cursor from previous response to load more.
+- async getWriteStatus({ subjectId, commentId } = {}) | scopes: content:read
+  - Returns: { writeStatus: { serverNow, subjectCreate, commentCreate, subjectEdit, commentEdit } }
+  - Each operation slice is { cooldownSeconds, availableAt, retryAfterSeconds }.
+  - serverNow is unix seconds so progress bars ignore client clock skew.
+  - Pass subjectId/commentId to include per-target edit cooldowns.
+- async create({ title, description }) | scopes: content:write
+  - Returns: { subject, writeStatus }
+  - Creates a normal site subject (title + description only in v1).
+  - Site-wide durable cooldown: 600s between creates. 429 includes writeStatus.
+- async edit({ subjectId, title, description }) | scopes: content:write
+  - Returns: { subject, writeStatus }
+  - Own subjects only (userId === uploader). Never uses moderator edit rights.
+  - Per-subject edit cooldown: 10s.
 
 ### Twinkle.aiCards
 - async list({ limit, cursor, level, minLevel, maxLevel, quality, userId, hasImage, hasExample } = {}) | scopes: content:read
@@ -468,6 +481,13 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - For subject-poster books that include poster replies, use author: subjectPoster, includeReplies: true, and replyScope: ownThread so the poster's replies to other people do not become pages.
   - Supports cursor-based pagination. Pass cursor from the previous response to load more.
   - Example: const { subjects } = await Twinkle.subjects.search({ query: searchText, limit: 12 }); const subjectId = pickedSubject.id; const page = await Twinkle.subjectComments.list(subjectId, { sortBy: 'oldest', author: 'subjectPoster', includeReplies: true, replyScope: 'ownThread', limit: 50 });
+- async create({ subjectId, content }) | scopes: content:write
+  - Returns: { comment, writeStatus }
+  - Adds a top-level subject comment (book page). Own subject only.
+  - Site-wide durable cooldown: 20s between comment creates. 429 includes writeStatus.
+- async edit({ commentId, content }) | scopes: content:write
+  - Returns: { comment, writeStatus }
+  - Own comments only. Per-comment edit cooldown: 10s.
 
 ### Twinkle.profileComments
 - async getProfileComments({ profileUserId, limit, offset, sortBy, includeReplies, range, since, until } = {}) | scopes: content:read
@@ -540,7 +560,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Update a viewer-owned shared row, optionally notifying safe recipients from the canonical write.
   - Updates an entry. Only the entry creator or the build owner can update.
   - data must be a JSON object, max 10 KB.
-  - notify may include eventKey, label, summary, recipients, and target. Supported recipients include { kind: 'sharedDbEntryAuthor', entryId }.
+  - notify may include eventKey, label, summary, recipients, and target. Supported recipients include { kind: 'sharedDbEntryAuthor', entryId } and { kind: 'subjectAuthor', subjectId } (subject must be referenced by this build via a subject-linked sharedDb entry).
 - async deleteEntry(entryId) | scopes: sharedDb:write
   - Returns: { success: true }
   - Deletes an entry. Only the entry creator or the build owner can delete.
