@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.26.3
-Updated: 2026-07-10
-Generated: 2026-07-20T11:23:30.608Z
+Version: 1.27.0
+Updated: 2026-07-21
+Generated: 2026-07-21T02:49:19.025Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -80,6 +80,14 @@ files:read, user:read, users:read, dailyReflections:read, content:read, content:
   - The parent validates that the target is still a Build preview URL before navigating.
   - External URLs are rejected and do not receive the Build bridge nonce.
   - Example: await Twinkle.app.navigate('./arena.html');
+- async openContent(target) | scopes: none
+  - Returns: { success, url }
+  - Open a recognized Twinkle content page in the parent app from a viewer click or tap.
+  - Call this directly from a user click or tap handler; calls without an active user action are rejected.
+  - The trusted parent displays the canonical destination and requires viewer confirmation before navigating.
+  - Only recognized Twinkle content URLs are accepted. The parent preserves its current signed-in origin when opening the content.
+  - Use navigate() for routes inside the current Build and openContent() for Twinkle subjects, comments, apps, profiles, and other content pages.
+  - Example: await Twinkle.app.openContent('https://www.twin-kle.com/subjects/432');
 
 ### Twinkle.preview
 - getLayout() | scopes: none
