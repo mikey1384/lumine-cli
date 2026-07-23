@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "../lib/commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
@@ -35,6 +36,7 @@ test("CLI exposes open-source explore, reference, and fork commands", () => {
 });
 
 test("CLI resolves Build branch URLs and exposes owner review commands", () => {
+  assert.match(cliSource, /"branches"/);
   assert.match(cliSource, /"diff"/);
   assert.match(cliSource, /"merge"/);
   assert.match(cliSource, /"replace-main"/);
@@ -64,6 +66,107 @@ test("CLI resolves Build branch URLs and exposes owner review commands", () => {
   );
 });
 
+test("CLI lists contribution branches for review", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-branches-test-"));
+  const authFile = path.join(tmpDir, "auth.json");
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ method: req.method, url: req.url });
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/session") {
+      res.end(
+        JSON.stringify({
+          userId: 7,
+          username: "project-owner",
+          scopes: ["build:read"],
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/build/884/files?includeContent=0"
+    ) {
+      res.end(
+        JSON.stringify({
+          build: {
+            id: 884,
+            title: "Twinkle Book Maker",
+            role: "owner",
+            canWrite: true,
+            canPublish: true,
+          },
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/build/884/contributions?limit=10"
+    ) {
+      res.end(
+        JSON.stringify({
+          contributions: [
+            {
+              id: 901,
+              title: "Edit branch",
+              username: "Cloudstar",
+              contributionBranchNumber: 4,
+              contributionStatus: "draft",
+            },
+          ],
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+  t.after(() => {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address();
+  const apiUrl = `http://127.0.0.1:${port}`;
+  fs.writeFileSync(
+    authFile,
+    JSON.stringify({ token: "test-token", apiUrl }),
+    "utf8",
+  );
+
+  const result = await runCli([
+    "branches",
+    "884",
+    "--limit",
+    "10",
+    "--api-url",
+    apiUrl,
+    "--site-url",
+    "https://www.twin-kle.com",
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+  ]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /Branches for Twinkle Book Maker \(#884\):/);
+  assert.match(
+    result.stdout,
+    /Edit branch - Cloudstar - branch 4 \(draft\)/,
+  );
+  assert.match(result.stdout, /https:\/\/www\.twin-kle\.com\/build\/884\/4/);
+  assert.equal(
+    requests.some(
+      (request) =>
+        request.method === "GET" &&
+        request.url === "/build/884/contributions?limit=10",
+    ),
+    true,
+  );
+});
+
 test("CLI can create a new Build without starting an AI run", () => {
   assert.match(cliSource, /"new"/);
   assert.match(cliSource, /async function newBuild\(options\)/);
@@ -88,6 +191,39 @@ test("CLI can create a new Build without starting an AI run", () => {
   );
   assert.doesNotMatch(cliSource, /build_generate_greeting/);
   assert.doesNotMatch(cliSource, /build_generate[^_]/);
+});
+
+test("CLI rename keeps positionals title-only and requires an explicit target flag", () => {
+  const numericLeadingTitle = parseArgs(["rename", "2026 Roadmap"]);
+  assert.equal(numericLeadingTitle.target, "");
+  assert.equal(numericLeadingTitle.title, "2026 Roadmap");
+
+  const numericTitle = parseArgs(["rename", "2026"]);
+  assert.equal(numericTitle.target, "");
+  assert.equal(numericTitle.title, "2026");
+
+  const positionalTitle = parseArgs(["rename", "1835", "New Title"]);
+  assert.equal(positionalTitle.target, "");
+  assert.equal(positionalTitle.title, "1835 New Title");
+
+  const explicitTarget = parseArgs([
+    "rename",
+    "New Title",
+    "--target",
+    "1835",
+  ]);
+  assert.equal(explicitTarget.target, "1835");
+  assert.equal(explicitTarget.title, "New Title");
+
+  const explicitUrl = parseArgs([
+    "rename",
+    "--title",
+    "URL Target",
+    "--url",
+    "https://www.twin-kle.com/app/1835",
+  ]);
+  assert.equal(explicitUrl.target, "https://www.twin-kle.com/app/1835");
+  assert.equal(explicitUrl.title, "URL Target");
 });
 
 test("CLI new posts title and optional description then pulls the created workspace", async (t) => {
@@ -416,6 +552,158 @@ test("update-from-main persists the returned file hash when metadata refresh fai
   assert.equal(metadata.build.title, "Branch after sync");
   assert.equal(metadata.build.canWrite, true);
   assert.equal(metadata.build.canPublish, false);
+});
+
+test("CLI rename handles workspace, explicit-target, and missing-title modes", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-rename-test-"));
+  const workspaceDir = path.join(tmpDir, "workspace");
+  const metadataDir = path.join(workspaceDir, ".twinkle");
+  const metadataPath = path.join(metadataDir, "lumine-project.json");
+  const authFile = path.join(tmpDir, "auth.json");
+  const renameBodies = [];
+  let requestCount = 0;
+  const server = http.createServer(async (req, res) => {
+    requestCount += 1;
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/session") {
+      res.end(
+        JSON.stringify({
+          userId: 7,
+          username: "cli-user",
+          scopes: ["build:read", "build:write"],
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/build/1835/files?includeContent=0"
+    ) {
+      res.end(
+        JSON.stringify({
+          build: {
+            id: 1835,
+            title: "Old title",
+            role: "owner",
+            canWrite: true,
+            canPublish: true,
+          },
+        }),
+      );
+      return;
+    }
+    if (req.method === "PUT" && req.url === "/build/1835") {
+      const renameBody = JSON.parse(body || "{}");
+      renameBodies.push(renameBody);
+      res.end(
+        JSON.stringify({
+          success: true,
+          build: {
+            id: 1835,
+            title: renameBody.title,
+          },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+  t.after(() => {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address();
+  const apiUrl = `http://127.0.0.1:${port}`;
+  fs.mkdirSync(metadataDir, { recursive: true });
+  fs.writeFileSync(
+    metadataPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      buildId: 1835,
+      build: {
+        id: 1835,
+        title: "Old title",
+        role: "owner",
+        canWrite: true,
+        canPublish: true,
+      },
+      apiUrl,
+      manifest: { entryPath: "/index.html" },
+      filesHash: "canonical-files-hash",
+    }),
+    "utf8",
+  );
+  fs.writeFileSync(
+    authFile,
+    JSON.stringify({ token: "test-token", apiUrl }),
+    "utf8",
+  );
+
+  const result = await runCli([
+    "rename",
+    "2026",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    workspaceDir,
+    "--no-update-check",
+  ]);
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(renameBodies, [{ title: "2026" }]);
+  assert.match(result.stdout, /Renamed Build #1835 to "2026"\./);
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+  assert.equal(metadata.build.title, "2026");
+  assert.equal(metadata.build.role, "owner");
+  assert.equal(metadata.build.canWrite, true);
+  assert.equal(metadata.build.canPublish, true);
+  assert.equal(metadata.filesHash, "canonical-files-hash");
+
+  const explicitTargetResult = await runCli([
+    "rename",
+    "New Title",
+    "--target",
+    "1835",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(explicitTargetResult.code, 0, explicitTargetResult.stderr);
+  assert.deepEqual(renameBodies, [
+    { title: "2026" },
+    { title: "New Title" },
+  ]);
+  assert.match(
+    explicitTargetResult.stdout,
+    /Renamed Build #1835 to "New Title"\./,
+  );
+
+  const requestCountBeforeMissingTitle = requestCount;
+  const missingTitleResult = await runCli([
+    "rename",
+    "--target",
+    "1835",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(missingTitleResult.code, 1);
+  assert.match(missingTitleResult.stderr, /Pass a title:/);
+  assert.equal(requestCount, requestCountBeforeMissingTitle);
 });
 
 function readRequestBody(req) {

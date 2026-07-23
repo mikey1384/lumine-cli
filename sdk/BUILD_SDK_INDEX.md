@@ -2,7 +2,7 @@
 
 Version: 1.27.0
 Updated: 2026-07-21
-Generated: 2026-07-21T02:49:19.025Z
+Generated: 2026-07-23T05:57:27.486Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -318,6 +318,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Generate or edit an image from a prompt and optional base64/data-URL reference image.
   - Signed-in viewers only.
   - Each successful image generation consumes AI Energy from the signed-in viewer.
+  - Call generateImage directly from an explicit viewer action such as a button click. Calls from page load, timers, background work, or programmatic retries are rejected.
+  - Twinkle shows a host-owned confirmation for every generation. One approval authorizes exactly one request.
+  - Only one image generation may be active at a time. Do not queue or automatically retry cancellation, ai_image_generation_in_progress, USER_ACTIVATION_REQUIRED, or 429 errors.
   - Default engine is openai and default quality is high.
   - The SDK timeout defaults to 390000ms for image generation because high-quality image runs can exceed normal request timing.
   - Pass onStatus to receive real-time stages from the backend: prompt_ready, in_progress, generating, partial_image, completed, and error.

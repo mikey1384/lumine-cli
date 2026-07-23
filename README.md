@@ -7,7 +7,10 @@ npx @stage5/lumine@latest
 npx @stage5/lumine@latest login
 npx @stage5/lumine@latest new "Daily Reflection App"
 npx @stage5/lumine@latest new --title "Daily Reflection App" --description "Private journal with streaks"
+npx @stage5/lumine@latest rename "My New Build Title"
+npx @stage5/lumine@latest rename "New Title" --target 123
 npx @stage5/lumine@latest projects
+npx @stage5/lumine@latest branches 884
 npx @stage5/lumine@latest explore --sort forks
 npx @stage5/lumine@latest reference https://www.twin-kle.com/app/123
 npx @stage5/lumine@latest fork https://www.twin-kle.com/app/123
@@ -32,6 +35,10 @@ For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and
 checks out that branch locally. Saves go to your branch, so the project owner
 can merge or replace main from Twinkle.
+
+Use `lumine branches <build-url-or-id>` to list the contribution branches you
+can review, including each contributor, branch number, status, and URL. Then use
+`lumine diff <branch-url>` to inspect one branch.
 
 Use `lumine explore` to list public open-source Build apps that can be used as
 examples or starting points. It supports `--search` and `--sort forks`,
