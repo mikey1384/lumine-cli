@@ -338,7 +338,8 @@ test("CLI new posts title and optional description then pulls the created worksp
 });
 
 test("CLI blocks saves from read-only branch checkouts", () => {
-  assert.match(cliSource, /metadata\.build\?\.canWrite === false/);
+  assert.match(cliSource, /readOnlyProjectMetadataKind\(metadata\)/);
+  assert.match(cliSource, /metadata\?\.build\?\.canWrite === false/);
   assert.match(cliSource, /This Lumine checkout is read-only/);
   assert.match(cliSource, /build\?\.canWrite === false/);
   assert.match(cliSource, /Review changes: lumine diff/);
@@ -704,6 +705,246 @@ test("CLI rename handles workspace, explicit-target, and missing-title modes", a
   assert.equal(missingTitleResult.code, 1);
   assert.match(missingTitleResult.stderr, /Pass a title:/);
   assert.equal(requestCount, requestCountBeforeMissingTitle);
+});
+
+test("CLI rename preserves matching read-only checkout metadata", async (t) => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-rename-readonly-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const renameBodies = [];
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/session") {
+      res.end(
+        JSON.stringify({
+          userId: 7,
+          username: "cli-user",
+          scopes: ["build:read", "build:write"],
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/build/1835/files?includeContent=0"
+    ) {
+      res.end(
+        JSON.stringify({
+          build: {
+            id: 1835,
+            title: "Old title",
+            role: "owner",
+            canWrite: true,
+            canPublish: true,
+          },
+        }),
+      );
+      return;
+    }
+    if (req.method === "PUT" && req.url === "/build/1835") {
+      const renameBody = JSON.parse(body || "{}");
+      renameBodies.push(renameBody);
+      res.end(
+        JSON.stringify({
+          success: true,
+          build: {
+            id: 1835,
+            title: renameBody.title,
+          },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+  t.after(() => {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address();
+  const apiUrl = `http://127.0.0.1:${port}`;
+  fs.writeFileSync(
+    authFile,
+    JSON.stringify({ token: "test-token", apiUrl }),
+    "utf8",
+  );
+
+  const cases = [
+    {
+      name: "main",
+      metadata: {
+        schemaVersion: 1,
+        buildId: 1835,
+        readOnly: true,
+        mainCheckout: true,
+        build: {
+          id: 1835,
+          title: "Main snapshot title",
+          role: "owner",
+          canWrite: false,
+          canPublish: false,
+        },
+      },
+      saveError: /read-only checkout of main/,
+    },
+    {
+      name: "version",
+      metadata: {
+        schemaVersion: 1,
+        buildId: 1835,
+        readOnly: true,
+        versionCheckout: true,
+        checkoutVersion: 41,
+        checkoutVersionSummary: "Historical snapshot",
+        build: {
+          id: 1835,
+          title: "Version snapshot title",
+          role: "owner",
+          canWrite: false,
+          canPublish: false,
+        },
+      },
+      saveError: /read-only checkout of a previous save/,
+    },
+    {
+      name: "reference",
+      metadata: {
+        schemaVersion: 1,
+        buildId: 1835,
+        readOnly: true,
+        reference: {
+          readOnly: true,
+          forkable: true,
+          sourceBuildId: 1835,
+        },
+        build: {
+          id: 1835,
+          title: "Reference snapshot title",
+          role: "reference",
+          canWrite: false,
+          canPublish: false,
+        },
+      },
+      saveError: /read-only Lumine reference/,
+    },
+    {
+      name: "server-read-only",
+      metadata: {
+        schemaVersion: 1,
+        buildId: 1835,
+        build: {
+          id: 1835,
+          title: "Review snapshot title",
+          role: "project_owner",
+          canWrite: false,
+          canPublish: false,
+        },
+      },
+      saveError: /This Lumine checkout is read-only/,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const checkoutDir = path.join(tmpDir, testCase.name);
+    const metadataDir = path.join(checkoutDir, ".twinkle");
+    const metadataPath = path.join(metadataDir, "lumine-project.json");
+    const metadataText = JSON.stringify(
+      {
+        ...testCase.metadata,
+        apiUrl,
+        manifest: { entryPath: "/index.html" },
+      },
+      null,
+      2,
+    );
+    fs.mkdirSync(metadataDir, { recursive: true });
+    fs.writeFileSync(metadataPath, metadataText, "utf8");
+
+    const renameResult = await runCli([
+      "rename",
+      `Renamed from ${testCase.name}`,
+      "--target",
+      "1835",
+      "--api-url",
+      apiUrl,
+      "--auth-file",
+      authFile,
+      "--dir",
+      checkoutDir,
+      "--no-update-check",
+    ]);
+
+    assert.equal(renameResult.code, 0, renameResult.stderr);
+    assert.equal(fs.readFileSync(metadataPath, "utf8"), metadataText);
+
+    const saveResult = await runCli([
+      "save",
+      "--api-url",
+      apiUrl,
+      "--auth-file",
+      authFile,
+      "--dir",
+      checkoutDir,
+      "--no-update-check",
+    ]);
+    assert.equal(saveResult.code, 1);
+    assert.match(saveResult.stderr, testCase.saveError);
+  }
+
+  const nonmatchingDir = path.join(tmpDir, "nonmatching");
+  const nonmatchingMetadataDir = path.join(nonmatchingDir, ".twinkle");
+  const nonmatchingMetadataPath = path.join(
+    nonmatchingMetadataDir,
+    "lumine-project.json",
+  );
+  const nonmatchingMetadataText = JSON.stringify(
+    {
+      schemaVersion: 1,
+      buildId: 999,
+      build: {
+        id: 999,
+        title: "Different Build",
+        role: "owner",
+        canWrite: true,
+        canPublish: true,
+      },
+      apiUrl,
+      filesHash: "different-build-hash",
+    },
+    null,
+    2,
+  );
+  fs.mkdirSync(nonmatchingMetadataDir, { recursive: true });
+  fs.writeFileSync(
+    nonmatchingMetadataPath,
+    nonmatchingMetadataText,
+    "utf8",
+  );
+
+  const nonmatchingResult = await runCli([
+    "rename",
+    "Still remote only",
+    "--target",
+    "1835",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    nonmatchingDir,
+    "--no-update-check",
+  ]);
+  assert.equal(nonmatchingResult.code, 0, nonmatchingResult.stderr);
+  assert.equal(
+    fs.readFileSync(nonmatchingMetadataPath, "utf8"),
+    nonmatchingMetadataText,
+  );
+  assert.equal(renameBodies.length, cases.length + 1);
 });
 
 function readRequestBody(req) {
