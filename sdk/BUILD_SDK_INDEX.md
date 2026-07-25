@@ -2,7 +2,7 @@
 
 Version: 1.27.0
 Updated: 2026-07-21
-Generated: 2026-07-23T05:57:27.486Z
+Generated: 2026-07-25T04:48:07.450Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -348,7 +348,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Pass onText/onStatus for streaming dialogue. Omit callbacks for non-streaming dialogue where the promise resolves with the final response.
   - thinkingMode low uses Lite Mode: Zero uses Grok 4.5 with low reasoning and Ciel uses Claude Haiku 4.5; usage is recorded as free low-energy usage.
   - thinkingMode medium uses normal AI Energy: Zero uses Grok 4.5 with medium reasoning and Ciel uses Claude Sonnet 5 while AI Energy remains.
-  - thinkingMode high uses high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses Claude Opus 4.8 with extended thinking while AI Energy remains.
+  - thinkingMode high uses high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses Claude Opus 5 with extended thinking while AI Energy remains.
   - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.
