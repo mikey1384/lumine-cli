@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.27.0
-Updated: 2026-07-21
-Generated: 2026-07-25T04:48:07.450Z
+Version: 1.29.0
+Updated: 2026-07-31
+Generated: 2026-07-31T05:39:44.540Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -12,6 +12,7 @@ Generated: 2026-07-25T04:48:07.450Z
 - Match storage to update frequency: privateDb and sharedDb are for LOW-frequency durable state that changes on a user action. NEVER write per-frame/per-tick state to them (camera or cursor position, animation, live movement, presence, autosave every frame/tick). Keep live state in client memory, broadcast realtime/presence via Twinkle.world, and flush only occasional durable snapshots (on an interval or on exit, never per frame). The server enforces per-key write rate limits and returns 429 on excess; never retry-loop a 429.
 - Use Twinkle.userDb only for advanced private SQLite needs such as tables, indexes, many rows, filtered queries, or aggregates.
 - Use Twinkle.leaderboards for public Build scoreboards. Signed-in viewers are ranked by Twinkle username; guests can submit with a display name.
+- Use Twinkle.news to read the globally shared Twinkle Daily edition or let a signed-in viewer queue today's edition. The server permits only one ready edition per Twinkle day and generation does not spend the requesting viewer's AI Energy.
 - Use Twinkle.sharedDb for LOW-frequency durable shared multi-user state such as guestbooks, votes, room settings, submitted records, and append-only run history. It is NOT for high-frequency or per-frame/per-tick writes; keep live/realtime state in Twinkle.world or client memory. The server rate-limits writes and returns 429.
 - Use Twinkle.subjects.search for in-app subject pickers. Twinkle.mount remains an optional host-provided preselection/context shortcut, not a data API.
 - Use Twinkle.aiCards for read-only existing public AI Card words and example texts, including word levels for typing games.
@@ -21,6 +22,7 @@ Generated: 2026-07-25T04:48:07.450Z
 - Use Twinkle.world for realtime multiplayer rooms, avatar presence, movement, emotes, and lightweight actions; world sessions are disposable and durable MMO state belongs in sharedDb/privateDb.
 - Use Twinkle.characters.chat for real Zero/Ciel NPC dialogue with shared room context and AI Energy-aware thinking modes.
 - Twinkle.ai.chat history entries must use { role, content }; map local message.text fields to content before passing history.
+- Live web search is enabled by default for Twinkle.ai.chat and for Medium/High Twinkle.ai.generateObject and Twinkle.characters.chat requests. App authors can pass webSearch: false to disable it for their app. Search uses the provider's live web-search tool and is included in AI Energy usage; structured and character Lite Mode remains tool-free.
 - Interface text must not be selectable on touch devices: apply user-select: none plus -webkit-user-select: none and -webkit-touch-callout: none to interface text (HUD, buttons, labels, menus, scores, game controls) so mobile long-press does not highlight UI. Keep text inputs and genuinely user-copyable content selectable.
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
 
@@ -281,31 +283,34 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
 - async listPrompts() | scopes: none
   - Returns: Array<{ id, title, description }>
   - Legacy helper. Twinkle.ai.chat does not require promptId for default runtime text generation.
-- async chat({ promptId, message, history, systemPrompt, requestId, onText, onStatus } = {}) | scopes: none
-  - Returns: { text, response, model, aiUsagePolicy }
-  - Generate text with the default Lumine text model, optionally streaming text updates through onText.
+- async chat({ promptId, message, history, systemPrompt, webSearch, requestId, onText, onStatus } = {}) | scopes: none
+  - Returns: { text, response, model, webSearch, aiUsagePolicy }
+  - Generate text with the default Lumine text model, optionally using live web search and streaming text updates through onText.
   - Signed-in viewers only.
   - Uses Grok 4.5 by default.
   - Each successful text generation consumes AI Energy from the signed-in viewer.
   - history must be an array of { role: 'user' | 'assistant', content: string }. Twinkle.ai.chat does not read a text field.
   - The server keeps the latest 12 valid history entries.
   - Pass systemPrompt to define the app AI's personality, tone, role, or response rules.
+  - Live web search is enabled by default, and the model decides whether searching is useful. Pass webSearch: false to disable it for the app.
+  - When streaming, onStatus may receive searching_web while the provider is searching.
   - Pass onText to receive streaming accumulated text before the final result resolves.
-  - AI Energy is recorded after provider success when final token usage is available.
+  - AI Energy is recorded after provider success when final token and web-search tool usage are available.
   - Use this for in-app AI replies instead of creating or fetching app-local endpoints such as /api/chat.
   - Example: const chatHistory = conversation.slice(-12).map((entry) => ({ role: entry.role === 'assistant' ? 'assistant' : 'user', content: entry.text }));
 const result = await Twinkle.ai.chat({ message, history: chatHistory, systemPrompt: 'You are a cheerful pirate helper who answers in one sentence.', onText: (text, meta) => renderReply(text), onStatus: (status) => setThinking(status === 'thinking') });
-- async generateObject({ prompt, expectedStructure, thinkingMode, mode, instructions, systemPrompt } = {}) | scopes: none
-  - Returns: { object, result, model, provider, thinkingMode, requestedThinkingMode, aiUsagePolicy }
-  - Generate a validated structured JSON object for app decisions, routing, grading, and game-state logic.
+- async generateObject({ prompt, expectedStructure, thinkingMode, mode, instructions, systemPrompt, webSearch } = {}) | scopes: none
+  - Returns: { object, result, model, provider, thinkingMode, requestedThinkingMode, webSearch, aiUsagePolicy }
+  - Generate a validated structured JSON object for app decisions, routing, grading, and game-state logic, optionally using live web search.
   - Signed-in viewers only.
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
   - thinkingMode low uses GPT-5.6 Luna and records free low-energy usage.
-  - thinkingMode medium uses GPT-5.6 Luna and normal AI Energy while AI Energy remains.
-  - thinkingMode high uses Grok 4.5 with high reasoning and high AI Energy while AI Energy remains.
+  - thinkingMode medium uses Grok 4.5 with medium reasoning and normal AI Energy while AI Energy remains.
+  - thinkingMode high uses GPT-5.6 Sol with high reasoning and high AI Energy while AI Energy remains.
   - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
+  - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Omitted/default search turns off automatically when the request falls back to tool-free Lite Mode; explicitly forcing webSearch: true in Lite Mode returns an error.
   - The SDK validates shape and retries malformed JSON, but app code should still validate business-specific enum values.
   - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'medium', prompt: 'Classify the player intent from: ' + playerText, expectedStructure: { action: 'string', targetCharacter: 'string', confidence: 0, shouldAskFollowUp: false } });
 - onChatStatus(listener) | scopes: none
@@ -337,9 +342,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Example: const unsubscribe = Twinkle.ai.onImageGenerationStatus((status) => console.log(status.stage));
 
 ### Twinkle.characters
-- async chat({ character, thinkingMode, message, history, roomContext, scene, systemPrompt, instructions, includeWebsiteContext, requestId, onText, onStatus } = {}) | scopes: none
-  - Returns: { text, response, character, aiUsername, thinkingMode, requestedThinkingMode, includeWebsiteContext, model, provider, aiUsagePolicy }
-  - Talk to Zero or Ciel from a Build app, either as a final-response call or streaming RPG-style dialogue text with onText/onStatus.
+- async chat({ character, thinkingMode, message, history, roomContext, scene, systemPrompt, instructions, includeWebsiteContext, webSearch, requestId, onText, onStatus } = {}) | scopes: none
+  - Returns: { text, response, character, aiUsername, thinkingMode, requestedThinkingMode, includeWebsiteContext, webSearch, model, provider, aiUsagePolicy }
+  - Talk to Zero or Ciel from a Build app, optionally using live web search and streaming RPG-style dialogue text with onText/onStatus.
   - Signed-in viewers only.
   - character must be zero or ciel.
   - Recommended history shape is { role: 'user' | 'assistant', content: string, speaker?: string }; content is the canonical text field.
@@ -352,6 +357,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.
+  - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Omitted/default search turns off automatically when the request falls back to tool-free Lite Mode; explicitly forcing webSearch: true in Lite Mode returns an error.
+  - includeWebsiteContext controls Twinkle persona context and is unrelated to webSearch.
+  - When streaming, onStatus may receive searching_web while the provider is searching.
   - Use this for real Zero/Ciel NPCs instead of pretending with Twinkle.ai.chat systemPrompt.
   - Example: const dialogueHistory = recentTurns.slice(-16).map((entry) => ({ role: entry.role === 'assistant' ? 'assistant' : 'user', content: entry.text, speaker: entry.speaker }));
 const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: thinkHard ? 'high' : 'medium', message: playerText, history: dialogueHistory, roomContext, scene: { location: 'classroom', nearbyCharacters: ['zero', 'ciel'] }, includeWebsiteContext: false, onText: (text) => renderDialogue(text) });
@@ -518,6 +526,22 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Returns: { countsById: { [commentId]: { likes, replies } } }
   - Atomic step 3: fetches likes/replies aggregates for provided IDs.
   - Accepts either an array of IDs or an object like { ids: [...] }.
+
+### Twinkle.news
+- async getCurrentEdition() | scopes: none
+  - Returns: { dayIndex, nextEditionAt, generationStatus, edition: { id, dayIndex, status, coverageStartedAt, coverageEndedAt, sourceEventCount, edition, model, provider, generatedAt } | null, pendingEdition }
+  - Read today's shared Twinkle newspaper, or the latest ready edition while today's is being generated.
+  - Works for signed-in viewers and public-build guests.
+  - generationStatus is available, pending, generating, ready, or failed.
+  - While today's edition is pending, edition remains the latest ready shared edition and pendingEdition describes today's queued work.
+  - Poll gently while generation is pending; once every 5-10 seconds is sufficient.
+- async generateCurrentEdition() | scopes: none
+  - Returns: { dayIndex, nextEditionAt, generationStatus, edition, pendingEdition }
+  - Atomically queue the current Twinkle day's globally shared edition.
+  - Requires a signed-in viewer.
+  - The first request for a Twinkle day creates the canonical pending edition; concurrent and later requests return that same server state.
+  - Generation is platform-sponsored and does not consume the requesting viewer's AI Energy.
+  - A failed attempt may be queued again on the same day. A ready edition is immutable until the next Twinkle day.
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
