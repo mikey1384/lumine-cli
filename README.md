@@ -11,6 +11,7 @@ npx @stage5/lumine@latest rename "My New Build Title"
 npx @stage5/lumine@latest rename "New Title" --target 123
 npx @stage5/lumine@latest projects
 npx @stage5/lumine@latest branches 884
+npx @stage5/lumine@latest suggestions 884
 npx @stage5/lumine@latest explore --sort forks
 npx @stage5/lumine@latest reference https://www.twin-kle.com/app/123
 npx @stage5/lumine@latest fork https://www.twin-kle.com/app/123
@@ -39,6 +40,17 @@ can merge or replace main from Twinkle.
 Use `lumine branches <build-url-or-id>` to list the contribution branches you
 can review, including each contributor, branch number, status, and URL. Then use
 `lumine diff <branch-url>` to inspect one branch.
+
+Branch contributors can nudge the project owner from their pulled branch with
+`lumine suggest branch [message]` or `lumine suggest thumbnail`. The thumbnail
+command offers the thumbnail currently saved on that branch. Project owners can
+run `lumine suggestions <build-url-or-id>` to see their open suggestion inbox.
+The inbox prints canonical follow-up commands for merging or replacing Main and
+for applying the exact frozen thumbnail shown in a suggestion. The same actions
+are also available directly as `lumine suggestions merge <id>`,
+`lumine suggestions replace-main <id>`, and
+`lumine suggestions adopt-thumbnail <id>`. Large inboxes are cursor-paginated;
+the CLI prints the exact `--cursor` command for the next page.
 
 Use `lumine explore` to list public open-source Build apps that can be used as
 examples or starting points. It supports `--search` and `--sort forks`,
