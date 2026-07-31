@@ -9,6 +9,8 @@ npx @stage5/lumine@latest new "Daily Reflection App"
 npx @stage5/lumine@latest new --title "Daily Reflection App" --description "Private journal with streaks"
 npx @stage5/lumine@latest rename "My New Build Title"
 npx @stage5/lumine@latest rename "New Title" --target 123
+npx @stage5/lumine@latest describe "A welcoming place to build together"
+npx @stage5/lumine@latest describe --no-description --target 123
 npx @stage5/lumine@latest projects
 npx @stage5/lumine@latest branches 884
 npx @stage5/lumine@latest suggestions 884
@@ -31,6 +33,12 @@ asks for an optional description. It creates the Build and pulls an editable
 local workspace, but it does not auto-start a Lumine greeting or prompt run, so
 creating a project from the CLI does not spend AI battery. Add project files
 locally, including `/index.html`, then run `lumine save`.
+
+Use `lumine rename` to change an existing Build title and `lumine describe` to
+change its description through the same canonical metadata route as the
+website. Both commands target the current workspace or selected Build; pass
+`--target <build-url-or-id>` to update another Build you own. Run
+`lumine describe --no-description` to clear a description explicitly.
 
 For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and

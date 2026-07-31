@@ -226,6 +226,72 @@ test("CLI rename keeps positionals title-only and requires an explicit target fl
   assert.equal(explicitUrl.title, "URL Target");
 });
 
+test("CLI describe keeps positionals description-only and supports explicit clearing", () => {
+  const positionalDescription = parseArgs([
+    "describe",
+    "A newspaper for everyone on Twinkle",
+  ]);
+  assert.equal(positionalDescription.target, "");
+  assert.equal(
+    positionalDescription.description,
+    "A newspaper for everyone on Twinkle",
+  );
+  assert.equal(positionalDescription.descriptionProvided, true);
+
+  const explicitTarget = parseArgs([
+    "describe",
+    "Community news",
+    "--target",
+    "1929",
+  ]);
+  assert.equal(explicitTarget.target, "1929");
+  assert.equal(explicitTarget.description, "Community news");
+
+  const explicitOption = parseArgs([
+    "describe",
+    "--description",
+    "Shared daily newspaper",
+    "--target",
+    "https://www.twin-kle.com/app/1929",
+  ]);
+  assert.equal(explicitOption.target, "https://www.twin-kle.com/app/1929");
+  assert.equal(explicitOption.description, "Shared daily newspaper");
+  assert.equal(explicitOption.descriptionProvided, true);
+
+  const clearDescription = parseArgs(["describe", "--no-description"]);
+  assert.equal(clearDescription.target, "");
+  assert.equal(clearDescription.noDescription, true);
+  assert.equal(clearDescription.descriptionProvided, false);
+
+  assert.throws(
+    () =>
+      parseArgs([
+        "describe",
+        "--description",
+        "--target",
+        "1929",
+      ]),
+    /Missing value for --description\./,
+  );
+  assert.throws(
+    () => parseArgs(["describe", "--description", "--no-description"]),
+    /Missing value for --description\./,
+  );
+  assert.throws(
+    () => parseArgs(["describe", "--description", "-h"]),
+    /Missing value for --description\./,
+  );
+
+  const explicitFlagLikeDescription = parseArgs([
+    "describe",
+    "--description=--target",
+    "--target",
+    "1929",
+  ]);
+  assert.equal(explicitFlagLikeDescription.description, "--target");
+  assert.equal(explicitFlagLikeDescription.target, "1929");
+});
+
 test("CLI new posts title and optional description then pulls the created workspace", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-new-test-"));
   const workspaceDir = path.join(tmpDir, "workspace");
@@ -705,6 +771,221 @@ test("CLI rename handles workspace, explicit-target, and missing-title modes", a
   assert.equal(missingTitleResult.code, 1);
   assert.match(missingTitleResult.stderr, /Pass a title:/);
   assert.equal(requestCount, requestCountBeforeMissingTitle);
+});
+
+test("CLI describe updates and clears canonical Build descriptions", async (t) => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-describe-test-"),
+  );
+  const workspaceDir = path.join(tmpDir, "workspace");
+  const metadataDir = path.join(workspaceDir, ".twinkle");
+  const metadataPath = path.join(metadataDir, "lumine-project.json");
+  const authFile = path.join(tmpDir, "auth.json");
+  const updateBodies = [];
+  let requestCount = 0;
+  const server = http.createServer(async (req, res) => {
+    requestCount += 1;
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/session") {
+      res.end(
+        JSON.stringify({
+          userId: 7,
+          username: "cli-user",
+          scopes: ["build:read", "build:write"],
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/build/1929/files?includeContent=0"
+    ) {
+      res.end(
+        JSON.stringify({
+          build: {
+            id: 1929,
+            title: "Canonical Newspaper",
+            description: "Old description",
+            role: "owner",
+            canWrite: true,
+            canPublish: true,
+          },
+        }),
+      );
+      return;
+    }
+    if (req.method === "PUT" && req.url === "/build/1929") {
+      const updateBody = JSON.parse(body || "{}");
+      updateBodies.push(updateBody);
+      res.end(
+        JSON.stringify({
+          success: true,
+          build: {
+            id: 1929,
+            title: "Canonical Newspaper",
+            description: updateBody.description,
+          },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: "not found" }));
+  });
+  t.after(() => {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const { port } = server.address();
+  const apiUrl = `http://127.0.0.1:${port}`;
+  fs.mkdirSync(metadataDir, { recursive: true });
+  fs.writeFileSync(
+    metadataPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      buildId: 1929,
+      build: {
+        id: 1929,
+        title: "Stale local title",
+        role: "owner",
+        canWrite: true,
+        canPublish: true,
+      },
+      apiUrl,
+      manifest: { entryPath: "/index.html" },
+      filesHash: "canonical-files-hash",
+    }),
+    "utf8",
+  );
+  fs.writeFileSync(
+    authFile,
+    JSON.stringify({ token: "test-token", apiUrl }),
+    "utf8",
+  );
+
+  const updateResult = await runCli([
+    "describe",
+    "Community news for everyone",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    workspaceDir,
+    "--no-update-check",
+  ]);
+
+  assert.equal(updateResult.code, 0, updateResult.stderr);
+  assert.deepEqual(updateBodies, [
+    { description: "Community news for everyone" },
+  ]);
+  assert.match(
+    updateResult.stdout,
+    /Updated description for Canonical Newspaper \(#1929\)\./,
+  );
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+  assert.equal(metadata.build.title, "Canonical Newspaper");
+  assert.equal(metadata.filesHash, "canonical-files-hash");
+
+  const clearResult = await runCli([
+    "describe",
+    "--no-description",
+    "--target",
+    "1929",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(clearResult.code, 0, clearResult.stderr);
+  assert.deepEqual(updateBodies, [
+    { description: "Community news for everyone" },
+    { description: null },
+  ]);
+  assert.match(
+    clearResult.stdout,
+    /Cleared description for Canonical Newspaper \(#1929\)\./,
+  );
+
+  const requestCountBeforeInvalidInput = requestCount;
+  const missingDescription = await runCli([
+    "describe",
+    "--target",
+    "1929",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(missingDescription.code, 1);
+  assert.match(missingDescription.stderr, /Pass a description:/);
+
+  const conflictingDescription = await runCli([
+    "describe",
+    "Community news",
+    "--no-description",
+    "--target",
+    "1929",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(conflictingDescription.code, 1);
+  assert.match(
+    conflictingDescription.stderr,
+    /either a description or `--no-description`/,
+  );
+
+  const missingDescriptionBeforeTarget = await runCli([
+    "describe",
+    "--description",
+    "--target",
+    "1929",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(missingDescriptionBeforeTarget.code, 1);
+  assert.match(
+    missingDescriptionBeforeTarget.stderr,
+    /Missing value for --description\./,
+  );
+
+  const missingDescriptionBeforeClear = await runCli([
+    "describe",
+    "--description",
+    "--no-description",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--dir",
+    tmpDir,
+    "--no-update-check",
+  ]);
+  assert.equal(missingDescriptionBeforeClear.code, 1);
+  assert.match(
+    missingDescriptionBeforeClear.stderr,
+    /Missing value for --description\./,
+  );
+  assert.equal(requestCount, requestCountBeforeInvalidInput);
 });
 
 test("CLI rename preserves matching read-only checkout metadata", async (t) => {
