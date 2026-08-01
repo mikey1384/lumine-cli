@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.29.0
-Updated: 2026-07-31
-Generated: 2026-07-31T05:39:44.540Z
+Version: 1.30.0
+Updated: 2026-08-01
+Generated: 2026-08-01T01:18:58.863Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -12,7 +12,7 @@ Generated: 2026-07-31T05:39:44.540Z
 - Match storage to update frequency: privateDb and sharedDb are for LOW-frequency durable state that changes on a user action. NEVER write per-frame/per-tick state to them (camera or cursor position, animation, live movement, presence, autosave every frame/tick). Keep live state in client memory, broadcast realtime/presence via Twinkle.world, and flush only occasional durable snapshots (on an interval or on exit, never per frame). The server enforces per-key write rate limits and returns 429 on excess; never retry-loop a 429.
 - Use Twinkle.userDb only for advanced private SQLite needs such as tables, indexes, many rows, filtered queries, or aggregates.
 - Use Twinkle.leaderboards for public Build scoreboards. Signed-in viewers are ranked by Twinkle username; guests can submit with a display name.
-- Use Twinkle.news to read the globally shared Twinkle Daily edition or let a signed-in viewer queue today's edition. The server permits only one ready edition per Twinkle day and generation does not spend the requesting viewer's AI Energy.
+- Use Twinkle.news to read the globally shared Twinkle Daily edition or let a signed-in viewer queue today's edition. The server permits only one ready edition per Twinkle day. A model-backed edition consumes AI Energy from the signed-in viewer whose request creates or retries that job; deduplicated observers and quiet editions with no editorial model call do not consume Energy.
 - Use Twinkle.sharedDb for LOW-frequency durable shared multi-user state such as guestbooks, votes, room settings, submitted records, and append-only run history. It is NOT for high-frequency or per-frame/per-tick writes; keep live/realtime state in Twinkle.world or client memory. The server rate-limits writes and returns 429.
 - Use Twinkle.subjects.search for in-app subject pickers. Twinkle.mount remains an optional host-provided preselection/context shortcut, not a data API.
 - Use Twinkle.aiCards for read-only existing public AI Card words and example texts, including word levels for typing games.
@@ -306,11 +306,11 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - thinkingMode low uses GPT-5.6 Luna and records free low-energy usage.
-  - thinkingMode medium uses Grok 4.5 with medium reasoning and normal AI Energy while AI Energy remains.
-  - thinkingMode high uses GPT-5.6 Sol with high reasoning and high AI Energy while AI Energy remains.
-  - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
-  - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Omitted/default search turns off automatically when the request falls back to tool-free Lite Mode; explicitly forcing webSearch: true in Lite Mode returns an error.
+  - thinkingMode low uses GPT-5.6 Luna and consumes the viewer's AI Energy from confirmed provider usage; its smaller model is usually cheaper than Medium or High.
+  - thinkingMode medium uses Grok 4.5 with medium reasoning and consumes normal AI Energy.
+  - thinkingMode high uses GPT-5.6 Sol with high reasoning and consumes high AI Energy.
+  - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
+  - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
   - The SDK validates shape and retries malformed JSON, but app code should still validate business-specific enum values.
   - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'medium', prompt: 'Classify the player intent from: ' + playerText, expectedStructure: { action: 'string', targetCharacter: 'string', confidence: 0, shouldAskFollowUp: false } });
 - onChatStatus(listener) | scopes: none
@@ -351,13 +351,13 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - The character route also accepts text or message fields for compatibility, but generated apps should use content.
   - The server keeps the latest 16 valid character history entries.
   - Pass onText/onStatus for streaming dialogue. Omit callbacks for non-streaming dialogue where the promise resolves with the final response.
-  - thinkingMode low uses Lite Mode: Zero uses Grok 4.5 with low reasoning and Ciel uses Claude Haiku 4.5; usage is recorded as free low-energy usage.
-  - thinkingMode medium uses normal AI Energy: Zero uses Grok 4.5 with medium reasoning and Ciel uses Claude Sonnet 5 while AI Energy remains.
-  - thinkingMode high uses high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses Claude Opus 5 with extended thinking while AI Energy remains.
-  - If medium or high is requested after AI Energy is empty, the server falls back to low and returns thinkingMode: low.
+  - thinkingMode low uses Lite Mode: Zero uses Grok 4.5 with low reasoning and Ciel uses Claude Haiku 4.5; confirmed provider usage consumes the viewer's AI Energy and is usually cheaper than Medium or High.
+  - thinkingMode medium consumes normal AI Energy: Zero uses Grok 4.5 with medium reasoning and Ciel uses Claude Sonnet 5.
+  - thinkingMode high consumes high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses Claude Opus 5 with extended thinking.
+  - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.
-  - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Omitted/default search turns off automatically when the request falls back to tool-free Lite Mode; explicitly forcing webSearch: true in Lite Mode returns an error.
+  - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
   - includeWebsiteContext controls Twinkle persona context and is unrelated to webSearch.
   - When streaming, onStatus may receive searching_web while the provider is searching.
   - Use this for real Zero/Ciel NPCs instead of pretending with Twinkle.ai.chat systemPrompt.
@@ -540,7 +540,8 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Atomically queue the current Twinkle day's globally shared edition.
   - Requires a signed-in viewer.
   - The first request for a Twinkle day creates the canonical pending edition; concurrent and later requests return that same server state.
-  - Generation is platform-sponsored and does not consume the requesting viewer's AI Energy.
+  - When this request creates or retries a model-backed edition, confirmed provider usage consumes AI Energy from this requesting viewer. Concurrent or later callers that deduplicate onto the same pending or ready edition are not charged.
+  - A quiet edition with no editorial events does not call an AI provider and does not consume AI Energy.
   - A failed attempt may be queued again on the same day. A ready edition is immutable until the next Twinkle day.
 
 ### Twinkle.leaderboards
