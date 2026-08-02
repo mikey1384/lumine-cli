@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.31.0
-Updated: 2026-08-01
-Generated: 2026-08-01T02:43:14.310Z
+Version: 1.32.0
+Updated: 2026-08-02
+Generated: 2026-08-02T03:03:30.002Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -12,7 +12,7 @@ Generated: 2026-08-01T02:43:14.310Z
 - Match storage to update frequency: privateDb and sharedDb are for LOW-frequency durable state that changes on a user action. NEVER write per-frame/per-tick state to them (camera or cursor position, animation, live movement, presence, autosave every frame/tick). Keep live state in client memory, broadcast realtime/presence via Twinkle.world, and flush only occasional durable snapshots (on an interval or on exit, never per frame). The server enforces per-key write rate limits and returns 429 on excess; never retry-loop a 429.
 - Use Twinkle.userDb only for advanced private SQLite needs such as tables, indexes, many rows, filtered queries, or aggregates.
 - Use Twinkle.leaderboards for public Build scoreboards. Signed-in viewers are ranked by Twinkle username; guests can submit with a display name.
-- Use Twinkle.news to read the globally shared Twinkle Daily edition or let a signed-in viewer queue today's edition. The server permits only one ready edition per Twinkle day for ordinary viewers. In the canonical Twinkle Newspaper app, its current owner may explicitly refresh today's ready edition. A model-backed edition consumes AI Energy from the signed-in viewer whose request creates, retries, or refreshes that job; deduplicated observers and quiet editions with no editorial model call do not consume Energy.
+- Use Twinkle.news to read the globally shared Twinkle Daily edition, browse canonical daily archives and preserved successful press runs, or let a signed-in viewer queue today's edition. The server permits only one canonical edition per Twinkle day for ordinary viewers. In the canonical Twinkle Newspaper app, its current owner may explicitly refresh today's ready edition, appending a revision while keeping the newest successful press run canonical. A model-backed edition consumes AI Energy from the signed-in viewer whose request creates, retries, or refreshes that job; deduplicated observers and quiet editions with no editorial model call do not consume Energy.
 - Use Twinkle.sharedDb for LOW-frequency durable shared multi-user state such as guestbooks, votes, room settings, submitted records, and append-only run history. It is NOT for high-frequency or per-frame/per-tick writes; keep live/realtime state in Twinkle.world or client memory. The server rate-limits writes and returns 429.
 - Use Twinkle.subjects.search for in-app subject pickers. Twinkle.mount remains an optional host-provided preselection/context shortcut, not a data API.
 - Use Twinkle.aiCards for read-only existing public AI Card words and example texts, including word levels for typing games.
@@ -529,18 +529,32 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 
 ### Twinkle.news
 - async getCurrentEdition() | scopes: none
-  - Returns: { dayIndex, nextEditionAt, generationStatus, edition: { id, dayIndex, status, coverageStartedAt, coverageEndedAt, sourceEventCount, edition, model, provider, generatedAt } | null, pendingEdition }
+  - Returns: { dayIndex, nextEditionAt, generationStatus, edition: { id, dayIndex, status, coverageStartedAt, coverageEndedAt, sourceEventCount, edition, model, provider, generatedAt, revisionNumber, revisionCount } | null, pendingEdition }
   - Read today's shared Twinkle newspaper, or the latest ready edition while today's is being generated.
   - Works for signed-in viewers and public-build guests.
   - generationStatus is available, pending, generating, ready, or failed.
   - While today's first edition is pending, edition remains the latest ready shared edition. During an owner refresh, edition remains the earlier same-day edition. pendingEdition describes the canonical queued work in both cases.
   - Poll gently while generation is pending; once every 5-10 seconds is sufficient.
+- async listEditions({ limit = 12, cursor } = {}) | scopes: none
+  - Returns: { editions: [{ id, dayIndex, dateKey, headline, deck, coverageStartedAt, coverageEndedAt, sourceEventCount, generatedAt, revisionNumber, revisionCount }], cursor, hasMore }
+  - List the canonical daily newspaper archive newest-first.
+  - Works for signed-in viewers and public-build guests.
+  - Returns compact publication summaries rather than full newspaper JSON.
+  - limit defaults to 12 and is capped at 30. Pass cursor from the previous response to load older editions.
+  - Each item describes the latest canonical revision for that Twinkle day.
+- async getEdition({ dayIndex, revisionNumber } = {}) | scopes: none
+  - Returns: { edition: { id, revisionId?, dayIndex, status, coverageStartedAt, coverageEndedAt, sourceEventCount, edition, model, provider, generatedAt, revisionNumber, revisionCount }, revisions: [{ revisionId, revisionNumber, coverageStartedAt, coverageEndedAt, sourceEventCount, model, provider, generatedAt, createdAt }], selectedRevisionNumber, canonicalRevisionNumber }
+  - Read one canonical daily edition or an exact preserved successful press run.
+  - Works for signed-in viewers and public-build guests.
+  - dayIndex is required. Omit revisionNumber to read that day's latest canonical edition.
+  - Pass a revisionNumber returned in revisions to read that exact successful press run.
+  - Historical revisions remain subject to canonical privacy and deletion redactions.
 - async generateCurrentEdition({ refresh = false } = {}) | scopes: none
   - Returns: { dayIndex, nextEditionAt, generationStatus, edition, pendingEdition }
   - Atomically queue the current Twinkle day's globally shared edition.
   - Requires a signed-in viewer.
   - The first request for a Twinkle day creates the canonical pending edition; concurrent and later ordinary requests return that same server state.
-  - In the canonical Twinkle Newspaper app, its current owner may pass { refresh: true } to revise an already-ready same-day edition using the latest canonical events. Ownership is checked by the server at request time and therefore follows an app transfer.
+  - In the canonical Twinkle Newspaper app, its current owner may pass { refresh: true } to revise an already-ready same-day edition using the latest canonical events. Every successful refresh is appended as a preserved press run and becomes that day's canonical revision. Ownership is checked by the server at request time and therefore follows an app transfer.
   - When this request creates, retries, or refreshes a model-backed edition, confirmed provider usage consumes AI Energy from this requesting viewer. Concurrent or later callers that deduplicate onto the same pending or ready edition are not charged.
   - A quiet edition with no editorial events does not call an AI provider and does not consume AI Energy.
   - A failed attempt may be queued again on the same day. A ready edition is immutable for ordinary viewers.
