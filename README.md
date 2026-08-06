@@ -153,6 +153,64 @@ claude "Read CLAUDE.md, then make the requested change."
 The login command uses a browser approval code and stores a scoped token and the
 selected project at `~/.twinkle/lumine-cli-auth.json`.
 
+## Privileged website administration
+
+`lumine admin` reuses Mikey's saved CLI login while keeping the visible public
+actor separate. The server reloads Mikey's current authority from the writer,
+resolves Zero/Ciel by immutable IDs, and binds every operation to an expiring,
+purpose-scoped daily run. Flags, usernames, token claims, and local state never
+grant delegation. Delegated work does not create a bot login or presence
+session, but its public content changes use Twinkle's normal real-time socket
+events.
+
+```bash
+lumine admin identity list --json
+lumine admin daily-run start --identity auto --comment-mode off --json
+lumine admin recommendations list --cursor '<cursor>' --json
+lumine admin subjects candidates --after 2026-08-01T00:00:00Z --json
+lumine admin subjects candidates --effort unassigned --json
+lumine admin subject get 123 --include-comments --json
+lumine admin post get https://www.twin-kle.com/ai-stories/88 --json
+lumine admin post comments dailyReflection:99 --json
+lumine admin subject comments 123 --cursor '<cursor>' --json
+lumine admin subject reveal 123 --json
+lumine admin subject effort set 123 --level 3 --json
+lumine admin subject creator set-made-by-poster 123 --json
+lumine admin featured list --json
+lumine admin subject feature 123 --json
+lumine admin subject unfeature 123 --json
+lumine admin featured reorder --subject-ids 30,20,10 --json
+lumine admin post recommend comment:456 --anyone-can-reward --reward-twinkles 3 --json
+lumine admin post reward comment:456 --twinkles 3 --json
+lumine admin daily-run complete --json
+```
+
+Numeric recommendation targets default to subjects. Use `comment:<id>`,
+`aiStory:<id>`, `dailyReflection:<id>`, a canonical URL, or the matching
+`--type` for another post kind. Commenting is always `off` for a new run unless
+`--comment-mode draft` or `--comment-mode post` is explicitly supplied. Drafts
+and posts use the selected bot's server-owned canonical persona; a later human
+reply is handled by Twinkle's existing autonomous Zero/Ciel responder without
+Lumine remaining active.
+
+Every operation is noninteractive when its required arguments are present.
+`--json` prints exactly one uncolored JSON value and returns a nonzero status
+for forbidden, not-found, validation, and partial-failure responses. Pass a
+stable `--idempotency-key` when retrying one mutation across processes; the
+server also enforces canonical no-duplicate invariants. Failed mutation JSON
+includes `error.details.retryIdempotencyKey` so a partial attempt can be
+resumed with the exact generated key.
+
+Subject and recommendation-queue listings use opaque, stable snapshot cursors.
+Pass the returned `data.pagination.nextCursor` back through `--cursor` until
+`data.pagination.exhausted` is true. Subject `--after` is inclusive and cursors
+are bound to the original date and effort filters.
+
+The complete run lifecycle, command contracts, nullable fields, Karma approval
+behavior, pagination semantics, secret-subject behavior, presence isolation,
+and retry rules are documented in
+[`sdk/LUMINE_ADMIN.md`](sdk/LUMINE_ADMIN.md).
+
 `lumine login` opens the Twinkle approval page automatically. If you are running
 in SSH, CI, or an agent environment, use:
 
