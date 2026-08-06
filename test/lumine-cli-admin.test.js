@@ -241,7 +241,7 @@ test("forbidden and partial failures are one JSON value with nonzero exit", asyn
         status: "forbidden",
         error: {
           code: "CLI_ADMIN_FORBIDDEN",
-          message: "Administrator or supermoderator access is required.",
+          message: "Approved administrator access is required.",
           details: null,
         },
       },

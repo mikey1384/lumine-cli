@@ -9,7 +9,9 @@ canonical structured data.
 
 - The saved Lumine login always authenticates the real operator. The API reloads
   that user's current role from the writer database on every request.
-- Only the server-configured administrator may delegate, and only the immutable
+- Only the server-configured administrator with authoritative administrator
+  management authority may delegate. Effective Level 5 alone is rejected.
+  Only the immutable
   server-owned Zero and Ciel user IDs are approved. Usernames and CLI flags are
   not authority.
 - `daily-run start` creates or returns a six-hour `delegated-admin` run with
@@ -526,6 +528,9 @@ Numeric targets default to `subject`. Use `subject:<id>`, `comment:<id>`,
 type PriorRecommendationApproval = {
   recommendationId: number;
   recipientUserId: number;
+  karmaRecipientUserId: number;
+  karmaAwarded: number; // 10 for a new canonical approval; 0 on retry
+  karmaPoints: number; // writer-confirmed absolute balance after recomputation
   status: "created" | "already_approved";
   reward: Record<string, unknown>; // canonical users_rewards row
 };
@@ -578,13 +583,17 @@ type RewardThree = Success<
 >;
 ```
 
-Zero/Ciel are treated as effective Level 5 only inside the shared canonical
-recommendation-approval decision. A newly activated qualifying recommendation
+Zero/Ciel are normalized to effective Level 5 only inside the shared canonical
+recommendation-approval decision. This narrow rule does not grant delegation,
+management authority, or any other permission. A newly activated qualifying
+recommendation
 approves eligible earlier lower-level recommenders through the existing
 `users_rewards` recommendation mechanism and multiplier. It excludes the
 content author's self-recommendation, the approving bot, both management bots,
-Level 5+ users, deleted rows, and existing ineligible rows. It does not update
-`users.karmaPoints` or claim an immediate Karma balance change.
+Level 5+ users, deleted rows, and existing ineligible rows. The approval then
+runs the same absolute canonical Karma recomputation as `/user/karma`, using
+writer-locked state. A new approval reports the canonical 10-point contribution;
+a retry reports zero newly awarded and the same confirmed absolute balance.
 
 Recommendation history is checked across both management bots, so rotation
 does not recommend the same target again. Changing only `anyoneCanReward` does
