@@ -9,8 +9,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  filterRecommendationQueueResult,
   formatAdminJsonError,
   parseAdminOperation,
+  parseRecommendationContentTypes,
   parseRecommendationTarget,
 } from "../lib/admin.js";
 import { parseArgs } from "../lib/commands.js";
@@ -37,6 +39,52 @@ test("admin parsing preserves opaque cursors and explicit noninteractive flags",
   assert.equal(options.adminEffort, "unassigned");
   assert.equal(options.json, true);
   assert.match(parseAdminOperation(options).path, /cursor=eyJ2ZXJzaW9uIjoxfQ/);
+});
+
+test("recommendation content filters exclude AI Stories without changing pagination", () => {
+  const options = parseArgs([
+    "admin",
+    "recommendations",
+    "list",
+    "--content-types",
+    "comment,dailyReflection",
+  ]);
+  assert.deepEqual(parseRecommendationContentTypes(options.adminContentTypes), [
+    "comment",
+    "dailyReflection",
+  ]);
+  assert.match(
+    parseAdminOperation(options).path,
+    /contentTypes=comment%2CdailyReflection/,
+  );
+  assert.throws(
+    () => parseRecommendationContentTypes("comment,subject"),
+    /accepts comment, aiStory, and dailyReflection/,
+  );
+  const result = filterRecommendationQueueResult({
+    result: {
+      ok: true,
+      status: "success",
+      data: {
+        items: [
+          { contentType: "comment", contentId: 1 },
+          { contentType: "aiStory", contentId: 2 },
+          { contentType: "dailyReflection", contentId: 3 },
+        ],
+        pagination: { nextCursor: "opaque", exhausted: false },
+      },
+    },
+    contentTypes: ["comment", "dailyReflection"],
+  });
+  assert.deepEqual(
+    result.data.items.map((item) => item.contentId),
+    [1, 3],
+  );
+  assert.equal(result.data.pagination.nextCursor, "opaque");
+  assert.deepEqual(result.data.clientFilter, {
+    contentTypes: ["comment", "dailyReflection"],
+    excludedItems: 1,
+  });
 });
 
 test("delegated identity and daily-run parsing keeps comment permission run-local", () => {
@@ -68,6 +116,75 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   assert.equal(parseAdminOperation(nextRun).body.identity, undefined);
 });
 
+test("skip and audit commands map to stable API contracts", () => {
+  const skip = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "post",
+      "skip",
+      "dailyReflection:99",
+      "--reason",
+      "one-line answer",
+      "--json",
+    ]),
+  );
+  assert.equal(skip.name, "post.skip");
+  assert.equal(skip.method, "POST");
+  assert.equal(skip.path, "/cli/admin/skips/dailyReflection/99");
+  assert.deepEqual(skip.body, { reason: "one-line answer" });
+  assert.equal(skip.mutates, true);
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "post", "skip", "comment:456"]))
+      .body.reason,
+    undefined,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "post", "skip", "123"])),
+    /effort assignment/,
+  );
+
+  const audit = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "audit",
+      "list",
+      "--run",
+      "current",
+      "--target",
+      "dailyReflection:99",
+      "--actions",
+      "recommendation.skip",
+      "--limit",
+      "50",
+      "--full",
+      "--json",
+    ]),
+  );
+  assert.equal(audit.name, "audit.list");
+  assert.equal(audit.mutates, false);
+  assert.match(audit.path, /^\/cli\/admin\/audit\?/);
+  assert.match(audit.path, /run=current/);
+  assert.match(audit.path, /target=dailyReflection%3A99/);
+  assert.match(audit.path, /actions=recommendation\.skip/);
+  assert.match(audit.path, /full=true/);
+  assert.match(
+    parseAdminOperation(parseArgs(["admin", "audit"])).path,
+    /^\/cli\/admin\/audit\?limit=\d+$/,
+  );
+  assert.match(
+    parseAdminOperation(parseArgs(["admin", "audit", "list", "--run", "12"]))
+      .path,
+    /run=12/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "audit", "list", "--run", "yesterday"]),
+      ),
+    /--run must be an integer/,
+  );
+});
+
 test("new subject, featured, reward, and comment commands map to stable API contracts", () => {
   assert.equal(
     parseAdminOperation(
@@ -93,17 +210,54 @@ test("new subject, featured, reward, and comment commands map to stable API cont
       mutates: true,
     },
   );
+  // A bare numeric draft target still means the subject, exactly as before
+  // the target model existed.
   assert.deepEqual(
     parseAdminOperation(
       parseArgs(["admin", "comment", "draft", "42", "--identity", "ciel"]),
     ).body,
-    { subjectId: 42, identity: "ciel" },
+    { targetType: "subject", targetId: 42, identity: "ciel" },
   );
   assert.equal(
     parseAdminOperation(
       parseArgs(["admin", "comment", "post", "--draft-id", "77"]),
     ).path,
     "/cli/admin/comment-drafts/77/publish",
+  );
+});
+
+test("comment drafts target replies and standalone posts through one operation", () => {
+  const reply = parseAdminOperation(
+    parseArgs(["admin", "comment", "reply", "comment:456"]),
+  );
+  assert.equal(reply.name, "comment.draft");
+  assert.equal(reply.path, "/cli/admin/comment-drafts");
+  assert.deepEqual(reply.body, {
+    targetType: "comment",
+    targetId: 456,
+    identity: undefined,
+  });
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs(["admin", "comment", "draft", "dailyReflection:99"]),
+    ).body.targetType,
+    "dailyReflection",
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "comment",
+        "draft",
+        "https://www.twin-kle.com/comments/456",
+      ]),
+    ).body,
+    { targetType: "comment", targetId: 456, identity: undefined },
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "comment", "reply", "123"])),
+    /targets a comment/,
   );
 });
 

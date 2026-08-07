@@ -273,9 +273,26 @@ type DailyRunFail = DailyRunComplete;
 
 `lastRun` makes a lost-response retry of `complete` or `fail` possible after
 the active pointer has been cleared. Other run-scoped commands accept only the
-current unexpired `active` run. Completion rejects while a content mutation or
-audit finalization is pending; `fail` remains available to abandon such a run
-without advancing rotation.
+current unexpired `active` run. Completion first finalizes any mutation whose
+content change committed but whose audit bookkeeping was still pending,
+counting it toward the run's rotation signal. It then rejects only while a
+mutation from the last ten minutes is genuinely in flight (the 409 lists the
+pending mutations and a `retryAfterSeconds`); older in-flight rows are treated
+as orphans of a dead process and no longer block completion. `fail` remains
+available to abandon a run without advancing rotation, including a run whose
+six-hour authorization has expired; an expired run can never be completed.
+A TTL-expired run is reported with status `expired` even before the next
+start reaps it, so `daily-run status` never shows an unusable run as
+`active`.
+
+Starting with a run key that belongs to a finished or expired run fails with
+`CLI_ADMIN_RUN_KEY_ALREADY_USED`; supply a fresh `--run-key` (for example
+`daily:2026-08-07:2`) to start again the same day. Reusing the key of the
+live active run returns that run only when the requested `--comment-mode`
+and any explicit `--identity` match it; otherwise the start fails with
+`CLI_ADMIN_RUN_SETTINGS_MISMATCH` instead of silently returning a run with
+different scopes. The same check applies when a start without the active
+run's key would fall back to that active run.
 
 The default run key is `daily:YYYY-MM-DD` in Asia/Bangkok. Supply `--run-key`
 for a separate explicit run. `--idempotency-key` may be supplied to any
@@ -286,7 +303,8 @@ JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 ## Canonical lists and inspection
 
 ```bash
-lumine admin recommendations list --kind recommend --cursor '<cursor>' --json
+lumine admin recommendations list --kind recommend \
+  --content-types comment,dailyReflection --cursor '<cursor>' --json
 lumine admin subjects candidates --after 2026-08-01T00:00:00Z \
   --cursor '<cursor>' --json
 lumine admin subjects candidates --effort unassigned --json
@@ -321,20 +339,37 @@ type RecommendationQueueList = Success<{
     recommendation: RecommendationState;
     reward: RewardState;
   }>;
-  pagination: Pagination & { scannedCount: number };
+  pagination: Pagination & {
+    scannedCount: number;
+    contentTypes?: Array<"comment" | "aiStory" | "dailyReflection">;
+  };
+  clientFilter?: {
+    contentTypes: Array<"comment" | "aiStory" | "dailyReflection">;
+    excludedItems: number;
+  };
 }>;
 
 type SubjectCandidates = Success<{
   subjects: Subject[];
-  pagination: Pagination;
+  pagination: Pagination & { scannedCount: number };
 }>;
 ```
 
 Both cursors freeze a primary-key high-water mark and traverse descending IDs,
-so concurrent inserts cannot shift or duplicate later pages. A recommendation
-page can be empty while `hasMore` remains true; continue until `exhausted`.
-Subject `--after` is inclusive, and the opaque cursor is bound to its original
-date and effort filters.
+so concurrent inserts cannot shift or duplicate later pages. Both walks scan a
+bounded primary-key window (500 rows) per call before applying their residual
+filters, so a page — recommendation or subject — can be empty while `hasMore`
+remains true; continue until `exhausted`. Subject `--after` is inclusive, and
+the opaque cursor is bound to its original date and effort filters.
+
+`--content-types` is sent to APIs that support server-side filtering so excluded
+types do not run their eligibility/content queries. The local CLI also filters
+the returned page defensively for deployment compatibility. The server cursor
+still advances across every underlying feed row, so excluding `aiStory` cannot
+create gaps in later comment or Daily Reflection pages. New server cursors bind
+the canonical content-type set; one legacy unbound cursor can be resumed and is
+then reissued as bound. `clientFilter.excludedItems` makes any client-side
+filtering explicit in JSON output.
 
 For a run-scoped command, `--identity zero|ciel` is an assertion against the
 server-selected run identity; it cannot switch actors locally. A mismatch
@@ -343,9 +378,14 @@ selection.
 
 ### Query and index design
 
-Subject and queue traversal are bounded primary-key walks; the queue reads at
-most 500 `noti_feeds` rows per cursor step before applying the existing Earn
-Recommend eligibility predicates. The joins/`NOT EXISTS` checks are necessary
+Subject and queue traversal are bounded primary-key walks; the subject walk
+reads at most 500 `content_subjects` rows per cursor step, and the queue reads
+at most 500 `noti_feeds` rows per cursor step before applying the existing Earn
+Recommend eligibility predicates. The effort projection's
+`UPDATE noti_feeds ... WHERE type = 'subject' AND contentId = ?` reuses the
+website's canonical reward-level projection shape; deployment should verify
+`noti_feeds` carries an index whose leading columns cover `(type, contentId)`
+(or `(contentId, ...)`) as the canonical route already requires. The joins/`NOT EXISTS` checks are necessary
 to preserve the normal recommendation and skip rules, but they run only for
 IDs in that bounded window. Subject-comment traversal uses
 `idx_comments_isDeleted_subject_id`; standalone-post comments use the existing
@@ -414,7 +454,13 @@ type SubjectGet = Success<{
       answer: string | null;
       attachment: unknown | null;
     };
+    // True only when comments were actually returned; a secret-gated subject
+    // reports false here (with secret.shown false) even when they were
+    // requested.
     commentsIncluded: boolean;
+    // The inline list is capped at 200 comments in conversation order; when
+    // true, page through `subject comments` for the rest.
+    commentsTruncated: boolean;
     comments: Comment[];
   };
 }>;
@@ -503,7 +549,11 @@ type FeaturedReorder = SubjectFeature;
 `reveal` publishes the existing hidden “viewed without responding” notification
 as the selected bot, with the ordinary notification and socket side effects.
 Effort assignment rejects an unrevealed secret subject. Creator attribution
-requires an attachment. Every response is reloaded from the writer.
+requires an attachment. Both effort assignment and creator attribution enforce
+the website's moderator-precedence rule: when a strictly higher-level
+moderator recorded the current value, the mutation fails with
+`CLI_ADMIN_MODERATOR_PRECEDENCE` (the bots compare at the shared canonical
+effective level). Every response is reloaded from the writer.
 
 Featured reorder is a complete-set replacement: it rejects duplicates,
 unknown/deleted IDs, missing current members, non-subject rows, and more than
@@ -596,27 +646,124 @@ writer-locked state. A new approval reports the canonical 10-point contribution;
 a retry reports zero newly awarded and the same confirmed absolute balance.
 
 Recommendation history is checked across both management bots, so rotation
-does not recommend the same target again. Changing only `anyoneCanReward` does
-not rerun prior-recommender approval. Approval reward rows are locked and
-writer-read, so concurrent or restored attempts cannot insert the same
-approval twice.
+does not recommend the same target again — unless the request asks for
+`--anyone-can-reward` and the other bot's recommendation does not carry that
+permission, in which case the actor proceeds with its own recommendation so
+the requested permission and paired reward are honored rather than silently
+dropped. When the other bot's recommendation does satisfy the request, the
+`managementBotDeduplication` payload is returned and any requested 3-Twinkle
+reward is still processed. A bare recommend never downgrades an existing
+recommendation's anyone-can-reward permission; only an explicit
+`--anyone-can-reward` changes it, and only in the granting direction.
+Changing only `anyoneCanReward` does not rerun prior-recommender approval.
+Approval reward rows are locked and writer-read, so concurrent or restored
+attempts cannot insert the same approval twice.
 
 Both the standalone and combined reward paths also inspect existing 3-Twinkle
 management rewards across Zero and Ciel. A canonical three from either bot is
 reported as already rewarded instead of adding another management reward.
 
 The separate 3-Twinkle reward targets the worthwhile canonical post or comment.
-It uses the selected bot and Twinkle's ordinary canonical balance, Level, and
-recipient rules; Mikey is never charged while Zero/Ciel is displayed. Thus the
-bot's canonical balance is charged whenever the normal economy requires
-payment, while the existing Level-based no-charge rule remains unchanged. The
+It uses the selected bot and Twinkle's ordinary canonical Level and recipient
+rules; Mikey is never charged while Zero/Ciel is displayed. Zero and Ciel are
+exempt from recommendation and reward coin charges in the shared canonical
+mutation helpers, so neither `insufficient_coins` nor a bot balance decrease
+can occur for these actors; every human actor still pays under the existing
+Level-based rules. The
 reward transaction serializes the rewarder and cap-bearing content row, then
 adds only the amount needed for that actor to total exactly three. Existing
 three is `already_done`; a cap is `maximum_reached`.
 If recommendation succeeds but reward fails, the command exits nonzero with
 `partial_failure` and `retrySafe: true`.
 
-## Persona-backed comments
+## Skip decisions
+
+```bash
+lumine admin post skip dailyReflection:99 --json
+lumine admin post skip comment:456 --reason "one-line answer, nothing to add" --json
+```
+
+A skip records that the management rotation has judged a recommend-queue item
+and decided not to act, so neither bot's queue resurfaces it. It writes the
+same canonical `users_earn_skip_status` row the website's Earn page writes
+(`earnType 'karma'`, `action 'recommendation'`) under the acting bot, and the
+queue eligibility predicates honor either bot's row. Human moderators' own
+Earn queues are deliberately unaffected: the bots are not database supermods,
+so a bot skip never hides content from a human, who may judge differently.
+
+Targets are `comment`, `aiStory`, and `dailyReflection` only; subjects leave
+their queue through effort assignment. Skipping an already-skipped item (by
+either bot) returns `already_done` with `changed: false`. The optional
+`--reason` (at most 500 characters) is stored in the private audit row's
+metadata — it is the agent's memory of the judgment, not public content.
+The skip requires the `recommendation:write` scope and is audited like every
+other mutation.
+
+```ts
+type PostSkip = Success<{
+  skip: {
+    contentType: "comment" | "aiStory" | "dailyReflection";
+    contentId: number;
+    url: string;
+    skippedByUserId: number;
+    skippedAt: number | null;
+  };
+}>;
+```
+
+## Audit history
+
+```bash
+lumine admin audit list --json
+lumine admin audit list --run current --json
+lumine admin audit list --run last --actions recommendation.skip --json
+lumine admin audit list --target dailyReflection:99 --full --json
+lumine admin audit list --cursor '<cursor>' --limit 50 --json
+```
+
+Lists the operator's own private audit events, newest first, so an agent can
+see what earlier runs did. `--run` accepts `current`, `last`, or a run ID;
+`--target` accepts `<targetType>:<id>`; `--actions` is a comma-separated
+action list. Filters are bound into the cursor exactly like the other list
+cursors. The walk is a bounded descending primary-key traversal over the
+existing operator/run/target audit indexes.
+
+Rows are compact by default (identifiers, action, target, result, response
+`status`/`changed`, timestamps, and the request's idempotency key). `--full`
+adds the stored `beforeState`, `afterState`, `responseJson`, and `metadata`
+payloads — the same data the mutation already returned to this operator. The
+private per-attempt fencing token is never returned. Reading audit history
+requires only the `content:read` scope of an active run.
+
+```ts
+type AuditEvent = {
+  id: number;
+  runId: number | null;
+  publicActorUserId: number | null;
+  sessionKind: string;
+  action: string;
+  targetType: string | null;
+  targetId: number | null;
+  requestId: string;
+  result: string; // in_progress | completed | failed | partial_failure | bookkeeping_pending
+  status: string | null; // response status, e.g. success | already_done
+  changed: boolean | null;
+  createdAt: number;
+  completedAt: number | null;
+  // Present only with --full:
+  beforeState?: unknown;
+  afterState?: unknown;
+  responseJson?: unknown;
+  metadata?: unknown;
+};
+
+type AuditList = Success<{
+  events: AuditEvent[];
+  pagination: Pagination;
+}>;
+```
+
+## Persona-backed comments and replies
 
 ```bash
 lumine admin daily-run start --identity auto --comment-mode draft --json
@@ -626,21 +773,44 @@ lumine admin daily-run start --identity ciel --comment-mode post \
   --run-key daily:2026-08-06:comments --json
 lumine admin comment draft 123 --identity ciel \
   --idempotency-key comment-123-draft-v1 --json
+lumine admin comment draft dailyReflection:99 --json
+lumine admin comment reply comment:456 --json
 lumine admin comment post --draft-id 77 \
   --idempotency-key comment-123-post-v1 --json
 ```
+
+A draft targets one of:
+
+- `subject:<id>` (or a bare numeric ID) — a top-level comment on the subject;
+- `aiStory:<id>` / `dailyReflection:<id>` — a top-level comment on the
+  standalone post;
+- `comment:<id>` — a public reply to that specific comment. `comment reply`
+  is the same operation and requires a comment target.
+
+A reply's container resolves canonically from the target comment: its subject,
+or its AI Story / Daily Reflection root. Comments under any other root are
+rejected with `CLI_ADMIN_UNSUPPORTED_REPLY_ROOT`. Replies to Zero/Ciel
+comments and to notification comments are rejected with
+`CLI_ADMIN_INVALID_REPLY_TARGET` — the bots never thread with themselves or
+each other, and a human's later reply to a delegated comment still enters the
+existing autonomous comment-assistant pipeline. Published replies carry the
+ordinary thread linkage (thread root and reply-to), and notification fan-out
+uses the normal canonical path.
 
 ```ts
 type CommentDraft = Success<{
   draft: {
     id: number;
     runId: number;
-    subjectId: number;
-    subjectUrl: string;
+    targetType: "subject" | "comment" | "aiStory" | "dailyReflection";
+    targetId: number;
+    targetUrl: string;
+    subjectId: number | null; // container subject; null for standalone posts
+    subjectUrl: string | null;
     publicActorUserId: number;
     commentMode: "draft" | "post";
     personaRevision: string; // SHA-256; raw prompt is never returned
-    contextRevision: string; // SHA-256 of canonical subject/comments
+    contextRevision: string; // SHA-256 of canonical container/comments/target
     decision: "draft" | "skip";
     reason: string | null;
     content: string | null;
@@ -663,24 +833,44 @@ type CommentPost = CommentGet & {
     };
     published: {
       commentId: number;
-      subjectId: number;
-      subjectUrl: string;
+      targetType: "subject" | "comment" | "aiStory" | "dailyReflection";
+      targetId: number;
+      subjectId: number | null;
+      subjectUrl: string | null;
+      containerUrl: string;
       commentUrl: string;
     };
   };
 };
 ```
 
-The server loads the canonical subject and complete visible comment context,
-then invokes the existing exact Zero/Ciel system prompt through the shared
-response assembler. The raw prompt is never returned or audited. The model—not
-regexes or keyword rules—chooses `draft` or `skip` under the run policy.
+The server loads the canonical container (subject or standalone post) and its
+complete visible comment context, then invokes the existing exact Zero/Ciel
+system prompt through the shared response assembler with a mode-specific
+decision policy (comment vs reply). The raw prompt is never returned or
+audited. The model—not regexes or keyword rules—chooses `draft` or `skip`
+under the run policy.
 
-Draft IDs are bound to operator, run, public bot, subject, comment mode,
-context revision, persona revision, expiry, and idempotency key. Posting locks
-the draft and context in the same transaction as the ordinary comment insert.
-Changed context or persona rejects publication and requires regeneration.
-Retries return the already-published comment instead of duplicating it.
+Draft IDs are bound to operator, run, public bot, target, comment mode,
+context revision, persona revision, expiry, and idempotency key. The context
+revision covers the container, every visible comment, and the target binding,
+so a thread that changes between draft and publish rejects publication.
+Posting locks the draft and context in the same transaction as the ordinary
+comment insert. Changed context or persona rejects publication and requires
+regeneration. Retries return the already-published comment instead of
+duplicating it. Secret-subject gating applies whenever the container is a
+subject, including replies inside it.
+
+Draft idempotency keys are permanent per operator: supplying a key that an
+earlier run (or another target) already used fails rather than resolving to
+the old reservation — normally as the audit layer's
+`CLI_ADMIN_AUDIT_IDENTITY_MISMATCH` (different run) or
+`CLI_ADMIN_IDEMPOTENCY_KEY_MISMATCH` (different target), with
+`CLI_ADMIN_DRAFT_KEY_REUSED` as the draft-table backstop. All three mean the
+same thing: embed the run or date in any caller-supplied draft key and retry
+with a fresh one. Note that the agent's
+own `subject effort set` or `creator set-made-by-poster` between draft and
+post changes the context revision — order those mutations before drafting.
 
 ## Audit, sockets, and deployment
 
@@ -692,9 +882,9 @@ cookies, passwords, or raw system prompts.
 
 Retry acquisition and completion are row-locked and fenced by a private
 per-attempt token, so an expired request cannot overwrite a newer retry. A new
-recommendation and its normal recommendation coin charge commit together; the
-canonical prior-recommender approval and the separate 3-Twinkle reward remain
-independently retryable.
+recommendation commits atomically (the management bots are exempt from the
+recommendation coin charge); the canonical prior-recommender approval and the
+separate 3-Twinkle reward remain independently retryable.
 
 Public content actions use ordinary Twinkle fan-out:
 
@@ -705,9 +895,11 @@ Public content actions use ordinary Twinkle fan-out:
 - effort/creator changes emit `edit_content`;
 - Featured changes emit a canonical `home_outdated` refresh.
 
-Apply `twinkle-api/scripts/migrations/add-lumine-admin-delegation.sql` before
-deploying the API. It adds only focused daily-run, rotation, draft, and audit
-tables and indexes; there are no runtime schema checks. The local CLI changes
+Apply `twinkle-api/scripts/migrations/add-lumine-admin-delegation.sql` and
+then `add-lumine-admin-comment-targets.sql` before deploying the API. They add
+only focused daily-run, rotation, draft, and audit tables/columns and indexes;
+there are no runtime schema checks. The comment-targets migration backfills
+existing subject drafts into the generalized target columns. The local CLI changes
 are not available to users until a separately authorized npm publication.
 
 Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
