@@ -683,3 +683,113 @@ async function runCli(args) {
   const [code] = await once(child, "close");
   return { code, stdout, stderr };
 }
+
+test("newspaper verbs map to the delegated news routes", () => {
+  const status = parseAdminOperation(parseArgs(["admin", "news"]));
+  assert.equal(status.name, "news.status");
+  assert.equal(status.method, "GET");
+  assert.equal(status.path, "/cli/admin/news");
+  assert.equal(status.mutates, false);
+
+  const explicitStatus = parseAdminOperation(
+    parseArgs(["admin", "news", "status"]),
+  );
+  assert.equal(explicitStatus.name, "news.status");
+  assert.equal(explicitStatus.path, "/cli/admin/news");
+
+  const print = parseAdminOperation(parseArgs(["admin", "news", "print"]));
+  assert.equal(print.name, "news.print");
+  assert.equal(print.method, "POST");
+  assert.equal(print.path, "/cli/admin/news/print");
+  assert.equal(print.mutates, true);
+
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "news", "refresh"])),
+    /lumine admin news \[status\] \| news print \| news claim/,
+  );
+});
+
+test("newspaper claim and submit map to the editorial routes", () => {
+  const claim = parseAdminOperation(parseArgs(["admin", "news", "claim"]));
+  assert.equal(claim.name, "news.claim");
+  assert.equal(claim.method, "POST");
+  assert.equal(claim.path, "/cli/admin/news/claim");
+  assert.equal(claim.mutates, true);
+
+  const editorialPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-news-")),
+    "editorial.json",
+  );
+  fs.writeFileSync(
+    editorialPath,
+    JSON.stringify({
+      mastheadHeadline: "Test Edition",
+      lead: null,
+      stories: [],
+      editorsNote: "",
+    }),
+  );
+  const submit = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "news",
+      "submit",
+      "--edition-id",
+      "42",
+      "--lease-token",
+      "lease-abc",
+      "--file",
+      editorialPath,
+      "--model",
+      "Claude",
+    ]),
+  );
+  assert.equal(submit.name, "news.submit");
+  assert.equal(submit.path, "/cli/admin/news/submit");
+  assert.equal(submit.body.editionId, 42);
+  assert.equal(submit.body.leaseToken, "lease-abc");
+  assert.equal(submit.body.model, "Claude");
+  assert.equal(submit.body.editorial.mastheadHeadline, "Test Edition");
+
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "news", "submit", "--edition-id", "42"]),
+      ),
+    /--lease-token/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "news",
+          "submit",
+          "--edition-id",
+          "42",
+          "--lease-token",
+          "lease-abc",
+        ]),
+      ),
+    /--file/,
+  );
+});
+
+test("newspaper repair claims carry the target date", () => {
+  const repair = parseAdminOperation(
+    parseArgs(["admin", "news", "claim", "--date", "2026-08-05"]),
+  );
+  assert.equal(repair.name, "news.claim");
+  assert.deepEqual(repair.body, { date: "2026-08-05" });
+
+  const todayClaim = parseAdminOperation(parseArgs(["admin", "news", "claim"]));
+  assert.deepEqual(todayClaim.body, {});
+
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "news", "claim", "--date", "yesterday"]),
+      ),
+    /--date must be YYYY-MM-DD/,
+  );
+});

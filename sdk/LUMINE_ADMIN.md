@@ -711,6 +711,145 @@ type PostSkip = Success<{
 }>;
 ```
 
+## Twinkle Newspaper
+
+```bash
+lumine admin news --json
+lumine admin news claim --json
+lumine admin news submit --edition-id 42 --lease-token <token> \
+  --file editorial.json --model "Claude" --json
+lumine admin news print --json
+```
+
+The Twinkle Newspaper (Build app 1929) is normally printed by a community
+member spending their own AI Energy. Making sure today's paper exists is part
+of every delegated website-management run: check `lumine admin news` early in
+the run, and if `printedToday` is false with no edition `pending` or
+`generating`, print it.
+
+**Preferred: write the editorial yourself.** `news claim` reserves today's
+edition under the server's generation lease and returns the exact canonical
+event digest the server would otherwise send to its own model, so no provider
+API credits are spent. Write a `GeneratedEditorial` JSON and send it back with
+`news submit` within the ten-minute lease. The server treats the editorial as
+untrusted regardless of author: every story must cite an exact `eventKey`
+from the digest, front-page `sourceQuote`s must be verbatim contiguous
+passages of the cited event's summary (invalid quotes are replaced with
+canonical text), section and page layout are server-enforced, announcements
+are appended verbatim outside your output, and source visibility is
+re-checked transactionally at commit.
+
+```ts
+type GeneratedEditorial = {
+  mastheadHeadline: string;
+  mastheadDeck: string;
+  lead: { eventKey: string; headline: string; summary: string; sourceQuote: string } | null;
+  stories: Array<{ eventKey: string; headline: string; summary: string; sourceQuote: string }>;
+  editorsNote: string;
+};
+```
+
+Editorial rules (the same ones the server's own model works under): use only
+the supplied events — never world news, invented names, invented statistics,
+or unsupported claims. Subjects and shared Daily Reflections are the primary
+authored material; only a `section: "front"` event may be the lead. Preserve
+substance, names, and numbers. Do not mention official announcements (the
+server adds them), and give non-front events an empty `sourceQuote`.
+
+Claim edge cases: a quiet day (no editorial events) is committed as the
+canonical quiet edition at claim time — no editorial needed, the response
+says so. If the claim is not submitted before the lease expires, the server's
+press worker falls back to generating the edition itself. `news submit`
+failing with `CLI_ADMIN_NEWS_CLAIM_LOST` means the lease was superseded —
+re-check `lumine admin news` and claim again only if the paper still needs
+printing.
+
+**Repairing a past edition.** `news claim --date YYYY-MM-DD` leases an
+already-printed historical edition and returns a fresh digest of its original
+coverage window (primary Subjects/Reflections are re-projected from canonical
+tables, and anything since deleted or made private drops out). Submitting
+appends the next revision — every prior press run stays browsable in the
+archive, and repairs never re-notify subscribers (only a day's first revision
+does). Today's edition is never repaired this way; refreshing today is the
+Newspaper owner's website-only action. Repair only when an edition is
+genuinely degraded (missing masthead, missing lead, empty pages), not to
+rewrite history editorially.
+
+**Fallback: queue the server's own model.** `news print` reserves the edition
+and lets the server's press worker write it (spends provider credits). It is
+idempotent per day: it queues a new edition when today has none, requeues a
+retry when today's only attempts failed, and returns `already_done` when the
+paper is printed or being typeset.
+
+Neither path ever reprints or refreshes an already-printed edition —
+refreshing is the Newspaper owner's website-only action. The acting bot is
+recorded as the requester, and the management bots are exempt from AI Energy
+for newspaper generation: the platform absorbs the cost, exactly like their
+coin-exempt recommends and rewards. When a day's first edition is printed,
+the server notifies the app's notification subscribers (users can mute the
+app or unsubscribe in the app; the bots never need to send anything). All
+three mutations require the `news:print` scope (in every run's base scopes)
+and are audited as `news.print` / `news.claim` / `news.submit` against
+`news_edition` targets.
+
+```ts
+type NewsStatus = Success<{
+  newspaper: {
+    dayIndex: number;
+    dateKey: string; // YYYY-MM-DD
+    printedToday: boolean;
+    generationStatus:
+      | "available" // no edition requested today
+      | "pending"
+      | "generating"
+      | "ready"
+      | "failed";
+    failureMessage: string | null;
+    attempts: number | null;
+    latestPrinted: {
+      dayIndex: number;
+      dateKey: string;
+      generatedAt: number | null;
+      sourceEventCount: number;
+      revisionNumber: number;
+    } | null; // most recent printed edition, possibly a previous day
+    nextEditionAt: number;
+    printDecision: "already_printed" | "in_progress" | "retry" | "create";
+    requestedAction?: "none" | "retry" | "create"; // print responses only
+  };
+}>;
+
+type NewsPrint = NewsStatus; // "success" (queued) or "already_done"
+
+type NewsClaim = Success<{
+  newspaper: NewsStatus["data"]["newspaper"] & {
+    quietEditionPrinted?: boolean;
+  };
+  claim: {
+    editionId: number;
+    dayIndex: number;
+    dateKey: string;
+    leaseToken: string;
+    leaseExpiresAt: number;
+    coverage: { startedAt: number; endedAt: number };
+    maxSourceQuoteLength: number;
+    announcementCount: number;
+    events: Array<{
+      eventKey: string;
+      kind: string;
+      section: string; // front | community | notices | scores | marketplace
+      occurredAt: number;
+      priority: number;
+      title: string;
+      summary: string;
+      payload: unknown; // may include author and canonical topComments
+    }>;
+  } | null; // null: already printed/typesetting, or the quiet edition auto-committed
+}>;
+
+type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
+```
+
 ## Audit history
 
 ```bash
