@@ -21,8 +21,18 @@ canonical structured data.
 - The public content actor is Zero or Ciel. Mikey's operator ID is retained in
   private audit rows and is not embedded in public comment metadata.
 - Delegated HTTP work never authenticates as the bot, opens a bot socket, changes
-  bot sessions, or updates bot presence/last-seen/typing state. Normal content
-  mutations still emit Twinkle's canonical real-time content events.
+  bot sessions, or updates bot presence/typing state. Normal content mutations
+  still emit Twinkle's canonical real-time content events.
+- One deliberate exception to the last-seen rule: a delegated mutation that
+  actually changed something stamps the acting bot's `users.lastActive`, so
+  Zero's and Ciel's public "last online" reflects the real day they commented on
+  and rewarded kids' posts instead of whenever a socket last closed. It is
+  written after the audit transaction commits, throttled to once a minute, and
+  best-effort — it can never fail or deadlock the content mutation. Presence is
+  still untouched: no socket is opened and no `online_status_changed` is emitted,
+  so the bots remain absent from the online list. Note that `lastActive` is the
+  ordering key for the People directory, so the bots now surface there after a
+  run; that is the intended consequence of the timestamp being truthful.
 - A later human reply to a delegated Zero/Ciel comment enters the existing
   server-side autonomous comment-assistant pipeline. Lumine does not need to
   remain running.
@@ -38,6 +48,117 @@ Comment mode is stored only on the current run:
 - `off` (default): no draft or post scope.
 - `draft`: server-generated drafts, no public comment.
 - `post`: drafts plus idempotent publication through the ordinary comment path.
+
+## Editorial priorities
+
+The CLI enforces none of this — it is the standing instruction for the operator
+or agent making the judgments, and it applies to every verb below: recommends,
+rewards, effort levels, Featured, skips, comments, and replies.
+
+**Twinkle is not Reddit.** Do not rank a run's attention by popularity,
+recommendation count, or polish. Most users here are young children, and the
+posts that most need Zero or Ciel are the ones nobody else answered.
+
+- **Look first at new, quiet, and overlooked users.** A child's first post, or a
+  post from someone who rarely gets replies, is worth more of a run's attention
+  than another well-liked post that already has a lively thread.
+- **Clumsy is not the same as low-effort.** Bad spelling, a one-line
+  description, a title that is just "hi", a drawing that did not come out right
+  — these are usually a child trying, not a child spamming. Read for the real
+  thing they were reaching for and respond to that.
+- **Zero engagement is a reason to act, not to skip.** A post sitting at no
+  recommendations and no comments is the strongest signal in the queue that
+  someone should notice it.
+- **Thought-provoking posts deserve substance, not applause — and an unnoticed
+  one is the highest priority of all.** When a child asks a real question or
+  makes a real argument and the thread is empty, that is the clearest case for
+  a Zero/Ciel comment on the whole site. Engage with the idea itself: answer it,
+  add a perspective or a counter-consideration, and leave the author somewhere
+  to go next. A good question that nobody answered teaches a child that thinking
+  hard is not worth it; that is the outcome these runs exist to prevent. This
+  cuts both ways with the point above — the two ends of the queue, the beginner
+  nobody noticed and the strong idea nobody engaged, both outrank the popular
+  post that already has a lively thread.
+- **Always answer Twinkle usage questions.** "How do I change my username",
+  "why can't I reward", "what unlocks the Summoner" — a child stuck on the site
+  cannot use it. Answer concretely and verify anything you are unsure of against
+  the canonical rules before publishing; say you will check with Mikey rather
+  than guessing at mechanics.
+- **Always respond to bug reports, and tag `@mikey` in the comment.** The
+  mention is what notifies him (`postComment` runs `processMentions` /
+  `postMentions` and emits `new_targeted_upload`), so a bug-report comment
+  without `@mikey` fails its main job. Restate what the child observed; never
+  promise a fix or a timeline.
+- **Guide users through the website, without waiting to be asked.** A post can
+  show that a child is stuck, confused, or unaware a feature exists without ever
+  containing a question — someone begging for coins who does not know about
+  daily rewards, someone reposting because they could not find their own post.
+  Give them a short, friendly crash course on the exact thing they are stuck on.
+  Teaching a child to use the site is worth more than any single recommend.
+- **Reserve `post skip` for genuine noise** — card-sale and coin-begging spam,
+  keyboard mash, duplicates, engagement farming — not for sincere posts that
+  merely look unimpressive.
+- **Effort levels are not a verdict on the child.** Level 1 on a thin post is
+  ordinary bookkeeping; it never means the author deserves less attention, and
+  it pairs well with a warm comment.
+- **Featured still selects for quality**, but when two candidates are close,
+  prefer the child who has never been featured over the one who has.
+
+Sensitive disclosures, active disputes, and anything needing crisis or medical
+judgment remain out of scope for a bot comment no matter how neglected the post
+is. Those go to Mikey.
+
+## Escalation to Mikey
+
+A run is not finished when the mutations are done. Curation surfaces things only
+a human owner can decide, and a finding nobody reports is a finding that did not
+happen. **Every run ends with an escalation list**, and it belongs in the run's
+final report whether or not anyone asks for it.
+
+Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
+`/comments/<id>` URL, a one-line summary, and why it needs him:
+
+- **Child-safety and wellbeing** — distress or mental-health disclosures,
+  anything about self-harm, a child asking for a photo of themselves to be
+  removed, requests to delete or hide personal information, contact details
+  posted in public, or a child who says they are leaving because something
+  happened. These outrank every other category.
+- **Account integrity** — someone posting from another person's account,
+  impersonation, shared logins, or a user operating a set of alternate accounts.
+- **Economy manipulation** — coin or XP farming across alternate accounts,
+  paid-grinding arrangements, "invest and I will pay you back more" offers,
+  pay-me-to-win contests, and anything that teaches other children a method for
+  any of these. Note the recommendation count: a manipulation how-to that other
+  kids are recommending is spreading, and that is the urgent part.
+- **Bug reports** the run encountered, even secondhand in a comment thread.
+
+Two rules that keep the list worth reading:
+
+- **Check the thread before escalating.** If Mikey already replied in it, the
+  matter is his and it is closed unless something new happened after his reply —
+  re-reporting it wastes the one channel that is supposed to mean "look at this."
+  Say so explicitly when a post looks alarming but he already handled it.
+- **Check `operatorViewed` too.** Every Subject, Comment, StandalonePost, and
+  queue item reports whether Mikey has opened that content and when. Silence is
+  not the same as not having seen it — he often reads without replying. Lead the
+  escalation list with items where `viewed` is false, and mark the rest as
+  already-seen rather than dropping them, since he may have looked before the
+  thing you are escalating happened. `lumine admin subjects candidates --unviewed`
+  and `lumine admin recommendations list --unviewed` filter a page down to what
+  he has not opened (`--viewed` inverts it). The flags are supported by the
+  recommendation, Subject, Featured, and comment-list commands only; they are
+  rejected before any request on every other command.
+
+  Two limits make this a strong negative signal and a weak positive one: a view
+  is recorded only when the content **page** is opened, so reading a post inline
+  in a feed records nothing, and a user's view of their **own** content is never
+  recorded. So `viewed: true` reliably means he opened it; `viewed: false` means
+  "no page open recorded", not "he never saw it". Never tell a child, in public,
+  whether Mikey has or has not looked at their post.
+
+- **Escalate; do not moderate.** Zero and Ciel have no moderation verbs here by
+  design. Do not delete, hide, argue with, or publicly accuse anyone, and do not
+  warn a child that they are in trouble. Report it and let Mikey decide.
 
 ## Common JSON types
 
@@ -76,6 +197,15 @@ type Failure = {
 Shared records:
 
 ```ts
+// Present on Subject, Comment, StandalonePost, and every recommend-queue item.
+// This is the OPERATOR's own view state (Mikey), never the bot's, and reading it
+// records nothing.
+type OperatorViewed = {
+  viewed: boolean;
+  firstViewedAt: number | null; // Unix seconds
+  lastViewedAt: number | null;
+};
+
 type Author = { id: number | null; username: string | null };
 
 type Attachment = {
@@ -305,9 +435,11 @@ JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 ```bash
 lumine admin recommendations list --kind recommend \
   --content-types comment,dailyReflection --cursor '<cursor>' --json
+lumine admin recommendations list --unviewed --json
 lumine admin subjects candidates --after 2026-08-01T00:00:00Z \
   --cursor '<cursor>' --json
 lumine admin subjects candidates --effort unassigned --json
+lumine admin subjects candidates --unviewed --json
 ```
 
 Schemas:
@@ -743,8 +875,18 @@ re-checked transactionally at commit.
 type GeneratedEditorial = {
   mastheadHeadline: string;
   mastheadDeck: string;
-  lead: { eventKey: string; headline: string; summary: string; sourceQuote: string } | null;
-  stories: Array<{ eventKey: string; headline: string; summary: string; sourceQuote: string }>;
+  lead: {
+    eventKey: string;
+    headline: string;
+    summary: string;
+    sourceQuote: string;
+  } | null;
+  stories: Array<{
+    eventKey: string;
+    headline: string;
+    summary: string;
+    sourceQuote: string;
+  }>;
   editorsNote: string;
 };
 ```

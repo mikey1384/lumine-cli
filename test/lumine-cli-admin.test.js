@@ -9,11 +9,15 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  adminCommand,
+  filterListResultByOperatorView,
   filterRecommendationQueueResult,
   formatAdminJsonError,
   parseAdminOperation,
+  parseOperatorViewFilter,
   parseRecommendationContentTypes,
   parseRecommendationTarget,
+  resolveOperatorViewFilter,
 } from "../lib/admin.js";
 import { parseArgs } from "../lib/commands.js";
 
@@ -255,8 +259,7 @@ test("comment drafts target replies and standalone posts through one operation",
     { targetType: "comment", targetId: 456, identity: undefined },
   );
   assert.throws(
-    () =>
-      parseAdminOperation(parseArgs(["admin", "comment", "reply", "123"])),
+    () => parseAdminOperation(parseArgs(["admin", "comment", "reply", "123"])),
     /targets a comment/,
   );
 });
@@ -792,4 +795,143 @@ test("newspaper repair claims carry the target date", () => {
       ),
     /--date must be YYYY-MM-DD/,
   );
+});
+
+test("operator view filter narrows lists without hiding unknown state", () => {
+  const result = {
+    ok: true,
+    status: "success",
+    data: {
+      items: [
+        { contentId: 1, operatorViewed: { viewed: true } },
+        { contentId: 2, operatorViewed: { viewed: false } },
+        // Older deployed API: no field at all. Must be kept, never silently
+        // dropped, so the filter can only ever be too inclusive.
+        { contentId: 3 },
+      ],
+    },
+  };
+
+  const unviewed = filterListResultByOperatorView({
+    result,
+    viewFilter: "unviewed",
+  });
+  assert.deepEqual(
+    unviewed.data.items.map((item) => item.contentId),
+    [2, 3],
+  );
+  assert.equal(unviewed.data.operatorViewFilter.excludedItems, 1);
+  assert.equal(unviewed.data.operatorViewFilter.unknownStateItems, 1);
+
+  const viewed = filterListResultByOperatorView({
+    result,
+    viewFilter: "viewed",
+  });
+  assert.deepEqual(
+    viewed.data.items.map((item) => item.contentId),
+    [1, 3],
+  );
+
+  // No flag leaves the payload untouched.
+  assert.equal(
+    filterListResultByOperatorView({ result, viewFilter: null }),
+    result,
+  );
+});
+
+test("operator view filter narrows comment lists too", () => {
+  const result = {
+    ok: true,
+    status: "success",
+    data: {
+      comments: [
+        { id: 1, operatorViewed: { viewed: true } },
+        { id: 2, operatorViewed: { viewed: false } },
+      ],
+    },
+  };
+  const filtered = filterListResultByOperatorView({
+    result,
+    viewFilter: "unviewed",
+  });
+  assert.deepEqual(
+    filtered.data.comments.map((comment) => comment.id),
+    [2],
+  );
+});
+
+test("operator view filter flags are mutually exclusive", () => {
+  assert.equal(
+    parseOperatorViewFilter({ unviewed: true, viewed: false }),
+    "unviewed",
+  );
+  assert.equal(
+    parseOperatorViewFilter({ unviewed: false, viewed: true }),
+    "viewed",
+  );
+  assert.equal(
+    parseOperatorViewFilter({ unviewed: false, viewed: false }),
+    null,
+  );
+  assert.throws(
+    () => parseOperatorViewFilter({ unviewed: true, viewed: true }),
+    /either --unviewed or --viewed/,
+  );
+});
+
+test("operator view filters reject unsupported commands before authentication or requests", () => {
+  const supported = parseAdminOperation(
+    parseArgs(["admin", "subjects", "candidates", "--unviewed"]),
+  );
+  assert.equal(
+    resolveOperatorViewFilter({
+      operation: supported,
+      unviewed: true,
+      viewed: false,
+    }),
+    "unviewed",
+  );
+  const mutation = parseAdminOperation(
+    parseArgs(["admin", "post", "reward", "comment:8", "--twinkles", "3"]),
+  );
+  assert.throws(
+    () =>
+      resolveOperatorViewFilter({
+        operation: mutation,
+        unviewed: true,
+        viewed: false,
+      }),
+    /only by admin content-list commands/,
+  );
+});
+
+test("unsupported operator view filters fail before admin authentication", async () => {
+  await assert.rejects(
+    () =>
+      adminCommand(
+        parseArgs([
+          "admin",
+          "post",
+          "reward",
+          "comment:8",
+          "--twinkles",
+          "3",
+          "--unviewed",
+        ]),
+      ),
+    /only by admin content-list commands/,
+  );
+});
+
+test("--unviewed and --viewed parse as boolean flags", () => {
+  const parsed = parseArgs([
+    "admin",
+    "subjects",
+    "candidates",
+    "--unviewed",
+    "--json",
+  ]);
+  assert.equal(parsed.adminUnviewed, true);
+  assert.equal(parsed.adminViewed, false);
+  assert.equal(parsed.json, true);
 });
