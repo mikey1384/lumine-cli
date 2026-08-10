@@ -262,36 +262,96 @@ test("comment edit sends composed replacement content for a bot comment", () => 
   assert.throws(
     () =>
       parseAdminOperation(
-        parseArgs(["admin", "comment", "edit", "subject:42", "--file", composedPath]),
+        parseArgs([
+          "admin",
+          "comment",
+          "edit",
+          "subject:42",
+          "--file",
+          composedPath,
+        ]),
       ),
     /comment edit targets a comment/,
   );
   assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "comment", "edit", "342752"])),
+    () =>
+      parseAdminOperation(parseArgs(["admin", "comment", "edit", "342752"])),
     /Pass composed comment text with --file/,
   );
 });
 
 test("notable add resolves numeric and username targets", () => {
-  const byId = parseAdminOperation(parseArgs(["admin", "notable", "add", "12445"]));
+  const byId = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "notable",
+      "add",
+      "12445",
+      "--note",
+      "  Eleven subjects and sixty-one helpful comments.  ",
+    ]),
+  );
   assert.equal(byId.name, "notable.add");
   assert.equal(byId.method, "POST");
   assert.equal(byId.path, "/cli/admin/notable-users");
-  assert.deepEqual(byId.body, { userId: 12445 });
+  assert.deepEqual(byId.body, {
+    userId: 12445,
+    note: "Eleven subjects and sixty-one helpful comments.",
+  });
   assert.equal(byId.mutates, true);
   assert.deepEqual(
-    parseAdminOperation(parseArgs(["admin", "notable", "add", "Minecrarft_guy"]))
-      .body,
-    { username: "Minecrarft_guy" },
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "notable",
+        "add",
+        "Minecrarft_guy",
+        "--note",
+        "Thoughtful peer support.",
+      ]),
+    ).body,
+    { username: "Minecrarft_guy", note: "Thoughtful peer support." },
   );
   assert.throws(
     () => parseAdminOperation(parseArgs(["admin", "notable", "add"])),
     /notable add <userId\|username>/,
   );
   assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "notable", "add", "12445"])),
+    /--note <text>/,
+  );
+  assert.throws(
     () =>
       parseAdminOperation(
-        parseArgs(["admin", "notable", "add", "999999999999999999999"]),
+        parseArgs(["admin", "notable", "add", "12445", "--note", "   "]),
+      ),
+    /--note <text>/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "notable",
+          "add",
+          "12445",
+          "--note",
+          "x".repeat(2_001),
+        ]),
+      ),
+    /at most 2000 characters/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "notable",
+          "add",
+          "999999999999999999999",
+          "--note",
+          "Specific rationale.",
+        ]),
       ),
     /user ID must be an integer/,
   );
@@ -315,8 +375,7 @@ test("insights brief maps to the read-only route with an optional window", () =>
     /between 1 and 30/,
   );
   assert.throws(
-    () =>
-      parseAdminOperation(parseArgs(["admin", "brief", "--days", "1.5"])),
+    () => parseAdminOperation(parseArgs(["admin", "brief", "--days", "1.5"])),
     /between 1 and 30/,
   );
 });
@@ -385,14 +444,7 @@ test("comment draft --file sends operator-composed persona content", () => {
   assert.throws(
     () =>
       parseAdminOperation(
-        parseArgs([
-          "admin",
-          "comment",
-          "draft",
-          "42",
-          "--file",
-          tooLongPath,
-        ]),
+        parseArgs(["admin", "comment", "draft", "42", "--file", tooLongPath]),
       ),
     /at most 10000/,
   );

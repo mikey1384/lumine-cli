@@ -926,7 +926,7 @@ the same priority, so treat a tied score (or recency) as no signal at all and
 make the call by reading:
 
 - **Choose the lead by argument, not by score or recency.** The best lead is
-  the front event where something is actually *at stake*: a claim with
+  the front event where something is actually _at stake_: a claim with
   reasoning, a question with a position behind it — ideally while another
   member is already responding. A claim plus a reply is a conversation in
   motion; a drawing, a greeting, or a link is a share, and shares belong
@@ -1052,8 +1052,8 @@ type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 ```bash
 lumine admin brief --json
 lumine admin brief --days 3 --json
-lumine admin notable add 12647 --json
-lumine admin notable add Minecrarft_guy --json
+lumine admin notable add 12647 --note "Top authored-activity kid of the window: 11 subjects, 61 comments." --json
+lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
 
 Read-only management insights for the delegated workflow, windowed since the
@@ -1095,10 +1095,19 @@ farm-signal sections added the same day):
   `isNewUser` marking window-new signups. Use it to find the overlooked and
   rising users the editorial priorities exist for, and propose additions to
   Mikey's Notable Users list in the report. When Mikey approves additions,
-  execute them with `lumine admin notable add <userId|username>` (idempotent —
+  execute them with
+  `lumine admin notable add <userId|username> --note "<specific rationale>"`
+  (idempotent —
   an existing member returns `already_done`; requires the `notable:write`
   scope, audited as `notable.add`, and writes through the management page's
   own canonical service). Without his approval the run only proposes.
+  **Always pass `--note`** with a concrete one-or-two-sentence record of what
+  made them notable — real numbers and specifics from the brief window, not
+  "active user". It lands in the management page's reason column, which is
+  where Mikey later reads why a name is on his list. On an already-listed
+  user, `--note` updates the stored reason (status `success` with
+  `data.reasonUpdated: true`; an identical note stays `already_done` without
+  rewriting its timestamp).
 - `teachers` — the mentor/sage achievement holders (the accounts the website
   titles teacher/headteacher): real classroom teachers, NOT the
   `userType='supermod'` Korean operations staff, whose work-only usage is
@@ -1177,7 +1186,7 @@ type WindowDelta = { current: number; previous: number; delta: number };
 type TeacherInsight = {
   userId: number;
   username: string | null;
-  rank: 'mentor' | 'sage';
+  rank: "mentor" | "sage";
   lastActive: number | null;
   daysSinceActive: number | null;
   subjectsPosted: number;
@@ -1199,7 +1208,7 @@ type InsightsBrief = Success<{
   window: {
     sinceTs: number;
     days: number;
-    source: 'requested' | 'since-last-completed-run' | 'default';
+    source: "requested" | "since-last-completed-run" | "default";
     generatedAt: number;
   };
   economy: {
