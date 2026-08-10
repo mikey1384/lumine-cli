@@ -272,6 +272,31 @@ test("comment edit sends composed replacement content for a bot comment", () => 
   );
 });
 
+test("notable add resolves numeric and username targets", () => {
+  const byId = parseAdminOperation(parseArgs(["admin", "notable", "add", "12445"]));
+  assert.equal(byId.name, "notable.add");
+  assert.equal(byId.method, "POST");
+  assert.equal(byId.path, "/cli/admin/notable-users");
+  assert.deepEqual(byId.body, { userId: 12445 });
+  assert.equal(byId.mutates, true);
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "notable", "add", "Minecrarft_guy"]))
+      .body,
+    { username: "Minecrarft_guy" },
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "notable", "add"])),
+    /notable add <userId\|username>/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "notable", "add", "999999999999999999999"]),
+      ),
+    /user ID must be an integer/,
+  );
+});
+
 test("insights brief maps to the read-only route with an optional window", () => {
   const brief = parseAdminOperation(parseArgs(["admin", "brief"]));
   assert.equal(brief.name, "insights.brief");

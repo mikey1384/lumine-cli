@@ -1041,6 +1041,8 @@ type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 ```bash
 lumine admin brief --json
 lumine admin brief --days 3 --json
+lumine admin notable add 12647 --json
+lumine admin notable add Minecrarft_guy --json
 ```
 
 Read-only management insights for the delegated workflow, windowed since the
@@ -1071,16 +1073,30 @@ Four sections (Mikey's chosen cut, 2026-08-10):
   on the Notable Users list) ranked by authored activity in the window, with
   `isNewUser` marking window-new signups. Use it to find the overlooked and
   rising users the editorial priorities exist for, and propose additions to
-  Mikey's Notable Users list in the report — the run never edits that list
-  itself.
-- `teachers` — every `userType='supermod'` account with per-window
-  `subjectsPosted`, `commentsPosted`, `recommendationsGiven`, `rewardsGiven`,
-  `rewardTwinklesGiven`, `lastActive`/`daysSinceActive`, ordered by an
-  engagement score. Mikey's standing question here: which teachers genuinely
-  use the website to its fullest and which only work through it. Authored
-  posts and comments signal personal engagement; recommendations and rewards
-  are the "work" verbs — report the contrast, not just the totals, and treat
-  it as notable-users-but-for-teachers.
+  Mikey's Notable Users list in the report. When Mikey approves additions,
+  execute them with `lumine admin notable add <userId|username>` (idempotent —
+  an existing member returns `already_done`; requires the `notable:write`
+  scope, audited as `notable.add`, and writes through the management page's
+  own canonical service). Without his approval the run only proposes.
+- `teachers` — the mentor/sage achievement holders (the accounts the website
+  titles teacher/headteacher): real classroom teachers, NOT the
+  `userType='supermod'` Korean operations staff, whose work-only usage is
+  expected and deliberately excluded. Mikey's standing question here: which
+  teachers genuinely use the website for themselves and which only work
+  through it. Recommendations and rewards are classroom "work" verbs and
+  count for nothing toward interest; genuine personal interest is measured by
+  what a teacher does for themselves — authored subjects/comments,
+  `reflections` (Daily Reflections answered), `dailyTasksCompleted`,
+  `wordlePlays`, `buildsTouched` (Lumine builds they own that changed in the
+  window), `aiStories`, and bounded `xpEvents` (XP-ledger activity). Shape:
+  `genuinelyInterested` (interestScore > 0, ordered by it, each row carrying
+  all the per-window counters plus `rank: mentor|sage` and `workScore`),
+  `workOnly` (classroom verbs only, zero personal signals), `activeButSilent`
+  (window-active log-ins with nothing at all, capped at 40), and `totals`.
+  Daily-task counts use canonical whole-day indices and can begin up to one
+  calendar day before the exact `window.sinceTs`.
+  Report the contrast between the buckets, and treat `genuinelyInterested` as
+  notable-users-but-for-teachers.
 
 The command needs only an active run's `content:read` scope and mutates
 nothing; reading the brief is not audited content action. Window boundaries
@@ -1089,6 +1105,27 @@ on the big append-only ledgers are found by binary-searching the PRIMARY key
 is still bounded to the selected 1–30 day window.
 
 ```ts
+type TeacherInsight = {
+  userId: number;
+  username: string | null;
+  rank: 'mentor' | 'sage';
+  lastActive: number | null;
+  daysSinceActive: number | null;
+  subjectsPosted: number;
+  commentsPosted: number;
+  reflections: number;
+  dailyTasksCompleted: number;
+  wordlePlays: number;
+  buildsTouched: number;
+  aiStories: number;
+  xpEvents: number;
+  recommendationsGiven: number;
+  rewardsGiven: number;
+  rewardTwinklesGiven: number;
+  interestScore: number;
+  workScore: number;
+};
+
 type InsightsBrief = Success<{
   window: {
     sinceTs: number;
@@ -1124,18 +1161,16 @@ type InsightsBrief = Success<{
     isNewUser: boolean;
     lastActive: number | null;
   }>;
-  teachers: Array<{
-    userId: number;
-    username: string | null;
-    lastActive: number | null;
-    daysSinceActive: number | null;
-    subjectsPosted: number;
-    commentsPosted: number;
-    recommendationsGiven: number;
-    rewardsGiven: number;
-    rewardTwinklesGiven: number;
-    engagementScore: number;
-  }>;
+  teachers: {
+    genuinelyInterested: TeacherInsight[];
+    workOnly: TeacherInsight[];
+    activeButSilent: TeacherInsight[];
+    totals: {
+      total: number;
+      activeInWindow: number;
+      interestedInWindow: number;
+    };
+  };
   aiSpending:
     | {
         days: number;
