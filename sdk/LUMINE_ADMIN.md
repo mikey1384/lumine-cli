@@ -898,6 +898,41 @@ authored material; only a `section: "front"` event may be the lead. Preserve
 substance, names, and numbers. Do not mention official announcements (the
 server adds them), and give non-front events an empty `sourceQuote`.
 
+**Editorial craft.** The rules above make an edition valid; they do not make
+it good. The server already used the digest's `priority` numbers to select
+the bounded set of eligible events; those numbers do not do the editor's job
+within the returned digest. On a typical day every front subject arrives with
+the same priority, so treat a tied score (or recency) as no signal at all and
+make the call by reading:
+
+- **Choose the lead by argument, not by score or recency.** The best lead is
+  the front event where something is actually *at stake*: a claim with
+  reasoning, a question with a position behind it — ideally one other member
+  are already responding to. A claim plus a reply is a conversation in
+  motion; a drawing, a greeting, or a link is a share, and shares belong
+  further down the page, not in the lead.
+- **Thread a theme through the paper.** Pick the strongest idea of the day
+  and let the masthead, the lead, and the editor's note all carry it, with
+  the editor's note reprising a community value from one of the day's posts
+  rather than summarizing the edition. The paper should end on something a
+  child can take with them.
+- **Cross-reference events into arcs.** The same thing often appears in the
+  digest several times (an app's release, its open-sourcing, and its maker's
+  Daily Reflection about it). Write those as one story arc — the origin
+  story up front, the notices pointing back to it — instead of three
+  disconnected blurbs. Each story still cites only its own `eventKey`.
+- **Headlines tell the story; they do not restate the title.** "Logged Out
+  and Briefly Panicked, X Confirms: Twinkle Is 5% of Life" beats repeating
+  the post's title. Keep every fact traceable to digest text — the craft is
+  in selection and framing, never in invention.
+- **Work mechanics under the ten-minute lease.** Dump every front event's
+  full summary to a file immediately after claiming, before writing a word.
+  Copy `sourceQuote`s byte-exact from the summary — curly apostrophes,
+  markdown asterisks, ellipsis dots and all (an inexact quote is silently
+  replaced with canonical text). An event with an empty summary gets an
+  empty `sourceQuote`; restate its title's facts in your story summary
+  instead.
+
 Claim edge cases: a quiet day (no editorial events) is committed as the
 canonical quiet edition at claim time — no editorial needed, the response
 says so. If the claim is not submitted before the lease expires, the server's
