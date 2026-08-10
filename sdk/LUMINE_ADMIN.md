@@ -1036,6 +1036,116 @@ type NewsClaim = Success<{
 type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 ```
 
+## Daily brief (management insights)
+
+```bash
+lumine admin brief --json
+lumine admin brief --days 3 --json
+```
+
+Read-only management insights for the delegated workflow, windowed since the
+operator's last completed run by default (`--days 1..30` overrides; capped at
+30 days). Call it early in every run — right after the newspaper check — and
+end every run report with an **"Insights for Mikey"** section carrying only
+the deltas and anomalies worth his time, next to the escalation list. Never
+dump raw sections at him.
+
+Four sections (Mikey's chosen cut, 2026-08-10):
+
+- `economy` — `topGainers` (coin-ledger aggregation over the window: gained,
+  spent, net, current balance per user, Zero/Ciel excluded) and `topBalances`
+  (current top-ten holders, also excluding Zero/Ciel). This is where
+  alt-account farming, sudden windfalls, and "someone got a million coins in a
+  week" surface with real numbers instead of secondhand kid gossip;
+  cross-check outliers against the
+  economy-manipulation escalation category.
+- `aiSpending` — a compact projection of the management AI-cost report:
+  `summary`, top spending accounts, top risk groups. Unlike the other sections'
+  exact `window.sinceTs`, this existing report is bucketed into whole UTC days;
+  `aiSpending.days` includes today and may begin up to one day before the exact
+  brief window. Flag accounts that jumped tiers or dominate that report period.
+  May be `{ unavailable: true }` if the cost report fails; say so rather than
+  guessing.
+- `notableCandidates` — kids (never bots, staff `userType`s, or users already
+  on the Notable Users list) ranked by authored activity in the window, with
+  `isNewUser` marking window-new signups. Use it to find the overlooked and
+  rising users the editorial priorities exist for, and propose additions to
+  Mikey's Notable Users list in the report — the run never edits that list
+  itself.
+- `teachers` — every `userType='supermod'` account with per-window
+  `subjectsPosted`, `commentsPosted`, `recommendationsGiven`, `rewardsGiven`,
+  `rewardTwinklesGiven`, `lastActive`/`daysSinceActive`, ordered by an
+  engagement score. Mikey's standing question here: which teachers genuinely
+  use the website to its fullest and which only work through it. Authored
+  posts and comments signal personal engagement; recommendations and rewards
+  are the "work" verbs — report the contrast, not just the totals, and treat
+  it as notable-users-but-for-teachers.
+
+The command needs only an active run's `content:read` scope and mutates
+nothing; reading the brief is not audited content action. Window boundaries
+on the big append-only ledgers are found by binary-searching the PRIMARY key
+(several tables have no timeStamp index), avoiding lifetime scans; aggregation
+is still bounded to the selected 1–30 day window.
+
+```ts
+type InsightsBrief = Success<{
+  window: {
+    sinceTs: number;
+    days: number;
+    source: 'requested' | 'since-last-completed-run' | 'default';
+    generatedAt: number;
+  };
+  economy: {
+    topGainers: Array<{
+      userId: number;
+      username: string | null;
+      userType: string | null;
+      gained: number;
+      spent: number;
+      net: number;
+      currentCoins: number;
+      joinedAt: number | null;
+    }>;
+    topBalances: Array<{
+      userId: number;
+      username: string | null;
+      userType: string | null;
+      coins: number;
+    }>;
+  };
+  notableCandidates: Array<{
+    userId: number;
+    username: string | null;
+    subjectsPosted: number;
+    commentsPosted: number;
+    activityScore: number;
+    joinedAt: number | null;
+    isNewUser: boolean;
+    lastActive: number | null;
+  }>;
+  teachers: Array<{
+    userId: number;
+    username: string | null;
+    lastActive: number | null;
+    daysSinceActive: number | null;
+    subjectsPosted: number;
+    commentsPosted: number;
+    recommendationsGiven: number;
+    rewardsGiven: number;
+    rewardTwinklesGiven: number;
+    engagementScore: number;
+  }>;
+  aiSpending:
+    | {
+        days: number;
+        summary: unknown;
+        topAccounts: unknown[];
+        topRiskGroups: unknown[];
+      }
+    | { unavailable: true; error: string };
+}>;
+```
+
 ## Audit history
 
 ```bash

@@ -231,6 +231,30 @@ test("new subject, featured, reward, and comment commands map to stable API cont
   );
 });
 
+test("insights brief maps to the read-only route with an optional window", () => {
+  const brief = parseAdminOperation(parseArgs(["admin", "brief"]));
+  assert.equal(brief.name, "insights.brief");
+  assert.equal(brief.mutates, false);
+  assert.equal(brief.path, "/cli/admin/insights/brief");
+  assert.match(
+    parseAdminOperation(parseArgs(["admin", "brief", "--days", "3"])).path,
+    /days=3/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "brief", "--days", "0"])),
+    /between 1 and 30/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "brief", "--days", "31"])),
+    /between 1 and 30/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "brief", "--days", "1.5"])),
+    /between 1 and 30/,
+  );
+});
+
 test("comment draft --file sends operator-composed persona content", () => {
   const composedPath = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), "lumine-comment-")),
