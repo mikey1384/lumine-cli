@@ -231,6 +231,47 @@ test("new subject, featured, reward, and comment commands map to stable API cont
   );
 });
 
+test("comment edit sends composed replacement content for a bot comment", () => {
+  const composedPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-edit-")),
+    "edited.md",
+  );
+  fs.writeFileSync(composedPath, "Honest update from Ciel.\n");
+  const edit = parseAdminOperation(
+    parseArgs(["admin", "comment", "edit", "342752", "--file", composedPath]),
+  );
+  assert.equal(edit.name, "comment.edit");
+  assert.equal(edit.method, "PUT");
+  assert.equal(edit.path, "/cli/admin/comments/342752");
+  assert.equal(edit.body.content, "Honest update from Ciel.");
+  assert.equal(edit.mutates, true);
+
+  assert.equal(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "comment",
+        "edit",
+        "comment:342752",
+        "--file",
+        composedPath,
+      ]),
+    ).path,
+    "/cli/admin/comments/342752",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "comment", "edit", "subject:42", "--file", composedPath]),
+      ),
+    /comment edit targets a comment/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "comment", "edit", "342752"])),
+    /Pass composed comment text with --file/,
+  );
+});
+
 test("insights brief maps to the read-only route with an optional window", () => {
   const brief = parseAdminOperation(parseArgs(["admin", "brief"]));
   assert.equal(brief.name, "insights.brief");

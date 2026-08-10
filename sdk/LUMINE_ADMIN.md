@@ -1062,10 +1062,11 @@ Four sections (Mikey's chosen cut, 2026-08-10):
 - `aiSpending` — a compact projection of the management AI-cost report:
   `summary`, top spending accounts, top risk groups. Unlike the other sections'
   exact `window.sinceTs`, this existing report is bucketed into whole UTC days;
-  `aiSpending.days` includes today and may begin up to one day before the exact
-  brief window. Flag accounts that jumped tiers or dominate that report period.
-  May be `{ unavailable: true }` if the cost report fails; say so rather than
-  guessing.
+  `aiSpending.startDayIndex` and `endDayIndex` are its canonical bounds. The
+  report period can begin up to one day before or after the exact brief window,
+  so use those bounds when describing it. Flag accounts that jumped tiers or
+  dominate that report period. May be `{ unavailable: true }` if the cost
+  report fails; say so rather than guessing.
 - `notableCandidates` — kids (never bots, staff `userType`s, or users already
   on the Notable Users list) ranked by authored activity in the window, with
   `isNewUser` marking window-new signups. Use it to find the overlooked and
@@ -1138,6 +1139,8 @@ type InsightsBrief = Success<{
   aiSpending:
     | {
         days: number;
+        startDayIndex: number;
+        endDayIndex: number;
         summary: unknown;
         topAccounts: unknown[];
         topRiskGroups: unknown[];
@@ -1145,6 +1148,24 @@ type InsightsBrief = Success<{
     | { unavailable: true; error: string };
 }>;
 ```
+
+**Editing the bot's own comments.** `comment edit <commentId> --file
+<comment.md>` replaces the text of a comment the ACTING bot itself authored —
+for correcting a factual error, an unfulfillable claim, or outdated guidance
+in Zero/Ciel's own words. It is deliberately not a moderation verb: comments
+by the other bot, by any human, and hidden notification records are all
+rejected (`CLI_ADMIN_EDIT_NOT_OWN_COMMENT`,
+`CLI_ADMIN_EDIT_NOTIFICATION_COMMENT`). The replacement text follows the
+composed-comment rules (plain UTF-8, 10,000-character limit, truth about what
+the session actually did) and publishes through the website's canonical
+comment-edit pipeline — mentions are reprocessed (a newly added `@mikey`
+notifies him), and Earn-candidate projections resync. Submitting identical
+text returns `already_done`. Requires the `comment:post` scope of a
+comment-mode `post` run, and is audited as `comment.edit` with the previous
+content in `beforeState` and `data.edit.previousContent`. Edit sparingly:
+kids may have already read the original, so a comment that changed meaning
+(not just wording) usually deserves a follow-up reply instead of a silent
+rewrite.
 
 ## Audit history
 
@@ -1216,6 +1237,9 @@ lumine admin comment reply comment:456 --json
 
 lumine admin comment post --draft-id 77 \
   --idempotency-key comment-123-post-v1 --json
+
+# Correct the acting bot's OWN published comment.
+lumine admin comment edit 342752 --file corrected.md --json
 ```
 
 **Compose in persona by default (Mikey's standing direction, 2026-08-10).**
@@ -1236,6 +1260,24 @@ from memory:
   draft-vs-skip judgment rules, which still govern composed comments: skip
   decisions are yours to make and record with `post skip` or in the run
   report).
+
+**Lumine Build app posts are composed-only, and only after actually looking
+(Mikey's direction, 2026-08-10).** When a post is about a Build app — the
+author shares their app, announces an update, or asks for feedback on their
+build — never use the server-generated draft path: the API persona cannot
+open an app, so its drafts either stay generic or fabricate first-hand
+experience (a real Ciel draft claimed "I clicked over to check it out" on an
+app nobody had opened). The day's management agent comments instead, and
+looks first: pull the project with lumine-cli when it is open source (or
+yours to pull) and read the code, or open the app and actually try it; then
+compose a comment whose specifics come from what you genuinely saw — a
+mechanic you liked, a nice touch in their code, a concrete suggestion. Be
+truthful about what you did: "I read through your code" and "I played a few
+rounds" are different claims, and a comment must only make the one that
+happened. If you could not access the app at all, say nothing about having
+tried it — ask the author about it instead. This is the standing rule for
+every composed comment, applied to apps: never claim an experience the
+session did not actually have.
 
 A composed draft (`--file`, plain UTF-8 text, at most the website's 10,000
 character comment limit) flows through the identical draft lifecycle —
