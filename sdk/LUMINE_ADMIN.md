@@ -1063,7 +1063,8 @@ end every run report with an **"Insights for Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
 
-Four sections (Mikey's chosen cut, 2026-08-10):
+Nine sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
+farm-signal sections added the same day):
 
 - `economy` — `topGainers` (coin-ledger aggregation over the window: gained,
   spent, net, current balance per user, Zero/Ciel excluded) and `topBalances`
@@ -1117,14 +1118,62 @@ Four sections (Mikey's chosen cut, 2026-08-10):
   calendar day before the exact `window.sinceTs`.
   Report the contrast between the buckets, and treat `genuinelyInterested` as
   notable-users-but-for-teachers.
+- `engagementPulse` — distinct users per surface (activeUsers, subjects,
+  comments, recommendations, wordle, reflections, dailyTasks, aiChat,
+  lumineBuildChat, buildsEdited, buildsPlayed) for the current window vs the
+  equal-length previous window, each as `{ current, previous, delta }`.
+  Presence, build edits, and build plays come from durable action/version/view
+  events, not mutable `lastActive`/`updatedAt` snapshots. Zero/Ciel are excluded
+  from authored surfaces. Wordle, daily tasks, and AI chat use the equal
+  calendar-bucket ranges in `dayWindow`; those can begin before the exact
+  timestamp window but always compare the same number of days. This is the
+  "where do users actually live, and is it shifting?" section: report only the
+  deltas that mean something, and read a surface's absolute size before
+  dramatizing a small delta.
+- `launchMetrics` — readouts for recently shipped features so nothing ships
+  unmeasured. v1 carries `firstBuildRescue` (offers recorded and redemptions
+  in the window, each `{ total, byEventType }`, plus first-Lumine-exchange
+  claims) and `wordleSkipShield` (`startDayIndex`, `active`, judged dodges,
+  and skip covers split `earned` vs `fromRescue`). Wordle metrics cover only
+  completed, actually judged days in `judgedWindow`; today's in-progress game
+  is never called a dodge. Offers without redemptions are a reason to inspect
+  sample size, event type, and offer age — not proof of a broken funnel by
+  themselves.
+- `goneQuiet` — the inverse of `notableCandidates`: users whose `lastActive`
+  fell in the 14 days before the window (so they were around, then stopped),
+  ranked by how regular they were in the prior 30 days (daily tasks and
+  Wordle), capped at 15 with `daysQuiet`. Use it for product signal (what did
+  they stop doing?) and gentle outreach candidates; never guilt a child in
+  public about absence.
+- `newUserFunnel` — signups in the window with `activeOnDayOne` (any
+  XP-ledger event within 24h of joining) and `returnedAfterDayOne`
+  (`lastActive` beyond their first day), plus the newest few accounts.
+  Deliberately coarse: it is an onboarding health check, not per-child
+  session tracking.
+- `farmSignals` — AI-cost farm signatures derivable with ZERO new data
+  collection: `inboxFamilies` (verified emails from accounts active in the
+  last `inboxFamilyActivityDays`, with only Gmail/googlemail's documented
+  plus-tag and dot aliases collapsed, flagging inboxes behind 3+ accounts) and
+  `youngAccountAiUsage` (accounts under 30 days old drawing battery in the
+  whole-day `aiUsageDayWindow`). SIGNAL ONLY: siblings legitimately share a
+  parent inbox, so an inbox family is a reason to look, never proof or grounds
+  for action. Feed real suspicions to the AI-cost escalation category. Shared
+  AI device/IP risk evidence is already in `aiSpending.topRiskGroups`; do not
+  guess it from inbox similarity.
 
 The command needs only an active run's `content:read` scope and mutates
 nothing; reading the brief is not audited content action. Window boundaries
 on the big append-only ledgers are found by binary-searching the PRIMARY key
 (several tables have no timeStamp index), avoiding lifetime scans; aggregation
-is still bounded to the selected 1–30 day window.
+is still bounded to the selected 1–30 day window. The optional sections run
+serially around the existing core report so this low-frequency command cannot
+occupy the production reader pool; one unavailable section does not suppress
+the others.
 
 ```ts
+type InsightUnavailable = { unavailable: true; error: string };
+type WindowDelta = { current: number; previous: number; delta: number };
+
 type TeacherInsight = {
   userId: number;
   username: string | null;
@@ -1200,7 +1249,115 @@ type InsightsBrief = Success<{
         topAccounts: unknown[];
         topRiskGroups: unknown[];
       }
-    | { unavailable: true; error: string };
+    | InsightUnavailable;
+  engagementPulse:
+    | {
+        windowDays: number;
+        dayWindow: {
+          currentStartDayIndex: number;
+          currentEndDayIndex: number;
+          previousStartDayIndex: number;
+          previousEndDayIndex: number;
+          dayCount: number;
+        };
+        surfaces: {
+          activeUsers: WindowDelta;
+          subjects: WindowDelta;
+          comments: WindowDelta;
+          recommendations: WindowDelta;
+          wordle: WindowDelta;
+          reflections: WindowDelta;
+          dailyTasks: WindowDelta;
+          aiChat: WindowDelta;
+          lumineBuildChat: WindowDelta;
+          buildsEdited: WindowDelta;
+          buildsPlayed: WindowDelta;
+        };
+      }
+    | InsightUnavailable;
+  launchMetrics:
+    | {
+        firstBuildRescue: {
+          offersRecorded: {
+            total: number;
+            byEventType: Record<string, number>;
+          };
+          redemptions: {
+            total: number;
+            byEventType: Record<string, number>;
+          };
+          firstLumineExchangeClaims: number;
+        };
+        wordleSkipShield: {
+          startDayIndex: number;
+          active: boolean;
+          judgedWindow: {
+            startDayIndex: number;
+            endDayIndex: number;
+          } | null;
+          judgedDodges: number;
+          skipCovers: { earned: number; fromRescue: number };
+        };
+      }
+    | InsightUnavailable;
+  goneQuiet:
+    | {
+        users: Array<{
+          userId: number;
+          username: string | null;
+          lastActive: number | null;
+          daysQuiet: number | null;
+          dailyTasksPrior30d: number;
+          wordlePlaysPrior30d: number;
+          regularityScore: number;
+        }>;
+        totals: { wentQuiet: number; previouslyRegular: number };
+      }
+    | InsightUnavailable;
+  newUserFunnel:
+    | {
+        totals: {
+          signups: number;
+          activeOnDayOne: number;
+          returnedAfterDayOne: number;
+        };
+        newest: Array<{
+          userId: number;
+          username: string | null;
+          joinedAt: number | null;
+          activeOnDayOne: boolean;
+          returnedAfterDayOne: boolean;
+        }>;
+      }
+    | InsightUnavailable;
+  farmSignals:
+    | {
+        inboxFamilyActivityDays: number;
+        inboxFamilies: Array<{
+          inbox: string;
+          accounts: Array<{
+            userId: number;
+            username: string | null;
+            joinedAt: number | null;
+            lastActive: number | null;
+          }>;
+          accountCount: number;
+          youngAccounts: number;
+        }>;
+        aiUsageDayWindow: {
+          startDayIndex: number;
+          endDayIndex: number;
+        };
+        youngAccountAiUsage: Array<{
+          userId: number;
+          username: string | null;
+          joinedAt: number | null;
+          energyUnits: number;
+          replies: number;
+        }>;
+        notes: string;
+      }
+    | InsightUnavailable;
 }>;
 ```
 
@@ -1333,6 +1490,27 @@ happened. If you could not access the app at all, say nothing about having
 tried it — ask the author about it instead. This is the standing rule for
 every composed comment, applied to apps: never claim an experience the
 session did not actually have.
+
+**Offer a Lumine prompt when the moment invites it (Mikey's direction,
+2026-08-10).** Zero and Ciel may include one concrete, copy-pasteable Lumine
+prompt in a comment or reply — a genuinely powerful one, tailored to what the
+kid is already doing — when the occasion naturally calls for it. Appropriate
+occasions: a kid describes an idea they wish existed, asks how something on
+the site was made, hits the edge of what a post/drawing/story can do, shares
+a Build app that could grow a specific feature, or shows an interest (space,
+cats, chess, comics) that maps cleanly onto something Lumine could build with
+them. On those occasions, the prompt IS the helpful answer: quote it so it
+can be copied as-is, keep it specific to their interest, and mention it works
+in the Build workspace chat. Restraint rules: never more than one prompt per
+comment; never in condolence, conflict, wellbeing, or moderation-adjacent
+threads; never as a reflex closing line on ordinary comments — if the comment
+is complete without the prompt, post it without the prompt. A run where only
+a few comments carry a prompt is healthy; a run where most do is shameless
+plugging, which is exactly what Mikey asked to avoid. SDK-aware prompt ideas
+are especially good ("ask Lumine to make a magazine that pulls real Twinkle
+posts with Twinkle.subjects.search") because kids do not know the content
+APIs exist — but only suggest SDK capabilities that actually exist; check
+TWINKLE_BUILD_SDK.md if unsure.
 
 A composed draft (`--file`, plain UTF-8 text, at most the website's 10,000
 character comment limit) flows through the identical draft lifecycle —
