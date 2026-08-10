@@ -907,8 +907,8 @@ make the call by reading:
 
 - **Choose the lead by argument, not by score or recency.** The best lead is
   the front event where something is actually *at stake*: a claim with
-  reasoning, a question with a position behind it — ideally one other member
-  are already responding to. A claim plus a reply is a conversation in
+  reasoning, a question with a position behind it — ideally while another
+  member is already responding. A claim plus a reply is a conversation in
   motion; a drawing, a greeting, or a link is a share, and shares belong
   further down the page, not in the lead.
 - **Thread a theme through the paper.** Pick the strongest idea of the day
