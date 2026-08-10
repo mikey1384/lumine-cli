@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   adminCommand,
+  assertComposedCommentDraftResult,
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
   formatAdminJsonError,
@@ -227,6 +228,118 @@ test("new subject, featured, reward, and comment commands map to stable API cont
       parseArgs(["admin", "comment", "post", "--draft-id", "77"]),
     ).path,
     "/cli/admin/comment-drafts/77/publish",
+  );
+});
+
+test("comment draft --file sends operator-composed persona content", () => {
+  const composedPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-comment-")),
+    "comment.md",
+  );
+  fs.writeFileSync(composedPath, "Hello from Ciel! \u{1F49B}\n");
+  const composed = parseAdminOperation(
+    parseArgs(["admin", "comment", "draft", "42", "--file", composedPath]),
+  );
+  assert.equal(composed.name, "comment.draft");
+  assert.equal(composed.path, "/cli/admin/comment-drafts");
+  assert.equal(composed.body.targetType, "subject");
+  assert.equal(composed.body.targetId, 42);
+  assert.equal(composed.body.content, "Hello from Ciel! \u{1F49B}");
+
+  const composedReply = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "comment",
+      "reply",
+      "comment:456",
+      "--file",
+      composedPath,
+    ]),
+  );
+  assert.equal(composedReply.body.targetType, "comment");
+  assert.equal(composedReply.body.content, "Hello from Ciel! \u{1F49B}");
+
+  // Without --file the body carries no content key: the server generates.
+  assert.equal(
+    "content" in
+      parseAdminOperation(parseArgs(["admin", "comment", "draft", "42"])).body,
+    false,
+  );
+
+  const emptyPath = path.join(path.dirname(composedPath), "empty.md");
+  fs.writeFileSync(emptyPath, "   \n");
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "comment", "draft", "42", "--file", emptyPath]),
+      ),
+    /empty/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "comment",
+          "draft",
+          "42",
+          "--file",
+          path.join(path.dirname(composedPath), "missing.md"),
+        ]),
+      ),
+    /Could not read/,
+  );
+
+  const tooLongPath = path.join(path.dirname(composedPath), "too-long.md");
+  fs.writeFileSync(tooLongPath, "x".repeat(10_001));
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "comment",
+          "draft",
+          "42",
+          "--file",
+          tooLongPath,
+        ]),
+      ),
+    /at most 10000/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertComposedCommentDraftResult({
+      expectedContent: "Hello from Ciel! \u{1F49B}",
+      result: {
+        data: {
+          draft: {
+            decision: "draft",
+            reason: "operator-composed",
+            content: "Hello from Ciel! \u{1F49B}",
+            status: "ready",
+          },
+        },
+      },
+    }),
+  );
+  assert.throws(
+    () =>
+      assertComposedCommentDraftResult({
+        expectedContent: "Hello from Ciel! \u{1F49B}",
+        result: {
+          data: {
+            draft: {
+              decision: "draft",
+              reason: "model-generated",
+              content: "Different text",
+              status: "ready",
+            },
+          },
+        },
+      }),
+    (error) =>
+      error.code === "LUMINE_ADMIN_COMPOSED_COMMENT_UNSUPPORTED" &&
+      /Stop without publishing/.test(error.message),
   );
 });
 

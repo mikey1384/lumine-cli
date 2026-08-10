@@ -103,6 +103,15 @@ posts that most need Zero or Ciel are the ones nobody else answered.
   it pairs well with a warm comment.
 - **Featured still selects for quality**, but when two candidates are close,
   prefer the child who has never been featured over the one who has.
+- **The live Featured board is Mikey's word.** Do not remove a currently
+  Featured subject without first showing Mikey the planned removals and
+  replacements and getting his go-ahead. In the other direction, if a subject
+  that was Featured or pinned during an earlier run is no longer on
+  `featured list`, treat that as Mikey having removed it deliberately — never
+  re-feature it to "restore" the board, and never treat any subject as a
+  permanent fixture from memory or old run notes. Derive the board fresh from
+  `featured list` at the start of every run; the only pins that exist are the
+  ones currently on it.
 
 Sensitive disclosures, active disputes, and anything needing crisis or medical
 judgment remain out of scope for a bot comment no matter how neglected the post
@@ -1082,18 +1091,56 @@ type AuditList = Success<{
 ## Persona-backed comments and replies
 
 ```bash
-lumine admin daily-run start --identity auto --comment-mode draft --json
-lumine admin comment draft 123 --identity auto --json
-
 lumine admin daily-run start --identity ciel --comment-mode post \
   --run-key daily:2026-08-06:comments --json
+
+# Default: the agent composes the comment in the bot's persona itself.
+lumine admin comment draft 123 --file comment.md --json
+lumine admin comment draft dailyReflection:99 --file comment.md --json
+lumine admin comment reply comment:456 --file reply.md --json
+
+# Fallback (only when Mikey asks for it): server-generated persona drafts.
 lumine admin comment draft 123 --identity ciel \
   --idempotency-key comment-123-draft-v1 --json
-lumine admin comment draft dailyReflection:99 --json
 lumine admin comment reply comment:456 --json
+
 lumine admin comment post --draft-id 77 \
   --idempotency-key comment-123-post-v1 --json
 ```
+
+**Compose in persona by default (Mikey's standing direction, 2026-08-10).**
+A delegated agent writing Zero/Ciel comments should assume the bot's persona
+and write the comment text itself, submitting it with `--file` — exactly like
+the newspaper's claim/submit path, this spends no provider credits and no AI
+Energy (server-generated drafts bill the **operator's own** AI Energy
+battery). Use the no-`--file` server-generated path only when Mikey
+explicitly asks for it. Before composing, read the canonical persona sources
+so the voice and judgment match the real bots — do not improvise the persona
+from memory:
+
+- `twinkle-api/constants/index.ts` — `SYS_PROMPT_FOR_CIEL` /
+  `SYS_PROMPT_FOR_ZERO` (the exact persona system prompts) and
+  `TWINKLE_FEATURES_EXPLANATION` (what the bots know about the site);
+- `twinkle-api/helpers/ai/comment-assistant/index.ts` —
+  `ADMIN_COMMENT_DECISION_POLICY` / `ADMIN_REPLY_DECISION_POLICY` (the
+  draft-vs-skip judgment rules, which still govern composed comments: skip
+  decisions are yours to make and record with `post skip` or in the run
+  report).
+
+A composed draft (`--file`, plain UTF-8 text, at most the website's 10,000
+character comment limit) flows through the identical draft lifecycle —
+reservation, idempotency, context-revision CAS, publish fencing, audit
+(`metadata.composed: true`) — and is published with the same
+`comment post --draft-id`. It never invokes the server's model and records
+no AI Energy usage. Deployment guard: an API deployed before this capability
+silently ignores `content` and generates with the server's model instead. The
+CLI therefore requires the ready draft response to echo the exact submitted
+text with `reason: "operator-composed"`; otherwise it stops with
+`LUMINE_ADMIN_COMPOSED_COMMENT_UNSUPPORTED`. Never publish that rejected draft.
+Placement stays on the requested target: compose replies via `comment:<id>`
+targets (the generated path's model-chosen
+`replyTargetCommentId` does not apply). Everything below about targets,
+containers, and publication applies to both kinds of draft.
 
 A draft targets one of:
 
