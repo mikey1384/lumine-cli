@@ -139,6 +139,17 @@ Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
   pay-me-to-win contests, and anything that teaches other children a method for
   any of these. Note the recommendation count: a manipulation how-to that other
   kids are recommending is spreading, and that is the urgent part.
+- **AI-cost exploits** — patterns that convert free AI allowances into farmable
+  value: clusters of young accounts with heavy AI/battery usage, one person
+  operating many accounts that feed a single build through team branches,
+  plus-tagged or dot-variant email families (`kid+1@`, `k.id@`) behind multiple
+  active accounts, repeated first exchanges across accounts already linked by
+  independent evidence, or a rescue claim by an account created under 30 days
+  ago (the API maturity gate should make that last case impossible). A new
+  member's one first exchange is intended onboarding and is not suspicious by
+  itself. The daily battery is real provider money; treat farming signatures
+  with the same seriousness as coin farming. Escalate the account list and
+  evidence; never auto-enforce.
 - **Bug reports** the run encountered, even secondhand in a comment thread.
 
 Two rules that keep the list worth reading:
@@ -1068,7 +1079,16 @@ Four sections (Mikey's chosen cut, 2026-08-10):
   report period can begin up to one day before or after the exact brief window,
   so use those bounds when describing it. Flag accounts that jumped tiers or
   dominate that report period. May be `{ unavailable: true }` if the cost
-  report fails; say so rather than guessing.
+  report fails; say so rather than guessing. This section is also the run's
+  AI-cost exploit watch: while reading it, actively look for the signatures the
+  brief actually exposes — one risk group spanning several user IDs, repeated
+  plus-tag or dot-variant email families among top accounts, or heavy spend by
+  accounts that `economy.topGainers` or `notableCandidates` independently marks
+  as recent signups. Cross-check those signals against the escalation
+  categories. Missing join-date or community data is unknown, not evidence that
+  an account is young or empty. A run that reads the spending report without
+  asking "could any of this be one person with many accounts?" has skipped a
+  duty.
 - `notableCandidates` — kids (never bots, staff `userType`s, or users already
   on the Notable Users list) ranked by authored activity in the window, with
   `isNewUser` marking window-new signups. Use it to find the overlooked and
