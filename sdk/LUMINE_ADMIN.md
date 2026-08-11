@@ -961,16 +961,23 @@ failing with `CLI_ADMIN_NEWS_CLAIM_LOST` means the lease was superseded —
 re-check `lumine admin news` and claim again only if the paper still needs
 printing.
 
-**Repairing a past edition.** `news claim --date YYYY-MM-DD` leases an
-already-printed historical edition and returns a fresh digest of its original
-coverage window (primary Subjects/Reflections are re-projected from canonical
-tables, and anything since deleted or made private drops out). Submitting
-appends the next revision — every prior press run stays browsable in the
-archive, and repairs never re-notify subscribers (only a day's first revision
-does). Today's edition is never repaired this way; refreshing today is the
-Newspaper owner's website-only action. Repair only when an edition is
-genuinely degraded (missing masthead, missing lead, empty pages), not to
-rewrite history editorially.
+**Repairing or revising an edition.** `news claim --date YYYY-MM-DD` leases an
+existing edition row, including a failed or pending day that never reached
+print, and returns a fresh digest of its coverage window (primary
+Subjects/Reflections are re-projected from canonical tables, and anything
+since deleted or made private drops out). Submitting writes the first revision
+or appends the next one — every prior press run stays browsable in the archive,
+and later revisions never re-notify subscribers (only a day's first revision
+does).
+`--date` with **today's** date revises today's printed paper the same way,
+additionally extending the coverage window to claim time so the revision is
+written from the complete canonical day so far; this replaces the old
+owner-website-refresh dance and, unlike a refresh, spends no AI Energy
+(composed editorials never invoke a model). An unexpired in-flight press run
+still blocks the claim. Repair a historical edition only when it is genuinely
+degraded (missing masthead, missing lead, empty pages), not to rewrite
+history editorially; revising today to materially raise its editorial quality
+is a legitimate management action.
 
 **Fallback: queue the server's own model.** `news print` reserves the edition
 and lets the server's press worker write it (spends provider credits). It is
@@ -978,16 +985,16 @@ idempotent per day: it queues a new edition when today has none, requeues a
 retry when today's only attempts failed, and returns `already_done` when the
 paper is printed or being typeset.
 
-Neither path ever reprints or refreshes an already-printed edition —
-refreshing is the Newspaper owner's website-only action. The acting bot is
-recorded as the requester, and the management bots are exempt from AI Energy
-for newspaper generation: the platform absorbs the cost, exactly like their
-coin-exempt recommends and rewards. When a day's first edition is printed,
-the server notifies the app's notification subscribers (users can mute the
-app or unsubscribe in the app; the bots never need to send anything). All
-three mutations require the `news:print` scope (in every run's base scopes)
-and are audited as `news.print` / `news.claim` / `news.submit` against
-`news_edition` targets.
+A dateless `news claim` and `news print` never reprint or refresh an
+already-printed edition; only the explicit dated repair/revision path above
+can append another revision. The acting bot is recorded as the requester, and
+the management bots are exempt from AI Energy for newspaper generation: the
+platform absorbs the cost, exactly like their coin-exempt recommends and
+rewards. When a day's first edition is printed, the server notifies the app's
+notification subscribers (users can mute the app or unsubscribe in the app;
+the bots never need to send anything). All three mutations require the
+`news:print` scope (in every run's base scopes) and are audited as `news.print`
+/ `news.claim` / `news.submit` against `news_edition` targets.
 
 ```ts
 type NewsStatus = Success<{
