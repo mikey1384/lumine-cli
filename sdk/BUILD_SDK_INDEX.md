@@ -2,7 +2,7 @@
 
 Version: 1.32.0
 Updated: 2026-08-02
-Generated: 2026-08-02T03:03:30.002Z
+Generated: 2026-08-11T04:29:29.082Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -351,9 +351,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - The character route also accepts text or message fields for compatibility, but generated apps should use content.
   - The server keeps the latest 16 valid character history entries.
   - Pass onText/onStatus for streaming dialogue. Omit callbacks for non-streaming dialogue where the promise resolves with the final response.
-  - thinkingMode low uses Lite Mode: Zero uses Grok 4.5 with low reasoning and Ciel uses Claude Haiku 4.5; confirmed provider usage consumes the viewer's AI Energy and is usually cheaper than Medium or High.
-  - thinkingMode medium consumes normal AI Energy: Zero uses Grok 4.5 with medium reasoning and Ciel uses Claude Sonnet 5.
-  - thinkingMode high consumes high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses Claude Opus 5 with extended thinking.
+  - Inside Build character chat, thinkingMode low uses Lite Mode: Zero and Ciel both use GPT-5.6 Luna with reasoning disabled; confirmed provider usage consumes the viewer's AI Energy and is usually cheaper than High.
+  - Inside Build character chat, thinkingMode medium uses the same normal chat model routing: Zero and Ciel both use GPT-5.6 Luna with reasoning disabled and normal AI Energy.
+  - Inside Build character chat, thinkingMode high uses Think Hard chat routing and high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses GPT-5.6 Terra with high reasoning.
   - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.
