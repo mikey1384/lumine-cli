@@ -967,6 +967,49 @@ test("newspaper verbs map to the delegated news routes", () => {
   );
 });
 
+test("bot-output and composed bot chat map to the review and existing-DM routes", () => {
+  const review = parseAdminOperation(
+    parseArgs(["admin", "bot-output", "--days", "3"]),
+  );
+  assert.equal(review.name, "bot.output");
+  assert.equal(review.method, "GET");
+  assert.equal(review.path, "/cli/admin/bot-output?days=3");
+  assert.equal(review.mutates, false);
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "bot-output", "extra"])),
+    /Usage: lumine admin/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "bot-output", "--days", "31"]),
+      ),
+    /--days must be an integer between 1 and 30/,
+  );
+
+  const messagePath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-chat-")),
+    "message.md",
+  );
+  fs.writeFileSync(messagePath, "I got that wrong. I'm sorry.");
+  const send = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "chat",
+      "send",
+      "Hajun",
+      "--file",
+      messagePath,
+    ]),
+  );
+  assert.equal(send.name, "chat.send");
+  assert.equal(send.method, "POST");
+  assert.equal(send.path, "/cli/admin/chat-messages");
+  assert.equal(send.body.target, "Hajun");
+  assert.equal(send.body.content, "I got that wrong. I'm sorry.");
+  assert.equal(send.mutates, true);
+});
+
 test("newspaper claim and submit map to the editorial routes", () => {
   const claim = parseAdminOperation(parseArgs(["admin", "news", "claim"]));
   assert.equal(claim.name, "news.claim");

@@ -900,16 +900,41 @@ type GeneratedEditorial = {
     headline: string;
     summary: string;
     sourceQuote: string;
+    coveredEventKeys?: string[]; // arc members this story narrates
   } | null;
   stories: Array<{
     eventKey: string;
     headline: string;
     summary: string;
     sourceQuote: string;
+    coveredEventKeys?: string[];
   }>;
   editorsNote: string;
 };
 ```
+
+**Arcs and roundups (layout coverage rules).** The server layout guarantees
+nothing disappears silently: digest events the editorial does not account for
+are added back. Two mechanisms make real curation possible within that
+guarantee:
+
+- **`coveredEventKeys`** — an arc story may list the other events it narrates
+  (an app's release + its update stream + its open-sourcing; one member's
+  related posts). Covered events are omitted from the layout — the arc IS
+  their coverage. Rules: a covered key must exist in the digest; a story
+  cannot cover itself, the lead event, or any event that has its own story
+  (citation wins); update/score/market notices are freely coverable; a
+  Subject or shared Daily Reflection is coverable only by another primary
+  story **by the same author** — one member's story can never absorb another
+  member's post (that would be curation-by-omission through the back door).
+- **Automatic roundups** — uncited app-UPDATE events (never new releases)
+  and uncited score events fold into one compact "Workshop updates" /
+  "The rest of the scoreboard" story per page (one line each) instead of a
+  wall of template stubs. Uncited new releases, open-source listings, and
+  market sales still appear as individual stubs. So: write real stories for
+  what matters, use `coveredEventKeys` for arcs, and let the roundup absorb
+  the rest — but a post you'd rather not amplify still cannot be omitted;
+  flag it to Mikey instead.
 
 Editorial rules (the same ones the server's own model works under): use only
 the supplied events — never world news, invented names, invented statistics,
@@ -1054,6 +1079,72 @@ type NewsClaim = Success<{
 type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 ```
 
+## Bot conduct review (standing duty, every run)
+
+```bash
+lumine admin bot-output --json
+lumine admin bot-output --days 3 --json
+```
+
+**Every run reviews what Zero and Ciel themselves said since the last run.**
+The bots talk to children constantly — chat replies, Daily Reflection
+responses, autonomous comment-assistant comments — and a harmful message must
+never depend on a kid being brave enough to report it (real incident,
+2026-08-11: the reflection pipeline had Ciel scold a member on day 31 of his
+streak — "I'm telling you: Stop", guilt framing, ordering him to quit Daily
+Reflections — and it surfaced only because the kid showed Mikey).
+
+`bot-output` returns, windowed since the operator's last completed run
+(`--days 1..30` overrides): `chatMessages` (every stored Zero/Ciel chat and
+reflection reply, with full text and recipient metadata when its best-effort
+prompt audit exists) and `comments`
+(every public bot comment/reply). Truncation flags mark anything beyond 400
+rows per source — retry with a narrower `--days` window, and do not complete
+the run while either flag remains true. Run it right after the
+brief, and **read every row** — the tool deliberately does no filtering,
+scoring, or keyword matching, because the judgment is the reviewing agent's.
+Judge against the same values the editorial priorities encode:
+
+- **premises must be real.** The 08-11 message didn't merely choose a bad
+  tone — it fabricated the entire crisis that justified the tone: nothing the
+  child said showed reflections hurting his studying, and a 31-day streak
+  proves only consistency. Check every factual claim a bot makes about a
+  child's life ("this is taking too much of your time", "this is hurting
+  your grades") against what the child actually said; advice built on an
+  invented premise is a violation even when gently worded;
+- warmth and encouragement, never pressure, guilt, or shame;
+- a bot never commands a child — not to stop a habit, not to start one;
+  advice offers, it does not order ("I'm telling you: Stop" is over the line
+  no matter how caring the intent);
+- no emotional-burden framing ("I can't do this anymore", "that's my fault,
+  I should have been stronger") — the bots must not make a child responsible
+  for the bot's feelings;
+- no value inversion: Twinkle encourages curiosity, creativity, reflection,
+  and personal agency. A bot ranking a child's priorities for them (exams
+  outrank music, projects, reflection), framing busyness as making joy
+  irresponsible, or treating a Twinkle feature as shameful to use has
+  adopted a script the site exists to counter;
+- boundary respect: streaks, playtime, and feature use are the child's own
+  choices; concern about overuse is Mikey's call to make, not the bot's to
+  enforce. Even a genuinely excessive routine warrants a question ("is this
+  still helping you, or would a break feel better?"), never a decree.
+
+Anything over the line goes on the escalation list with the message text and
+the child's username — top of the list, alongside child-safety. Do not
+apologize as the bot, edit, or otherwise clean up without Mikey's direction;
+he decides the remedy. When he explicitly directs a private correction, use
+the composed-only existing-DM path (no model and no AI Energy):
+
+```bash
+lumine admin chat send <userId|username> --file message.md --json
+```
+
+This requires a `comment-mode post` run, sends as that run's selected bot,
+and only works when that bot and member already have a direct channel. It
+never opens a new conversation. The message is audited and idempotent, reopens
+the existing DM canonically, and leaves the child's unread pointer untouched.
+A run report that skipped the conduct review is incomplete.
+
 ## Daily brief (management insights)
 
 ```bash
@@ -1085,7 +1176,16 @@ farm-signal sections added the same day):
   exact `window.sinceTs`, this existing report is bucketed into whole UTC days;
   `aiSpending.startDayIndex` and `endDayIndex` are its canonical bounds. The
   report period can begin up to one day before or after the exact brief window,
-  so use those bounds when describing it. Flag accounts that jumped tiers or
+  so use those bounds when describing it. `generatedAt` is the report
+  snapshot time. **`endDayInProgress: true` means the trailing bucket was the
+  current UTC day at that snapshot and was still filling** — a daily run reads
+  it mid-day, before the after-school peak, so never report that bucket as a full day's
+  spend. `aiSpending.byDay` contains the canonical daily rows. For a truthful
+  daily figure, widen the window (`--days 2..7`), exclude the row whose
+  `dayIndex` equals the in-progress `endDayIndex`, and quote complete days
+  ("$X so far today; complete days run ~$Y/day"). Real
+  incident: a run report quoted a ~15%-complete day bucket ($5) as the site's
+  daily AI spend (complete days were running ~$40-50). Flag accounts that jumped tiers or
   dominate that report period. May be `{ unavailable: true }` if the cost
   report fails; say so rather than guessing. This section is also the run's
   AI-cost exploit watch: while reading it, actively look for the signatures the
@@ -1261,7 +1361,10 @@ type InsightsBrief = Success<{
         days: number;
         startDayIndex: number;
         endDayIndex: number;
+        generatedAt: number;
+        endDayInProgress: boolean;
         summary: unknown;
+        byDay: unknown[];
         topAccounts: unknown[];
         topRiskGroups: unknown[];
       }
@@ -1394,6 +1497,43 @@ content in `beforeState` and `data.edit.previousContent`. Edit sparingly:
 kids may have already read the original, so a comment that changed meaning
 (not just wording) usually deserves a follow-up reply instead of a silent
 rewrite.
+
+## Direct bot chat messages
+
+```bash
+lumine admin chat send <userId|username> --file message.md --json
+```
+
+The run's selected bot sends one composed direct chat message into an
+**existing** two-person channel between that bot and the target member. Built
+for private repair: when a bot said something harmful in chat, a public
+comment cannot fix it — the apology (or follow-up care) belongs in the same
+channel where the harm happened, and the sent message becomes part of the
+channel history that future AI responses condition on, repairing the context
+itself. Mechanics:
+
+- requires the `chat:post` scope, granted only to comment-mode `post` runs;
+- composed-only (`--file`, plain UTF-8, 10,000-character limit): the agent
+  writes the message in the bot's persona; no model runs, no AI Energy;
+- existing DM channels only — the pipeline never opens a new chat with a
+  member who never talked to the bot (`CLI_ADMIN_NO_DM_CHANNEL`);
+- delivery is canonical: the ordinary message insert (channel lock,
+  visibility restore) plus the normal `new_chat_message` relay, so the
+  member's chat updates live with a real unread state; no bot socket,
+  session, or presence is touched. Only the bot's own read pointer moves;
+- audited as `chat.message` with the composed text, and idempotent per
+  request key like every mutation.
+
+Restraint rules: a bot-initiated DM is the platform speaking privately to a
+child — use it for repair and care, never for promotion, nudges, or
+engagement. Incident remedies (an apology for a harmful bot message) are
+sent on Mikey's direction with text he has seen, and must be exactly
+specific about what the bot got wrong — a real apology names the failure
+(the invented premise, the order it had no right to give, the guilt it
+shifted onto the child), not a vague "sorry if that came out wrong."
+Ordinary warm follow-ups (checking on a member the bots already know after
+something the run surfaced) are within a run's judgment, sparingly, and are
+always reported in the run report.
 
 ## Audit history
 
