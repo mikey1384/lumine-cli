@@ -59,6 +59,8 @@ lumine admin ai-bucket get --bucket-id 10 --json
 lumine admin ai-bucket accounts add --bucket-id 10 \
   --user-ids 3127,13037,15410,16288 \
   --note "operator-confirmed account family" --json
+lumine admin ai-bucket note set --bucket-id 10 \
+  --note "Quota accounting only; not a moderation flag." --json
 ```
 
 `accounts add` accepts 1-500 unique positive user IDs, preflights the complete
@@ -66,6 +68,10 @@ batch before writing, adds the canonical user and durable verified-email rules,
 re-attributes current-day AI usage, and returns the canonical bucket members.
 It is idempotent to retry. The API records the real operator in the private
 Lumine audit log; no public bot identity is involved.
+
+`note set` records up to 255 characters of private operational context on the
+canonical bucket. Use it to distinguish quota bookkeeping from moderation;
+the note itself changes no access, ban, or identity rules.
 
 This surface intentionally accepts only an existing **unbanned** bucket. It
 cannot ban accounts, block signup, add IP/device/risk-key rules, or infer an
@@ -484,6 +490,7 @@ lumine admin subjects candidates --after 2026-08-01T00:00:00Z \
   --cursor '<cursor>' --json
 lumine admin subjects candidates --effort unassigned --json
 lumine admin subjects candidates --unviewed --json
+lumine admin builds candidates --cursor '<cursor>' --limit 50 --json
 ```
 
 Schemas:
@@ -529,6 +536,29 @@ type SubjectCandidates = Success<{
   subjects: Subject[];
   pagination: Pagination & { scannedCount: number };
 }>;
+
+type BuildCandidates = Success<{
+  builds: Array<{
+    id: number;
+    title: string | null;
+    description: string | null;
+    username: string | null;
+    publishedAt: number | null;
+    publishedArtifactVersionId: number | null;
+    collaborationMode: "private" | "open_source";
+    url: string;
+    review: {
+      publishedArtifactVersionId: number | null;
+      codePullAvailable: boolean;
+      requiredBeforeComment: true;
+    };
+  }>;
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    exhausted: boolean;
+  };
+}>;
 ```
 
 Both cursors freeze a primary-key high-water mark and traverse descending IDs,
@@ -537,6 +567,24 @@ bounded primary-key window (500 rows) per call before applying their residual
 filters, so a page — recommendation or subject — can be empty while `hasMore`
 remains true; continue until `exhausted`. Subject `--after` is inclusive, and
 the opaque cursor is bound to its original date and effort filters.
+
+`builds candidates` is a management-agent discovery view over the canonical
+public Build browser, ordered by the current published release. It is
+available through the `admin` namespace only while a delegated run is active;
+page until `pagination.exhausted`. Each item includes its canonical app URL,
+published artifact version, and whether its code is pullable. This list does
+not decide that an app deserves a comment. The management agent must open and
+genuinely try the published runtime, or pull and read an open-source project,
+before making that judgment. Direct API/persona automation is never a review
+substitute.
+
+During every management run, scan recent Build candidates back through the
+run's review window alongside Subjects and the recommendation queue. An app
+that is thin, broken, private, unchanged since a prior substantive bot
+comment, or not meaningfully understood may be left alone. A new or materially
+updated app where specific, truthful feedback would help is comment-worthy.
+This is editorial attention, not a quota: do not manufacture a Build comment
+just to prove the queue was visited.
 
 `--content-types` is sent to APIs that support server-side filtering so excluded
 types do not run their eligibility/content queries. The local CLI also filters
@@ -1653,7 +1701,7 @@ from memory:
   decisions are yours to make and record with `post skip` or in the run
   report).
 
-**Lumine Build app posts are composed-only, and only after actually looking
+**Lumine Build apps and app posts are composed-only, and only after actually looking
 (Mikey's direction, 2026-08-10).** When a post is about a Build app — the
 author shares their app, announces an update, or asks for feedback on their
 build — never use the server-generated draft path: the API persona cannot
@@ -1670,6 +1718,29 @@ happened. If you could not access the app at all, say nothing about having
 tried it — ask the author about it instead. This is the standing rule for
 every composed comment, applied to apps: never claim an experience the
 session did not actually have.
+
+The same rule covers comments placed **directly on a Build app**. This is
+deliberately management-agent-only: no server-generated draft and no pure API
+persona may author one. After reviewing the project, bind the composed comment
+to the exact published artifact you saw:
+
+```bash
+lumine admin comment draft build:884 --file comment.md \
+  --reviewed-version 4512 --reviewed-via runtime --json
+lumine admin comment post --draft-id 77 --json
+```
+
+Use `--reviewed-via code` only when you actually pulled and read the project;
+`runtime` means you opened and tried the published app. Replies to human
+comments inside a Build use `comment:<id>` plus the same review flags. The API
+rejects missing review evidence, a server-generated Build draft, a mismatched
+published version, a private/noncanonical Build, or any Build/comment-context
+change between draft and publication. A changed version means review the new
+project state and compose again. The flags are an auditable statement of what
+the management agent did, not permission to infer experience from metadata.
+Autonomous mention/reply generation and sponsored AI replies are disabled in
+Build threads. The generic `comment edit` shortcut is also disabled there;
+review the current version and post a version-bound correction reply instead.
 
 **Offer a Lumine prompt when the moment invites it (Mikey's direction,
 2026-08-10).** Zero and Ciel may include one concrete, copy-pasteable Lumine
@@ -1710,15 +1781,18 @@ containers, and publication applies to both kinds of draft.
 A draft targets one of:
 
 - `subject:<id>` (or a bare numeric ID) — a top-level comment on the subject;
+- `build:<id>` — a top-level comment on a public canonical Build, composed
+  after reviewing its exact published version;
 - `aiStory:<id>` / `dailyReflection:<id>` — a top-level comment on the
   standalone post;
 - `comment:<id>` — a public reply to that specific comment. `comment reply`
   is the same operation and requires a comment target.
 
 A reply's container resolves canonically from the target comment: its subject,
-or its AI Story / Daily Reflection root. Comments under any other root are
-rejected with `CLI_ADMIN_UNSUPPORTED_REPLY_ROOT`. Replies to Zero/Ciel
-comments and to notification comments are rejected with
+Build, or AI Story / Daily Reflection root. Comments under any other root are
+rejected with `CLI_ADMIN_UNSUPPORTED_REPLY_ROOT`. Build replies require the
+same exact-version review evidence as top-level Build comments. Replies to
+Zero/Ciel comments and to notification comments are rejected with
 `CLI_ADMIN_INVALID_REPLY_TARGET` — the bots never thread with themselves or
 each other, and a human's later reply to a delegated comment still enters the
 existing autonomous comment-assistant pipeline. Published replies carry the
@@ -1730,7 +1804,7 @@ type CommentDraft = Success<{
   draft: {
     id: number;
     runId: number;
-    targetType: "subject" | "comment" | "aiStory" | "dailyReflection";
+    targetType: "subject" | "comment" | "build" | "aiStory" | "dailyReflection";
     targetId: number;
     targetUrl: string;
     subjectId: number | null; // container subject; null for standalone posts
@@ -1761,7 +1835,8 @@ type CommentPost = CommentGet & {
     };
     published: {
       commentId: number;
-      targetType: "subject" | "comment" | "aiStory" | "dailyReflection";
+      targetType:
+        "subject" | "comment" | "build" | "aiStory" | "dailyReflection";
       targetId: number;
       subjectId: number | null;
       subjectUrl: string | null;
@@ -1772,12 +1847,13 @@ type CommentPost = CommentGet & {
 };
 ```
 
-The server loads the canonical container (subject or standalone post) and its
-complete visible comment context, then invokes the existing exact Zero/Ciel
-system prompt through the shared response assembler with a mode-specific
-decision policy (comment vs reply). The raw prompt is never returned or
-audited. The model—not regexes or keyword rules—chooses `draft` or `skip`
-under the run policy.
+For Subjects and standalone posts, the server loads the canonical container
+and its complete visible comment context, then invokes the existing exact
+Zero/Ciel system prompt through the shared response assembler with a
+mode-specific decision policy (comment vs reply). The raw prompt is never
+returned or audited. The model—not regexes or keyword rules—chooses `draft`
+or `skip` under the run policy. Build comments never enter that generated
+path; they require management-agent-composed content and review evidence.
 
 Draft IDs are bound to operator, run, public bot, target, comment mode,
 context revision, persona revision, expiry, and idempotency key. The context

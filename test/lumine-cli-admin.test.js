@@ -14,6 +14,7 @@ import {
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
   formatAdminJsonError,
+  normalizeAdminBuildCandidatesResult,
   parseAdminOperation,
   parseOperatorViewFilter,
   parseRecommendationContentTypes,
@@ -152,6 +153,27 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
     ).path,
     "/cli/admin/ai-buckets/10",
   );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "ai-bucket",
+        "note",
+        "set",
+        "--bucket-id",
+        "10",
+        "--note",
+        "Quota accounting only; not moderation.",
+      ]),
+    ),
+    {
+      name: "ai-bucket.note.set",
+      method: "PUT",
+      path: "/cli/admin/ai-buckets/10/note",
+      body: { note: "Quota accounting only; not moderation." },
+      mutates: true,
+    },
+  );
   assert.throws(
     () =>
       parseAdminOperation(
@@ -197,6 +219,35 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
   });
   assert.equal(request?.runId, null);
   assert.match(request?.requestId, /^cli:[0-9a-f-]{36}$/);
+
+  const noteResult = await runCli([
+    "admin",
+    "ai-bucket",
+    "note",
+    "set",
+    "--bucket-id",
+    "10",
+    "--note",
+    "Quota accounting only; not moderation.",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(noteResult.code, 0, noteResult.stderr);
+  const noteRequest = fixture.requests.find(
+    (entry) => entry.url === "/cli/admin/ai-buckets/10/note",
+  );
+  assert.deepEqual(noteRequest?.body, {
+    note: "Quota accounting only; not moderation.",
+  });
+  assert.equal(noteRequest?.runId, null);
+  assert.match(noteRequest?.requestId, /^cli:[0-9a-f-]{36}$/);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "ai-bucket", "note", "set", "--bucket-id", "10"]),
+      ),
+    /--note/,
+  );
 });
 
 test("skip and audit commands map to stable API contracts", () => {
@@ -561,6 +612,156 @@ test("comment draft --file sends operator-composed persona content", () => {
       error.code === "LUMINE_ADMIN_COMPOSED_COMMENT_UNSUPPORTED" &&
       /Stop without publishing/.test(error.message),
   );
+});
+
+test("management Build comments require an actual version-bound review", () => {
+  const reviewDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-build-review-"),
+  );
+  const composedPath = path.join(reviewDir, "comment.md");
+  fs.writeFileSync(
+    composedPath,
+    "I played the published version and liked the pacing.",
+  );
+
+  const candidateOperation = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "builds",
+      "candidates",
+      "--cursor",
+      "opaque",
+      "--limit",
+      "25",
+    ]),
+  );
+  assert.equal(candidateOperation.name, "builds.candidates");
+  assert.equal(candidateOperation.mutates, false);
+  assert.match(candidateOperation.path, /^\/build\/public\/list\?/);
+  assert.match(candidateOperation.path, /sort=recent/);
+  assert.match(candidateOperation.path, /cursor=opaque/);
+  assert.deepEqual(
+    normalizeAdminBuildCandidatesResult({
+      siteUrl: "https://www.twin-kle.com",
+      result: {
+        builds: [
+          {
+            id: 884,
+            title: "Chess Lab",
+            collaborationMode: "open_source",
+            publishedArtifactVersionId: 4512,
+          },
+        ],
+        cursor: "next-page",
+      },
+    }),
+    {
+      ok: true,
+      status: "success",
+      data: {
+        builds: [
+          {
+            id: 884,
+            title: "Chess Lab",
+            collaborationMode: "open_source",
+            publishedArtifactVersionId: 4512,
+            url: "https://www.twin-kle.com/app/884",
+            review: {
+              publishedArtifactVersionId: 4512,
+              codePullAvailable: true,
+              requiredBeforeComment: true,
+            },
+          },
+        ],
+        pagination: {
+          nextCursor: "next-page",
+          hasMore: true,
+          exhausted: false,
+        },
+      },
+    },
+  );
+
+  const draft = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "comment",
+      "draft",
+      "build:884",
+      "--file",
+      composedPath,
+      "--reviewed-version",
+      "4512",
+      "--reviewed-via",
+      "runtime",
+    ]),
+  );
+  assert.deepEqual(draft.body, {
+    targetType: "build",
+    targetId: 884,
+    identity: undefined,
+    content: "I played the published version and liked the pacing.",
+    reviewedBuildVersionId: 4512,
+    buildReviewMethod: "runtime",
+  });
+
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "comment", "draft", "build:884"]),
+      ),
+    /composed only/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "comment",
+          "draft",
+          "build:884",
+          "--file",
+          composedPath,
+        ]),
+      ),
+    /both --reviewed-version/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "comment",
+          "draft",
+          "build:884",
+          "--file",
+          composedPath,
+          "--reviewed-version",
+          "4512",
+          "--reviewed-via",
+          "api",
+        ]),
+      ),
+    /runtime or code/,
+  );
+
+  const buildReply = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "comment",
+      "reply",
+      "comment:456",
+      "--file",
+      composedPath,
+      "--reviewed-version",
+      "4512",
+      "--reviewed-via",
+      "code",
+    ]),
+  );
+  assert.equal(buildReply.body.targetType, "comment");
+  assert.equal(buildReply.body.reviewedBuildVersionId, 4512);
+  assert.equal(buildReply.body.buildReviewMethod, "code");
 });
 
 test("comment drafts target replies and standalone posts through one operation", () => {
@@ -1046,6 +1247,10 @@ test("newspaper verbs map to the delegated news routes", () => {
 });
 
 test("bot-output and composed bot chat map to the review and existing-DM routes", () => {
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "bot-output"])).path,
+    "/cli/admin/bot-output",
+  );
   const review = parseAdminOperation(
     parseArgs(["admin", "bot-output", "--days", "3"]),
   );

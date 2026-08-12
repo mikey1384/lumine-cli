@@ -169,6 +169,7 @@ lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin recommendations list --cursor '<cursor>' --json
 lumine admin subjects candidates --after 2026-08-01T00:00:00Z --json
 lumine admin subjects candidates --effort unassigned --json
+lumine admin builds candidates --cursor '<cursor>' --json
 lumine admin subject get 123 --include-comments --json
 lumine admin post get https://www.twin-kle.com/ai-stories/88 --json
 lumine admin post comments dailyReflection:99 --json
@@ -184,6 +185,9 @@ lumine admin brief --days 3 --json
 lumine admin notable add Minecrarft_guy --note "Created 8 thoughtful subjects and helped peers in 23 comments this window." --json
 lumine admin post recommend comment:456 --anyone-can-reward --reward-twinkles 3 --json
 lumine admin post reward comment:456 --twinkles 3 --json
+lumine admin comment draft build:884 --file comment.md \
+  --reviewed-version 4512 --reviewed-via runtime --json
+lumine admin comment post --draft-id 77 --json
 lumine admin daily-run complete --json
 ```
 
@@ -194,6 +198,13 @@ Numeric recommendation targets default to subjects. Use `comment:<id>`,
 and posts use the selected bot's server-owned canonical persona; a later human
 reply is handled by Twinkle's existing autonomous Zero/Ciel responder without
 Lumine remaining active.
+
+Management agents also inspect recent public Build candidates during each run.
+A direct Build comment is never server-generated: first open and try the
+published app or pull and read its code, then compose with `--file` and bind
+the draft to the exact `publishedArtifactVersionId` using
+`--reviewed-version` and `--reviewed-via runtime|code`. The server rejects
+missing or stale review evidence and any app/thread change before publication.
 
 Every operation is noninteractive when its required arguments are present.
 `--json` prints exactly one uncolored JSON value and returns a nonzero status
