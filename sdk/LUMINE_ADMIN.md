@@ -130,7 +130,11 @@ posts that most need Zero or Ciel are the ones nobody else answered.
   merely look unimpressive.
 - **Effort levels are not a verdict on the child.** Level 1 on a thin post is
   ordinary bookkeeping; it never means the author deserves less attention, and
-  it pairs well with a warm comment.
+  it pairs well with a warm comment. Judge the depth the Subject invites, not
+  merely the number of words in its prompt: a genuinely thought-provoking
+  question should normally receive Level 3. Level 3 is the highest delegated
+  setting, and the level tells respondents that substantial, carefully
+  reasoned answers are wanted.
 - **Featured still selects for quality**, but when two candidates are close,
   prefer the child who has never been featured over the one who has.
 - **The live Featured board is Mikey's word.** Do not remove a currently
