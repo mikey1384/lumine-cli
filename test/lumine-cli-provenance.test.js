@@ -39,7 +39,10 @@ test("CLI save silently includes source, version, and optional agent context", a
       ok: true,
       status: 200,
       async text() {
-        return JSON.stringify({ success: true, artifactVersion: { versionId: 8 } });
+        return JSON.stringify({
+          success: true,
+          artifactVersion: { versionId: 8 },
+        });
       },
     };
   };
@@ -47,7 +50,7 @@ test("CLI save silently includes source, version, and optional agent context", a
   const options = {
     apiUrl: "https://api.example.test",
     timeoutMs: 1000,
-    lumineCli: { version: "0.2.32" },
+    lumineCli: { version: "0.2.33" },
   };
   const result = await saveProjectFiles({
     options,
@@ -71,7 +74,7 @@ test("CLI save silently includes source, version, and optional agent context", a
   const body = JSON.parse(requests[0].init.body);
   assert.deepEqual(body.clientContext, createLumineSaveClientContext(options));
   assert.equal(body.clientContext.source, "lumine_cli");
-  assert.equal(body.clientContext.version, "0.2.32");
+  assert.equal(body.clientContext.version, "0.2.33");
   assert.equal(body.createVersion, true);
   assert.equal(body.baseFilesHash, "a".repeat(64));
 });

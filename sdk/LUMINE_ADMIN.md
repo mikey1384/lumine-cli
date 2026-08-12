@@ -49,6 +49,30 @@ Comment mode is stored only on the current run:
 - `draft`: server-generated drafts, no public comment.
 - `post`: drafts plus idempotent publication through the ordinary comment path.
 
+### Private AI-bucket maintenance
+
+AI identity buckets are private operator bookkeeping, not a Zero/Ciel public
+action. They therefore do not require or attach to a delegated daily run:
+
+```bash
+lumine admin ai-bucket get --bucket-id 10 --json
+lumine admin ai-bucket accounts add --bucket-id 10 \
+  --user-ids 3127,13037,15410,16288 \
+  --note "operator-confirmed account family" --json
+```
+
+`accounts add` accepts 1-500 unique positive user IDs, preflights the complete
+batch before writing, adds the canonical user and durable verified-email rules,
+re-attributes current-day AI usage, and returns the canonical bucket members.
+It is idempotent to retry. The API records the real operator in the private
+Lumine audit log; no public bot identity is involved.
+
+This surface intentionally accepts only an existing **unbanned** bucket. It
+cannot ban accounts, block signup, add IP/device/risk-key rules, or infer an
+account family. Identification remains a human/LLM evidence judgment and must
+be explicitly requested by Mikey; routine administrator runs still escalate
+suspected alternate accounts and never auto-enforce.
+
 ## Editorial priorities
 
 The CLI enforces none of this — it is the standing instruction for the operator

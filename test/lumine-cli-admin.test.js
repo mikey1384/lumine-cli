@@ -121,6 +121,84 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   assert.equal(parseAdminOperation(nextRun).body.identity, undefined);
 });
 
+test("AI bucket account batches are explicit, bounded, and run-independent", async (t) => {
+  const operation = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "ai-bucket",
+      "accounts",
+      "add",
+      "--bucket-id",
+      "10",
+      "--user-ids",
+      "3127,13037,15410",
+      "--note",
+      "operator-confirmed account family",
+    ]),
+  );
+  assert.deepEqual(operation, {
+    name: "ai-bucket.accounts.add",
+    method: "POST",
+    path: "/cli/admin/ai-buckets/10/accounts",
+    body: {
+      userIds: [3127, 13037, 15410],
+      note: "operator-confirmed account family",
+    },
+    mutates: true,
+  });
+  assert.equal(
+    parseAdminOperation(
+      parseArgs(["admin", "ai-bucket", "get", "--bucket-id", "10"]),
+    ).path,
+    "/cli/admin/ai-buckets/10",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "ai-bucket",
+          "accounts",
+          "add",
+          "--bucket-id",
+          "10",
+          "--user-ids",
+          "3127,3127",
+        ]),
+      ),
+    /must be unique/,
+  );
+
+  const fixture = await createFixtureServer(t);
+  const result = await runCli([
+    "admin",
+    "ai-bucket",
+    "accounts",
+    "add",
+    "--bucket-id",
+    "10",
+    "--user-ids",
+    "3127,13037,15410",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/daily-runs/status",
+    ),
+    false,
+  );
+  const request = fixture.requests.find(
+    (entry) => entry.url === "/cli/admin/ai-buckets/10/accounts",
+  );
+  assert.deepEqual(request?.body, {
+    userIds: [3127, 13037, 15410],
+  });
+  assert.equal(request?.runId, null);
+  assert.match(request?.requestId, /^cli:[0-9a-f-]{36}$/);
+});
+
 test("skip and audit commands map to stable API contracts", () => {
   const skip = parseAdminOperation(
     parseArgs([
@@ -981,9 +1059,7 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   );
   assert.throws(
     () =>
-      parseAdminOperation(
-        parseArgs(["admin", "bot-output", "--days", "31"]),
-      ),
+      parseAdminOperation(parseArgs(["admin", "bot-output", "--days", "31"])),
     /--days must be an integer between 1 and 30/,
   );
 
@@ -993,14 +1069,7 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   );
   fs.writeFileSync(messagePath, "I got that wrong. I'm sorry.");
   const send = parseAdminOperation(
-    parseArgs([
-      "admin",
-      "chat",
-      "send",
-      "Hajun",
-      "--file",
-      messagePath,
-    ]),
+    parseArgs(["admin", "chat", "send", "Hajun", "--file", messagePath]),
   );
   assert.equal(send.name, "chat.send");
   assert.equal(send.method, "POST");
