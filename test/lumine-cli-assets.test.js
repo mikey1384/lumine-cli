@@ -47,14 +47,9 @@ test("CLI formats battery percentages from confirmed server capacity", () => {
   assert.equal(formatBatteryPercent(0, 850_000), "~0%");
 
   const successCapacityReads =
-    cliSource.match(
-      /result\?\.aiUsagePolicy\?\.baseEnergyUnitsPerDay/g,
-    ) || [];
+    cliSource.match(/result\?\.aiUsagePolicy\?\.baseEnergyUnitsPerDay/g) || [];
   assert.equal(successCapacityReads.length, 2);
-  assert.doesNotMatch(
-    cliSource,
-    /result\?\.aiUsagePolicy\?\.fullBatteryUnits/,
-  );
+  assert.doesNotMatch(cliSource, /result\?\.aiUsagePolicy\?\.fullBatteryUnits/);
   assert.doesNotMatch(cliSource, /\|\| 1_000_000/);
 });
 
@@ -62,11 +57,26 @@ test("CLI validates encodings and mirrors project limits locally", () => {
   assert.match(cliSource, /function detectProjectFileEncodingIssue\(buffer\)/);
   assert.match(cliSource, /it is UTF-16 encoded/);
   assert.match(cliSource, /function countEffectiveLines\(value\)/);
-  assert.match(cliSource, /function collectProjectLimitFindings\(files\)/);
+  assert.match(
+    cliSource,
+    /function collectProjectLimitFindings\(files, projectLimits = \{\}\)/,
+  );
   assert.match(cliSource, /const PROJECT_MAX_FILES = 100;/);
   assert.match(cliSource, /const PROJECT_MAX_EFFECTIVE_FILE_LINES = 500;/);
   assert.match(cliSource, /const PROJECT_EFFECTIVE_LINE_MAX_COLUMNS = 160;/);
-  assert.match(cliSource, /assertProjectFilesWithinLimits\(files\);/);
+  assert.match(
+    cliSource,
+    /assertProjectFilesWithinLimits\(files, build\?\.projectLimits\);/,
+  );
+  assert.match(
+    cliSource,
+    /const canonicalBuild = await loadBuildMetadata\(\{ options, auth, buildId \}\);/,
+  );
+  assert.match(
+    cliSource,
+    /build = result\.build \? \{ \.\.\.build, \.\.\.result\.build \} : build;/,
+  );
+  assert.match(cliSource, /result\.copilotPolicy\?\.limits/);
   // Binary rejection must point at the asset workflow, not dead-end.
   assert.match(cliSource, /lumine assets upload <path-to-file>/);
 });
