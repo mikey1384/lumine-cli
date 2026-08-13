@@ -55,6 +55,8 @@ AI identity buckets are private operator bookkeeping, not a Zero/Ciel public
 action. They therefore do not require or attach to a delegated daily run:
 
 ```bash
+lumine admin ai-bucket create --label Lemon \
+  --note "Quota accounting only; not a moderation flag." --json
 lumine admin ai-bucket get --bucket-id 10 --json
 lumine admin ai-bucket accounts add --bucket-id 10 \
   --user-ids 3127,13037,15410,16288 \
@@ -62,6 +64,13 @@ lumine admin ai-bucket accounts add --bucket-id 10 \
 lumine admin ai-bucket note set --bucket-id 10 \
   --note "Quota accounting only; not a moderation flag." --json
 ```
+
+`create` inserts a new unbanned quota bucket through the same helper the
+management page uses. `--label` is required (at most 120 characters). `--note`
+is required and follows the same 255-character quota-context rule as
+`note set`. It cannot create a banned bucket, copy an existing one, or infer
+members. The response returns the canonical bucket, including its id for
+later `get` / `accounts add` / `note set` calls.
 
 `accounts add` accepts 1-500 unique positive user IDs, preflights the complete
 batch before writing, adds the canonical user and durable verified-email rules,
@@ -73,11 +82,12 @@ Lumine audit log; no public bot identity is involved.
 canonical bucket. Use it to distinguish quota bookkeeping from moderation;
 the note itself changes no access, ban, or identity rules.
 
-This surface intentionally accepts only an existing **unbanned** bucket. It
-cannot ban accounts, block signup, add IP/device/risk-key rules, or infer an
-account family. Identification remains a human/LLM evidence judgment and must
-be explicitly requested by Mikey; routine administrator runs still escalate
-suspected alternate accounts and never auto-enforce.
+This surface is quota bookkeeping only. It cannot ban accounts, block signup,
+add IP/device/risk-key rules, or infer an account family. Identification
+remains a human/LLM evidence judgment and must be explicitly requested by
+Mikey; routine administrator runs still escalate suspected alternate accounts
+and never auto-enforce. `accounts add` and `note set` still accept only an
+existing **unbanned** bucket.
 
 ## Editorial priorities
 

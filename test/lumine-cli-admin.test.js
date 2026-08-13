@@ -123,6 +123,42 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
 });
 
 test("AI bucket account batches are explicit, bounded, and run-independent", async (t) => {
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "ai-bucket",
+        "create",
+        "--label",
+        "Lemon",
+        "--note",
+        "Quota accounting only; not moderation.",
+      ]),
+    ),
+    {
+      name: "ai-bucket.create",
+      method: "POST",
+      path: "/cli/admin/ai-buckets",
+      body: {
+        label: "Lemon",
+        note: "Quota accounting only; not moderation.",
+      },
+      mutates: true,
+    },
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "ai-bucket", "create"])),
+    /--label/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "ai-bucket", "create", "--label", "Lemon"]),
+      ),
+    /--note/,
+  );
+
   const operation = parseAdminOperation(
     parseArgs([
       "admin",
@@ -192,6 +228,34 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
   );
 
   const fixture = await createFixtureServer(t);
+  const createResult = await runCli([
+    "admin",
+    "ai-bucket",
+    "create",
+    "--label",
+    "Lemon",
+    "--note",
+    "Quota accounting only; not moderation.",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(createResult.code, 0, createResult.stderr);
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/daily-runs/status",
+    ),
+    false,
+  );
+  const createRequest = fixture.requests.find(
+    (entry) => entry.url === "/cli/admin/ai-buckets",
+  );
+  assert.deepEqual(createRequest?.body, {
+    label: "Lemon",
+    note: "Quota accounting only; not moderation.",
+  });
+  assert.equal(createRequest?.runId, null);
+  assert.match(createRequest?.requestId, /^cli:[0-9a-f-]{36}$/);
+
   const result = await runCli([
     "admin",
     "ai-bucket",

@@ -2,7 +2,7 @@
 
 Version: 1.32.0
 Updated: 2026-08-02
-Generated: 2026-08-11T04:29:29.082Z
+Generated: 2026-08-13T00:13:49.827Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -287,7 +287,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Returns: { text, response, model, webSearch, aiUsagePolicy }
   - Generate text with the default Lumine text model, optionally using live web search and streaming text updates through onText.
   - Signed-in viewers only.
-  - Uses Grok 4.5 by default.
+  - Uses Grok 4.6 by default.
   - Each successful text generation consumes AI Energy from the signed-in viewer.
   - history must be an array of { role: 'user' | 'assistant', content: string }. Twinkle.ai.chat does not read a text field.
   - The server keeps the latest 12 valid history entries.
@@ -307,7 +307,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
   - thinkingMode low uses GPT-5.6 Luna and consumes the viewer's AI Energy from confirmed provider usage; its smaller model is usually cheaper than Medium or High.
-  - thinkingMode medium uses Grok 4.5 with medium reasoning and consumes normal AI Energy.
+  - thinkingMode medium uses Grok 4.6 with medium reasoning and consumes normal AI Energy.
   - thinkingMode high uses GPT-5.6 Sol with high reasoning and consumes high AI Energy.
   - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
   - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
@@ -353,7 +353,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Pass onText/onStatus for streaming dialogue. Omit callbacks for non-streaming dialogue where the promise resolves with the final response.
   - Inside Build character chat, thinkingMode low uses Lite Mode: Zero and Ciel both use GPT-5.6 Luna with reasoning disabled; confirmed provider usage consumes the viewer's AI Energy and is usually cheaper than High.
   - Inside Build character chat, thinkingMode medium uses the same normal chat model routing: Zero and Ciel both use GPT-5.6 Luna with reasoning disabled and normal AI Energy.
-  - Inside Build character chat, thinkingMode high uses Think Hard chat routing and high AI Energy: Zero uses Grok 4.5 with high reasoning and Ciel uses GPT-5.6 Terra with high reasoning.
+  - Inside Build character chat, thinkingMode high uses Think Hard chat routing and high AI Energy: Zero uses Grok 4.6 with high reasoning and Ciel uses GPT-5.6 Terra with high reasoning.
   - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.
