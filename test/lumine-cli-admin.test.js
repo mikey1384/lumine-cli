@@ -469,7 +469,7 @@ test("comment edit sends composed replacement content for a bot comment", () => 
   assert.throws(
     () =>
       parseAdminOperation(parseArgs(["admin", "comment", "edit", "342752"])),
-    /Pass composed comment text with --file/,
+    /Pass composed text with --file/,
   );
 });
 
@@ -1337,6 +1337,36 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
     "message.md",
   );
   fs.writeFileSync(messagePath, "I got that wrong. I'm sorry.");
+  const announcementPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-announcement-")),
+    "announcement.md",
+  );
+  fs.writeFileSync(
+    announcementPath,
+    "Lumine can now use Grok 4.6.",
+  );
+  const announce = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "announcement",
+      "post",
+      "--file",
+      announcementPath,
+    ]),
+  );
+  assert.equal(announce.name, "announcement.post");
+  assert.equal(announce.method, "POST");
+  assert.equal(announce.path, "/cli/admin/announcements");
+  assert.equal(announce.body.content, "Lumine can now use Grok 4.6.");
+  assert.equal(announce.mutates, true);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "announcement", "post"]),
+      ),
+    /Pass composed text with --file/,
+  );
+
   const send = parseAdminOperation(
     parseArgs(["admin", "chat", "send", "Hajun", "--file", messagePath]),
   );

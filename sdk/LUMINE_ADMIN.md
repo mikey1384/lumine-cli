@@ -1621,6 +1621,30 @@ Ordinary warm follow-ups (checking on a member the bots already know after
 something the run surfaced) are within a run's judgment, sparingly, and are
 always reported in the run report.
 
+## Official announcements
+
+```bash
+lumine admin announcement post --file announcement.md --json
+```
+
+The run's selected bot posts one composed message to General's announcement
+subchannel (`channelId` 2, `subchannelId` 2). This is the public official
+board, not a DM and not a Home comment. Mechanics:
+
+- requires the `chat:post` scope of a comment-mode `post` run;
+- composed-only (`--file`, same 10,000-character limit as `chat send`);
+- authors as Zero or Ciel only — the ordinary chat post route and the
+  announcement socket relay now treat those two IDs as allowed announcement
+  authors, same as management-level 3 humans;
+- persists through the ordinary `msg_chats` insert (channel lock +
+  visibility restore), writes the Twinkle Newspaper `announcement:<messageId>`
+  event, and relays `new_chat_message` on General. No bot socket, session, or
+  presence;
+- audited as `announcement.post` and idempotent per request key.
+
+Use this only when Mikey asks for an official announcement. Do not treat a
+management run as a standing license to post there.
+
 ## Audit history
 
 ```bash
