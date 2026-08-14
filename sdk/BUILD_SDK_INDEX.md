@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.32.0
-Updated: 2026-08-02
-Generated: 2026-08-13T00:13:49.827Z
+Version: 1.32.1
+Updated: 2026-08-14
+Generated: 2026-08-14T03:20:48.358Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -20,6 +20,7 @@ Generated: 2026-08-13T00:13:49.827Z
 - Use Twinkle.grammarbles for public Grammarbles question-bank trainer apps and optional signed-in viewer attempt-history filtering.
 - Use Twinkle.chess for chess engine play and analysis; app code still owns chess rules, legal moves, board state, and UI.
 - Use Twinkle.world for realtime multiplayer rooms, avatar presence, movement, emotes, and lightweight actions; world sessions are disposable and durable MMO state belongs in sharedDb/privateDb.
+- Every Twinkle-owned profilePicUrl field returned by the SDK is an absolute HTTPS URL ready for img src, or null. Fields inside app-owned JSON such as sharedDb entry data are not rewritten.
 - Use Twinkle.characters.chat for real Zero/Ciel NPC dialogue with shared room context and AI Energy-aware thinking modes.
 - Twinkle.ai.chat history entries must use { role, content }; map local message.text fields to content before passing history.
 - Live web search is enabled by default for Twinkle.ai.chat and for Medium/High Twinkle.ai.generateObject and Twinkle.characters.chat requests. App authors can pass webSearch: false to disable it for their app. Search uses the provider's live web-search tool and is included in AI Energy usage; structured and character Lite Mode remains tool-free.
@@ -672,6 +673,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Always available in the build iframe.
   - World state is ephemeral and heartbeat/TTL based. Use sharedDb/privateDb for durable inventory, XP, quests, ownership, and saved progress — but write those LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick); per-frame/live state stays in world presence or client memory. The server rate-limits sharedDb/privateDb writes and returns 429.
   - Events are room-scoped and include serverTime, seq, eventId, schemaVersion, sessionId, player, and room metadata.
+  - Signed-in player identity comes from the canonical Twinkle user record; player.profilePicUrl is only used for guests and is returned only when it is a valid absolute HTTPS URL.
   - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles and reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
   - Use updatePresence for live avatar snapshots and send for lightweight actions such as emotes, interactions, and chat bubbles.
   - Throttle movement updates in app code, usually 5-15 updates per second. Do not call updatePresence from every animation frame.
