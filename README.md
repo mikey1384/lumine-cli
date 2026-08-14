@@ -11,6 +11,7 @@ npx @stage5/lumine@latest rename "My New Build Title"
 npx @stage5/lumine@latest rename "New Title" --target 123
 npx @stage5/lumine@latest describe "A welcoming place to build together"
 npx @stage5/lumine@latest describe --no-description --target 123
+npx @stage5/lumine@latest upgrade https://www.twin-kle.com/app/123
 npx @stage5/lumine@latest projects
 npx @stage5/lumine@latest branches 884
 npx @stage5/lumine@latest suggestions 884
@@ -39,6 +40,14 @@ change its description through the same canonical metadata route as the
 website. Both commands target the current workspace or selected Build; pass
 `--target <build-url-or-id>` to update another Build you own. Run
 `lumine describe --no-description` to clear a description explicitly.
+
+The configured project-limit reviewer can run
+`lumine upgrade <build-url-or-id>` to grant Main—and therefore every branch—the
+full approved project room of 500 files and 5 MB. The server verifies reviewer
+authority, resolves branch URLs back to their canonical Main project, and
+returns the confirmed canonical limits after commit. Running the command again
+is a safe no-op that reports the already-active canonical limits. Omit the
+target to use the current workspace or selected project.
 
 For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and
