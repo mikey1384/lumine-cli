@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.32.1
-Updated: 2026-08-14
-Generated: 2026-08-14T03:20:48.358Z
+Version: 1.33.0
+Updated: 2026-08-15
+Generated: 2026-08-15T03:00:24.685Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -76,6 +76,27 @@ files:read, user:read, users:read, dailyReflections:read, content:read, content:
   - Returns: Canonical shareable deep-link URL string, or null when app info is unavailable
   - Builds a canonical shareable deep link into this app, e.g. https://www.twin-kle.com/app/884/432-the-great-gatsby.
   - Example: await Twinkle.app.getShareUrl('432-the-great-gatsby');
+- history.getState() | scopes: none
+  - Returns: The current app-owned history state object, or null
+  - Read the current Build app view state stored through Twinkle.app.history.
+  - History state is local to this iframe session and never changes the parent Twinkle URL.
+  - Use this for archive/detail/page state inside one Build document; use navigate() to load another project file.
+- history.push(state) | scopes: none
+  - Returns: A JSON-cloned copy of the stored state
+  - Add a confirmed in-app view transition to browser history so Back stays inside the Build app.
+  - State must be a JSON-serializable object no larger than 16 KB.
+  - Push only after the requested view has loaded successfully; do not synthesize server-owned state.
+  - Example: Twinkle.app.history.push({ view: 'edition', dayIndex: 2080, page: 'scores' });
+- history.replace(state) | scopes: none
+  - Returns: A JSON-cloned copy of the stored state
+  - Replace the current in-app history entry without adding a Back step.
+  - Use this to establish the initial confirmed view or reconcile a loading-only change.
+- history.subscribe(listener, { immediate } = {}) | scopes: none
+  - Returns: unsubscribe function
+  - Restore app views when the viewer moves through browser Back or Forward history.
+  - The listener receives a cloned app state object, or null for an entry not owned by this app.
+  - The listener is called immediately by default; pass { immediate: false } to wait for Back or Forward.
+  - Example: const off = Twinkle.app.history.subscribe((state) => restoreView(state), { immediate: false });
 - async navigate(target) | scopes: none
   - Returns: { success, src }
   - Navigate to another Build preview route through the parent bridge without dropping Twinkle SDK access.

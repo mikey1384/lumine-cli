@@ -95,6 +95,12 @@ The CLI enforces none of this — it is the standing instruction for the operato
 or agent making the judgments, and it applies to every verb below: recommends,
 rewards, effort levels, Featured, skips, comments, and replies.
 
+Public text authored as Ciel must be English. This is an operator and generation
+instruction, not a script or keyword test: writing systems do not identify a
+language reliably, and the API must not pretend otherwise. This is a
+presentation rule, not an invitation to correct or lecture a member who writes
+in another language; reply naturally in concise English.
+
 **Twinkle is not Reddit.** Do not rank a run's attention by popularity,
 recommendation count, or polish. Most users here are young children, and the
 posts that most need Zero or Ciel are the ones nobody else answered.
@@ -168,6 +174,13 @@ a human owner can decide, and a finding nobody reports is a finding that did not
 happen. **Every run ends with an escalation list**, and it belongs in the run's
 final report whether or not anyone asks for it.
 
+Keep that list narrow enough to be useful. Escalate concrete child-safety,
+exploitation, privacy, targeted harassment, or platform/system-abuse risk — not
+ordinary children experimenting, arguing, making rumors, proposing informal
+in-site loans or contests, asking where media can be found, or making an
+unverified ownership claim. Those may merit a normal age-appropriate response,
+but they are not escalations without credible harmful conduct or a real victim.
+
 Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
 `/comments/<id>` URL, a one-line summary, and why it needs him:
 
@@ -178,11 +191,10 @@ Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
   happened. These outrank every other category.
 - **Account integrity** — someone posting from another person's account,
   impersonation, shared logins, or a user operating a set of alternate accounts.
-- **Economy manipulation** — coin or XP farming across alternate accounts,
-  paid-grinding arrangements, "invest and I will pay you back more" offers,
-  pay-me-to-win contests, and anything that teaches other children a method for
-  any of these. Note the recommendation count: a manipulation how-to that other
-  kids are recommending is spreading, and that is the urgent part.
+- **Economy exploitation** — coordinated coin or XP farming across alternate
+  accounts, coercive or deceptive arrangements, or a repeatable abuse of the
+  platform economy with concrete evidence. A child offering a voluntary loan,
+  repayment, prize, or contest is not enough by itself.
 - **AI-cost exploits** — patterns that convert free AI allowances into farmable
   value: clusters of young accounts with heavy AI/battery usage, one person
   operating many accounts that feed a single build through team branches,
@@ -446,6 +458,11 @@ lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin daily-run start --identity ciel --comment-mode draft \
   --run-key daily:2026-08-06:review --json
 lumine admin daily-run status --json
+lumine admin daily-run escalation add --target subject:123 \
+  --note "Public contact details need owner review" --severity urgent --json
+lumine admin daily-run escalation add --target chatMessage:3768159 \
+  --note "Concrete safety issue in a bot-authored chat message" --json
+lumine admin daily-run report --json
 lumine admin daily-run complete --json
 lumine admin daily-run fail --reason "operator stopped" --json
 ```
@@ -464,6 +481,14 @@ type DailyRunComplete = Success<{
 }>;
 type DailyRunFail = DailyRunComplete;
 ```
+
+Record only qualifying escalations as they are confirmed. `daily-run report`
+then composes the active run's canonical audit events, successful mutations,
+completed queue scans, recorded escalations, and the most useful brief deltas
+into one result. Generate it before `complete`, because run-scoped reads require
+the current active run. Queue coverage is written automatically only after an
+`--all` traversal reaches canonical exhaustion; an interrupted scan remains in
+its local checkpoint and cannot be misreported as complete.
 
 `lastRun` makes a lost-response retry of `complete` or `fail` possible after
 the active pointer has been cleared. Other run-scoped commands accept only the
@@ -498,13 +523,17 @@ JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 
 ```bash
 lumine admin recommendations list --kind recommend \
-  --content-types comment,dailyReflection --cursor '<cursor>' --json
+  --content-types comment,dailyReflection --all --json
+lumine admin recommendations list --after 2026-08-14T00:00:00Z \
+  --all --checkpoint recommendations.json --json
+lumine admin recommendations list --include-legacy --all --json
 lumine admin recommendations list --unviewed --json
 lumine admin subjects candidates --after 2026-08-01T00:00:00Z \
-  --cursor '<cursor>' --json
+  --all --checkpoint subjects.json --json
 lumine admin subjects candidates --effort unassigned --json
 lumine admin subjects candidates --unviewed --json
-lumine admin builds candidates --cursor '<cursor>' --limit 50 --json
+lumine admin builds candidates --all --limit 50 --json
+lumine admin builds review build:884 --output-dir ./build-review --json
 ```
 
 Schemas:
@@ -575,12 +604,28 @@ type BuildCandidates = Success<{
 }>;
 ```
 
-Both cursors freeze a primary-key high-water mark and traverse descending IDs,
-so concurrent inserts cannot shift or duplicate later pages. Both walks scan a
-bounded primary-key window (500 rows) per call before applying their residual
-filters, so a page — recommendation or subject — can be empty while `hasMore`
-remains true; continue until `exhausted`. Subject `--after` is inclusive, and
-the opaque cursor is bound to its original date and effort filters.
+Subject cursors freeze a primary-key high-water mark and traverse descending
+IDs. Bounded recommendation cursors freeze both the feed-ID high-water mark and
+the server timestamp, then traverse the indexed `(timeStamp, id)` order; this
+also catches a Daily Reflection whose old feed row moved forward when it was
+reshared. Explicit legacy scans retain the descending primary-key walk. A page
+can be empty while `hasMore` remains true; continue until `exhausted`. `--all`
+does that automatically and writes a private checkpoint after every
+server-confirmed page; `--resume` continues only when the checkpoint belongs to
+the same API, run, and exact request. The final result can be copied to
+`--output`, while `--checkpoint` is resumable operational state. Subject
+`--after` is inclusive, and every opaque cursor is bound to its original
+filters.
+
+Recommendations default to `--since-run`: the server uses the previous
+completed run's start time (or the same bounded seven-day fallback used by the
+brief on a first run). That deliberate start-to-start overlap gives the queue
+at-least-once coverage when content arrives after the prior snapshot but before
+that run completes. `--after` supplies an explicit inclusive timestamp.
+All-history traversal is deliberately available only through
+`--include-legacy`. The CLI requires the API to echo the canonical `after`
+boundary for bounded modes, so deploying a new CLI against an older API cannot
+silently fall back to a million-row historical scan.
 
 `builds candidates` is a management-agent discovery view over the canonical
 public Build browser, ordered by the current published release. It is
@@ -591,6 +636,15 @@ not decide that an app deserves a comment. The management agent must open and
 genuinely try the published runtime, or pull and read an open-source project,
 before making that judgment. Direct API/persona automation is never a review
 substitute.
+
+`builds review` is the managed runtime path: it fetches the current published
+artifact identity, launches the app in an isolated temporary Chromium profile,
+captures a screenshot and bounded console evidence, then fetches the identity
+again. It writes `review.json` in a unique per-review subdirectory only when
+the browser completed, the screenshot exists, and the artifact did not change
+mid-review. Attach the returned `receiptPath` with
+`comment draft ... --review-receipt review.json`; this binds the draft to the
+exact reviewed artifact without copying a version number by hand.
 
 During every management run, scan recent Build candidates back through the
 run's review window alongside Subjects and the recommendation queue. An app
@@ -919,6 +973,10 @@ If recommendation succeeds but reward fails, the command exits nonzero with
 ```bash
 lumine admin post skip dailyReflection:99 --json
 lumine admin post skip comment:456 --reason "one-line answer, nothing to add" --json
+lumine admin post skip-batch --target-file skip-targets.json \
+  --checkpoint skip-progress.json --json
+lumine admin post skip-batch --target-file skip-targets.json \
+  --checkpoint skip-progress.json --resume --json
 ```
 
 A skip records that the management rotation has judged a recommend-queue item
@@ -937,6 +995,13 @@ metadata — it is the agent's memory of the judgment, not public content.
 The skip requires the `recommendation:write` scope and is audited like every
 other mutation.
 
+`skip-batch` accepts either a JSON array (strings or `{ "target", "reason" }`
+objects), `{ "targets": [...] }`, or one target per text line. It deduplicates
+targets, submits them sequentially through the same canonical audited endpoint,
+and checkpoints only after each response is confirmed. `--resume` verifies the
+exact target-set fingerprint and run ID before continuing; it never guesses
+which writes succeeded.
+
 ```ts
 type PostSkip = Success<{
   skip: {
@@ -953,9 +1018,10 @@ type PostSkip = Success<{
 
 ```bash
 lumine admin news --json
-lumine admin news claim --json
-lumine admin news submit --edition-id 42 --lease-token <token> \
-  --file editorial.json --model "Claude" --json
+lumine admin news claim --output claim.json --scaffold editorial.json --json
+lumine admin news validate --claim claim.json --file editorial.json --json
+lumine admin news submit --claim claim.json --file editorial.json \
+  --model "Ciel" --json
 lumine admin news print --json
 ```
 
@@ -968,9 +1034,18 @@ the run, and if `printedToday` is false with no edition `pending` or
 **Preferred: write the editorial yourself.** `news claim` reserves today's
 edition under the server's generation lease and returns the exact canonical
 event digest the server would otherwise send to its own model, so no provider
-API credits are spent. Write a `GeneratedEditorial` JSON and send it back with
-`news submit` within the ten-minute lease. The server treats the editorial as
-untrusted regardless of author: every story must cite an exact `eventKey`
+API credits are spent. With `--output` and `--scaffold`, the CLI writes that
+lease/digest to a private claim file and creates an editable editorial shell.
+`news validate` runs locally, before authentication or a network request, and
+checks the complete citation graph plus byte-exact quote boundaries. Submit the
+validated pair with `news submit --claim`; the CLI reads the edition and lease
+from the claim file and validates again immediately before the request. The
+explicit `--edition-id` / `--lease-token` form remains available for backwards
+compatibility.
+
+Write a `GeneratedEditorial` JSON and send it back within the ten-minute lease.
+The server still treats the editorial as untrusted regardless of author: every
+story must cite an exact `eventKey`
 from the digest, front-page `sourceQuote`s must be verbatim contiguous
 passages of the cited event's summary (invalid quotes are replaced with
 canonical text), section and page layout are server-enforced, announcements

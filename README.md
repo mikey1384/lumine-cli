@@ -164,7 +164,35 @@ version state in `.twinkle/lumine-project.json` so local agents can tell when
 they should rerun with `npx @stage5/lumine@latest`. Use `--no-update-check` to
 skip that advisory network check.
 
-After pulling a project, run an agent from the pulled folder:
+## Subscription agents through the Lumine loop
+
+After pulling a project, a signed-in Codex or Claude Code subscription can
+power Lumine's workspace loop without spending Twinkle AI Energy:
+
+```bash
+lumine agent --provider codex "Add keyboard controls"
+lumine agent --provider claude-code "Fix the mobile layout"
+```
+
+The external model cannot write project files directly. Lumine supplies the
+same core workspace prompt/tool contract, read-before-edit behavior, bounded
+scope checks, and validation-repair passes used by the hosted Build agent. A save happens only
+after validation passes and still uses the workspace's server-issued
+`filesHash`, so a concurrent server change stops the run instead of being
+overwritten. Provider login and model usage stay inside the selected local CLI;
+Twinkle never receives a provider credential and does not reserve AI Energy.
+
+Every run writes a sanitized observable tool trace under
+`.twinkle/agent-runs/`. By default, the selected subscription agent reviews
+that trace after the pass and records evidence-based loop feedback without
+collecting hidden chain-of-thought; use `--no-review-loop` to skip that extra
+provider turn. Provider support is adapter-based rather than Codex-specific.
+Codex uses its local app-server protocol and Claude Code uses the same Lumine
+tools over MCP. Both adapters disable inherited model-side project tooling and
+launch with a credential-minimized environment, so project access remains at
+the Lumine tool boundary.
+
+You can still use a coding agent directly for a manual edit-and-save workflow:
 
 ```bash
 codex "Read AGENTS.md, then make the requested change."
@@ -187,10 +215,13 @@ events.
 ```bash
 lumine admin identity list --json
 lumine admin daily-run start --identity auto --comment-mode off --json
-lumine admin recommendations list --cursor '<cursor>' --json
+lumine admin recommendations list --all --checkpoint recommendations.json --json
+lumine admin recommendations list --after 2026-08-14T00:00:00Z --all --json
+lumine admin recommendations list --include-legacy --all --json
 lumine admin subjects candidates --after 2026-08-01T00:00:00Z --json
 lumine admin subjects candidates --effort unassigned --json
-lumine admin builds candidates --cursor '<cursor>' --json
+lumine admin builds candidates --all --json
+lumine admin builds review build:884 --output-dir ./build-review --json
 lumine admin subject get 123 --include-comments --json
 lumine admin post get https://www.twin-kle.com/ai-stories/88 --json
 lumine admin post comments dailyReflection:99 --json
@@ -206,9 +237,16 @@ lumine admin brief --days 3 --json
 lumine admin notable add Minecrarft_guy --note "Created 8 thoughtful subjects and helped peers in 23 comments this window." --json
 lumine admin post recommend comment:456 --anyone-can-reward --reward-twinkles 3 --json
 lumine admin post reward comment:456 --twinkles 3 --json
+lumine admin post skip-batch --target-file skipped.json --checkpoint skip-progress.json --json
 lumine admin comment draft build:884 --file comment.md \
-  --reviewed-version 4512 --reviewed-via runtime --json
+  --review-receipt /path/from-build-review/review.json --json
 lumine admin comment post --draft-id 77 --json
+lumine admin news claim --output claim.json --scaffold editorial.json --json
+lumine admin news validate --claim claim.json --file editorial.json --json
+lumine admin news submit --claim claim.json --file editorial.json --json
+lumine admin daily-run escalation add --target subject:123 \
+  --note "Concrete privacy issue requiring owner review" --json
+lumine admin daily-run report --json
 lumine admin daily-run complete --json
 ```
 
@@ -221,11 +259,15 @@ reply is handled by Twinkle's existing autonomous Zero/Ciel responder without
 Lumine remaining active.
 
 Management agents also inspect recent public Build candidates during each run.
-A direct Build comment is never server-generated: first open and try the
-published app or pull and read its code, then compose with `--file` and bind
-the draft to the exact `publishedArtifactVersionId` using
-`--reviewed-version` and `--reviewed-via runtime|code`. The server rejects
-missing or stale review evidence and any app/thread change before publication.
+`builds review` opens one published app in an isolated temporary Chromium
+profile, captures a screenshot and console evidence, verifies that the
+published version stayed fixed, and writes a review receipt in a unique output
+subdirectory. A direct Build comment is never server-generated: review the
+runtime (or pull and read an
+open-source app), compose with `--file`, and attach the receipt. The server
+rejects missing or stale review evidence and any app/thread change before
+publication. Manual `--reviewed-version` / `--reviewed-via` evidence remains
+available for genuine code reviews.
 
 Every operation is noninteractive when its required arguments are present.
 `--json` prints exactly one uncolored JSON value and returns a nonzero status
@@ -235,10 +277,21 @@ server also enforces canonical no-duplicate invariants. Failed mutation JSON
 includes `error.details.retryIdempotencyKey` so a partial attempt can be
 resumed with the exact generated key.
 
-Subject and recommendation-queue listings use opaque, stable snapshot cursors.
-Pass the returned `data.pagination.nextCursor` back through `--cursor` until
-`data.pagination.exhausted` is true. Subject `--after` is inclusive and cursors
-are bound to the original date and effort filters.
+Subject and queue listings use opaque, stable snapshot cursors. `--all`
+follows them automatically, saves a checkpoint after every canonical page,
+and records completed queue coverage in the run audit; `--resume` continues
+the exact same request. Recommendation scans default to the previous completed
+run's start boundary for at-least-once coverage. Use `--after` for an explicit
+timestamp or `--include-legacy`
+for an intentional all-history scan. Subject `--after` is inclusive and
+cursors are bound to the original date and effort filters.
+
+`news claim` can write both the canonical leased digest and an editable
+editorial scaffold. `news validate` is local and checks every citation and
+quote before submission; `news submit --claim` reads the lease identity from
+the claim file. `daily-run report` summarizes confirmed mutations, completed
+queue coverage, explicitly recorded escalations, and the run brief before the
+run is completed.
 
 The complete run lifecycle, command contracts, nullable fields, Karma approval
 behavior, pagination semantics, secret-subject behavior, presence isolation,

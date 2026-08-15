@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import {
   adminCommand,
   assertComposedCommentDraftResult,
+  assertRecommendationWindowResult,
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
   formatAdminJsonError,
@@ -18,9 +19,20 @@ import {
   parseAdminOperation,
   parseOperatorViewFilter,
   parseRecommendationContentTypes,
+  parseRecommendationWindow,
   parseRecommendationTarget,
   resolveOperatorViewFilter,
 } from "../lib/admin.js";
+import {
+  createNewsEditorialScaffold,
+  readAdminJsonFile,
+  validateNewsEditorial,
+} from "../lib/admin-news.js";
+import {
+  readBatchSkipTargets,
+  runAutomaticPagination,
+} from "../lib/admin-workflows.js";
+import { parseBuildReviewReceipt } from "../lib/build-review.js";
 import { parseArgs } from "../lib/commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -93,6 +105,72 @@ test("recommendation content filters exclude AI Stories without changing paginat
   });
 });
 
+test("recommendation scans default to the run window and require explicit legacy scope", () => {
+  const current = parseArgs(["admin", "recommendations", "list", "--all"]);
+  assert.equal(parseRecommendationWindow(current).mode, "since-run");
+  assert.match(parseAdminOperation(current).path, /sinceRun=true/);
+  assert.equal(current.adminAll, true);
+
+  const bounded = parseArgs([
+    "admin",
+    "recommendations",
+    "list",
+    "--after",
+    "2026-08-14T00:00:00Z",
+    "--checkpoint",
+    "/tmp/recommendations.json",
+    "--resume",
+  ]);
+  assert.equal(parseRecommendationWindow(bounded).mode, "after");
+  assert.match(parseAdminOperation(bounded).path, /after=2026-08-14T00%3A00%3A00Z/);
+  assert.equal(bounded.adminResume, true);
+
+  const legacy = parseArgs([
+    "admin",
+    "recommendations",
+    "list",
+    "--include-legacy",
+  ]);
+  assert.equal(parseRecommendationWindow(legacy).mode, "legacy");
+  assert.match(parseAdminOperation(legacy).path, /includeLegacy=true/);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "recommendations",
+          "list",
+          "--since-run",
+          "--include-legacy",
+        ]),
+      ),
+    /Choose one recommendation window/,
+  );
+
+  const operation = parseAdminOperation(current);
+  assert.doesNotThrow(() =>
+    assertRecommendationWindowResult({
+      operation,
+      result: {
+        data: {
+          pagination: {
+            after: 1_723_680_000,
+            snapshotTimeStamp: 1_723_680_100,
+          },
+        },
+      },
+    }),
+  );
+  assert.throws(
+    () =>
+      assertRecommendationWindowResult({
+        operation,
+        result: { data: { pagination: { exhausted: false } } },
+      }),
+    /did not confirm the bounded recommendation window/,
+  );
+});
+
 test("delegated identity and daily-run parsing keeps comment permission run-local", () => {
   const start = parseArgs([
     "admin",
@@ -120,6 +198,61 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   const nextRun = parseArgs(["admin", "daily-run", "start"]);
   assert.equal(parseAdminOperation(nextRun).body.commentMode, "off");
   assert.equal(parseAdminOperation(nextRun).body.identity, undefined);
+
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "daily-run", "report"])).path,
+    "/cli/admin/daily-runs/report",
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "daily-run",
+        "escalation",
+        "add",
+        "--target",
+        "https://www.twin-kle.com/comments/44",
+        "--note",
+        "Public contact details need owner review.",
+        "--severity",
+        "urgent",
+      ]),
+    ),
+    {
+      name: "daily-run.escalation.add",
+      method: "POST",
+      path: "/cli/admin/daily-runs/escalations",
+      body: {
+        targetType: "comment",
+        targetId: 44,
+        url: "https://www.twin-kle.com/comments/44",
+        summary: "Public contact details need owner review.",
+        severity: "urgent",
+      },
+      mutates: true,
+    },
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "daily-run",
+        "escalation",
+        "add",
+        "--target",
+        "chatMessage:3768159",
+        "--note",
+        "Concrete safety issue in a bot-authored chat message.",
+      ]),
+    ).body,
+    {
+      targetType: "chatMessage",
+      targetId: 3768159,
+      url: undefined,
+      summary: "Concrete safety issue in a bot-authored chat message.",
+      severity: "attention",
+    },
+  );
 });
 
 test("AI bucket account batches are explicit, bounded, and run-independent", async (t) => {
@@ -1460,6 +1593,492 @@ test("newspaper repair claims carry the target date", () => {
         parseArgs(["admin", "news", "claim", "--date", "yesterday"]),
       ),
     /--date must be YYYY-MM-DD/,
+  );
+});
+
+test("newspaper claim scaffolds preserve exact quote evidence before submit", () => {
+  const claim = {
+    editionId: 42,
+    leaseToken: "lease-abc",
+    maxSourceQuoteLength: 360,
+    events: [
+      {
+        eventKey: "subject:1",
+        section: "front",
+        summary: "An exact passage from the author.",
+      },
+      {
+        eventKey: "build:2",
+        section: "notices",
+        summary: "A new app was published.",
+      },
+    ],
+  };
+  const scaffold = createNewsEditorialScaffold(claim);
+  assert.equal(scaffold.lead.eventKey, "subject:1");
+  assert.equal(
+    scaffold.lead.sourceQuote,
+    "An exact passage from the author.",
+  );
+  assert.equal(scaffold.stories[0].sourceQuote, "");
+  scaffold.mastheadHeadline = "A Day of Making";
+  scaffold.mastheadDeck = "Twinklers share an idea and a new app.";
+  scaffold.editorsNote = "Good work becomes stronger when it is shared.";
+  scaffold.lead.headline = "An Author Makes the Case";
+  scaffold.lead.summary = "A member shared a clear argument.";
+  scaffold.stories[0].headline = "A New App Opens";
+  scaffold.stories[0].summary = "A builder published a new app.";
+  assert.deepEqual(validateNewsEditorial({ claim, editorial: scaffold }), {
+    valid: true,
+    editionId: 42,
+    citedEventCount: 2,
+    coveredEventCount: 0,
+    availableEventCount: 2,
+  });
+  scaffold.lead.sourceQuote = "a paraphrase";
+  assert.throws(
+    () => validateNewsEditorial({ claim, editorial: scaffold }),
+    /exact contiguous claim-summary passage/,
+  );
+
+  const emptySummaryClaim = {
+    ...claim,
+    events: [{ ...claim.events[0], summary: "" }],
+  };
+  const emptySummaryEditorial = {
+    ...scaffold,
+    lead: { ...scaffold.lead, sourceQuote: "" },
+    stories: [],
+  };
+  assert.equal(
+    validateNewsEditorial({
+      claim: emptySummaryClaim,
+      editorial: emptySummaryEditorial,
+    }).valid,
+    true,
+  );
+});
+
+test("newspaper validation and claim-based submission parse locally", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-news-claim-"));
+  const claimPath = path.join(dir, "claim.json");
+  const editorialPath = path.join(dir, "editorial.json");
+  const claim = {
+    editionId: 77,
+    leaseToken: "lease-77",
+    maxSourceQuoteLength: 360,
+    events: [
+      {
+        eventKey: "subject:7",
+        section: "front",
+        summary: "Exact source text",
+      },
+    ],
+  };
+  const editorial = {
+    mastheadHeadline: "The Test Daily",
+    mastheadDeck: "One exact source.",
+    lead: {
+      eventKey: "subject:7",
+      headline: "The Source Speaks",
+      summary: "The subject anchors the edition.",
+      sourceQuote: "Exact source text",
+      coveredEventKeys: [],
+    },
+    stories: [],
+    editorsNote: "Evidence comes first.",
+  };
+  fs.writeFileSync(claimPath, JSON.stringify({ schemaVersion: 1, claim }));
+  fs.writeFileSync(editorialPath, JSON.stringify(editorial));
+
+  const validate = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "news",
+      "validate",
+      "--claim",
+      claimPath,
+      "--file",
+      editorialPath,
+    ]),
+  );
+  assert.equal(validate.name, "news.validate");
+  assert.equal(validate.local, true);
+
+  const submit = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "news",
+      "submit",
+      "--claim",
+      claimPath,
+      "--file",
+      editorialPath,
+    ]),
+  );
+  assert.equal(submit.body.editionId, 77);
+  assert.equal(submit.body.leaseToken, "lease-77");
+});
+
+test("batch skip files are canonicalized and deduplicated", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-skip-batch-"));
+  const targetPath = path.join(dir, "targets.json");
+  fs.writeFileSync(
+    targetPath,
+    JSON.stringify([
+      "comment:12",
+      { target: "dailyReflection:9", reason: "already covered" },
+      "comment:12",
+    ]),
+  );
+  assert.deepEqual(
+    readBatchSkipTargets({
+      filePath: targetPath,
+      parseTarget: parseRecommendationTarget,
+      defaultReason: "legacy queue cleanup",
+    }),
+    [
+      {
+        key: "comment:12",
+        type: "comment",
+        id: 12,
+        reason: "legacy queue cleanup",
+      },
+      {
+        key: "dailyReflection:9",
+        type: "dailyReflection",
+        id: 9,
+        reason: "already covered",
+      },
+    ],
+  );
+});
+
+test("automatic pagination checkpoints each canonical page and records coverage", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const output = path.join(dir, "result.json");
+  const calls = [];
+  let recordedCoverage = null;
+  const result = await runAutomaticPagination({
+    options: {
+      adminCheckpoint: checkpoint,
+      adminResume: false,
+      adminOutput: output,
+    },
+    operation: {
+      name: "recommendations.list",
+      path: "/cli/admin/recommendations?sinceRun=true",
+      pagination: {
+        collectionKey: "items",
+        coverageQueue: "recommendations",
+        coverageMode: "since-run",
+        after: null,
+        filters: {},
+      },
+    },
+    runId: 26,
+    fetchPage: async (requestPath) => {
+      calls.push(requestPath);
+      return calls.length === 1
+        ? {
+            ok: true,
+            status: "success",
+            data: {
+              items: [{ contentType: "comment", contentId: 1 }],
+              pagination: {
+                nextCursor: "second",
+                exhausted: false,
+                scannedCount: 500,
+                snapshotMaxId: 900,
+                snapshotTimeStamp: 150,
+                after: 100,
+              },
+            },
+          }
+        : {
+            ok: true,
+            status: "success",
+            data: {
+              items: [{ contentType: "comment", contentId: 2 }],
+              pagination: {
+                nextCursor: null,
+                exhausted: true,
+                scannedCount: 25,
+                snapshotMaxId: 900,
+                snapshotTimeStamp: 150,
+                after: 100,
+              },
+            },
+          };
+    },
+    transformPage: (page) => page,
+    recordCoverage: async (coverage) => {
+      recordedCoverage = coverage;
+    },
+  });
+  assert.deepEqual(
+    result.data.items.map((item) => item.contentId),
+    [1, 2],
+  );
+  assert.equal(result.data.scan.pages, 2);
+  assert.equal(result.data.scan.scannedCount, 525);
+  assert.equal(result.data.scan.outputPath, output);
+  assert.equal(fs.statSync(output).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(fs.readFileSync(checkpoint, "utf8")).exhausted, true);
+  assert.deepEqual(recordedCoverage, {
+    queue: "recommendations",
+    mode: "since-run",
+    after: 100,
+    pages: 2,
+    scannedCount: 525,
+    candidateCount: 2,
+    snapshotMaxId: 900,
+    snapshotTimeStamp: 150,
+    exhausted: true,
+    filters: {},
+  });
+});
+
+test("automatic pagination resumes only after the last confirmed page", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-resume-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const operation = {
+    name: "recommendations.list",
+    path: "/cli/admin/recommendations?sinceRun=true",
+    pagination: {
+      collectionKey: "items",
+      coverageQueue: "recommendations",
+      coverageMode: "since-run",
+      after: null,
+      filters: {},
+    },
+  };
+  let initialCalls = 0;
+  await assert.rejects(
+    () =>
+      runAutomaticPagination({
+        options: {
+          adminCheckpoint: checkpoint,
+          adminResume: false,
+          adminOutput: "",
+        },
+        operation,
+        runId: 31,
+        fetchPage: async () => {
+          initialCalls += 1;
+          if (initialCalls > 1) throw new Error("temporary transport failure");
+          return {
+            ok: true,
+            status: "success",
+            data: {
+              items: [{ contentType: "comment", contentId: 1 }],
+              pagination: {
+                nextCursor: "confirmed-second-page",
+                exhausted: false,
+                scannedCount: 500,
+                snapshotMaxId: 700,
+                snapshotTimeStamp: 250,
+                after: 200,
+              },
+            },
+          };
+        },
+        transformPage: (page) => page,
+      }),
+    /temporary transport failure/,
+  );
+  assert.equal(initialCalls, 2);
+
+  await assert.rejects(
+    () =>
+      runAutomaticPagination({
+        options: {
+          adminCheckpoint: checkpoint,
+          adminResume: true,
+          adminOutput: "",
+        },
+        operation: {
+          ...operation,
+          pagination: {
+            ...operation.pagination,
+            filters: { operatorView: "viewed" },
+          },
+        },
+        runId: 31,
+        fetchPage: async () => {
+          throw new Error("a mismatched checkpoint must fail before fetching");
+        },
+        transformPage: (page) => page,
+      }),
+    /does not belong to this run and exact listing request/,
+  );
+
+  const resumedPaths = [];
+  const resumed = await runAutomaticPagination({
+    options: {
+      adminCheckpoint: checkpoint,
+      adminResume: true,
+      adminOutput: "",
+    },
+    operation,
+    runId: 31,
+    fetchPage: async (requestPath) => {
+      resumedPaths.push(requestPath);
+      return {
+        ok: true,
+        status: "success",
+        data: {
+          items: [{ contentType: "comment", contentId: 2 }],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 20,
+            snapshotMaxId: 700,
+            snapshotTimeStamp: 250,
+            after: 200,
+          },
+        },
+      };
+    },
+    transformPage: (page) => page,
+  });
+  assert.match(resumedPaths[0], /cursor=confirmed-second-page/);
+  assert.deepEqual(
+    resumed.data.items.map((item) => item.contentId),
+    [1, 2],
+  );
+  assert.equal(resumed.data.scan.resumed, true);
+});
+
+test("automatic pagination requires explicit exhaustion and stable snapshot boundaries", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-proof-"));
+  const baseOperation = {
+    name: "recommendations.list",
+    path: "/cli/admin/recommendations?sinceRun=true",
+    pagination: {
+      collectionKey: "items",
+      coverageQueue: "recommendations",
+      coverageMode: "since-run",
+      after: null,
+      filters: {},
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      runAutomaticPagination({
+        options: {
+          adminCheckpoint: path.join(dir, "missing-exhaustion.json"),
+          adminResume: false,
+          adminOutput: "",
+        },
+        operation: baseOperation,
+        runId: 41,
+        fetchPage: async () => ({
+          ok: true,
+          data: { items: [], pagination: { nextCursor: null } },
+        }),
+        transformPage: (page) => page,
+      }),
+    /explicitly confirm whether the canonical snapshot is exhausted/,
+  );
+
+  let pageNumber = 0;
+  await assert.rejects(
+    () =>
+      runAutomaticPagination({
+        options: {
+          adminCheckpoint: path.join(dir, "snapshot-drift.json"),
+          adminResume: false,
+          adminOutput: "",
+        },
+        operation: baseOperation,
+        runId: 42,
+        fetchPage: async () => {
+          pageNumber += 1;
+          return {
+            ok: true,
+            data: {
+              items: [],
+              pagination: {
+                nextCursor: pageNumber === 1 ? "page-2" : null,
+                exhausted: pageNumber > 1,
+                scannedCount: 0,
+                snapshotMaxId: pageNumber === 1 ? 90 : 91,
+                snapshotTimeStamp: 200,
+                after: 100,
+              },
+            },
+          };
+        },
+        transformPage: (page) => page,
+      }),
+    /changed snapshotMaxId while paging one canonical snapshot/,
+  );
+});
+
+test("pagination checkpoints may exceed claim-file limits within a bounded cap", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-large-checkpoint-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const payload = "x".repeat(2 * 1024 * 1024 + 1);
+  fs.writeFileSync(checkpoint, JSON.stringify({ payload }));
+
+  assert.throws(
+    () => readAdminJsonFile(checkpoint, "the ordinary JSON input"),
+    /under 2 MB/,
+  );
+  assert.equal(
+    readAdminJsonFile(checkpoint, "the pagination checkpoint", {
+      maxBytes: 4 * 1024 * 1024,
+    }).payload.length,
+    payload.length,
+  );
+});
+
+test("managed Build review receipts bind comments to one confirmed artifact", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-build-review-"));
+  const receiptPath = path.join(dir, "review.json");
+  const screenshotPath = path.join(dir, "runtime.png");
+  fs.writeFileSync(screenshotPath, "confirmed screenshot evidence");
+  fs.writeFileSync(
+    receiptPath,
+    JSON.stringify({
+      schemaVersion: 2,
+      status: "confirmed",
+      reviewMethod: "runtime",
+      buildId: 884,
+      publishedArtifactVersionId: 4512,
+      versionAfterReview: 4512,
+      versionStable: true,
+      browser: { runtimeReadiness: { ready: true } },
+      screenshot: {
+        path: screenshotPath,
+        bytes: fs.statSync(screenshotPath).size,
+      },
+    }),
+  );
+  assert.equal(parseBuildReviewReceipt(receiptPath).buildId, 884);
+  const commentPath = path.join(dir, "comment.md");
+  fs.writeFileSync(commentPath, "The navigation felt clear and deliberate.");
+  const operation = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "comment",
+      "draft",
+      "build:884",
+      "--file",
+      commentPath,
+      "--review-receipt",
+      receiptPath,
+    ]),
+  );
+  assert.equal(operation.body.reviewedBuildVersionId, 4512);
+  assert.equal(operation.body.buildReviewMethod, "runtime");
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "builds", "review", "884"]))
+      .buildId,
+    884,
   );
 });
 
