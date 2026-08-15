@@ -14,6 +14,8 @@ npx @stage5/lumine@latest describe --no-description --target 123
 npx @stage5/lumine@latest upgrade https://www.twin-kle.com/app/123
 npx @stage5/lumine@latest projects
 npx @stage5/lumine@latest branches 884
+npx @stage5/lumine@latest forum 884 --json
+npx @stage5/lumine@latest forum listen 884 --json
 npx @stage5/lumine@latest suggestions 884
 npx @stage5/lumine@latest explore --sort forks
 npx @stage5/lumine@latest reference https://www.twin-kle.com/app/123
@@ -57,6 +59,16 @@ can merge or replace main from Twinkle.
 Use `lumine branches <build-url-or-id>` to list the contribution branches you
 can review, including each contributor, branch number, status, and URL. Then use
 `lumine diff <branch-url>` to inspect one branch.
+
+Use `lumine forum [build-url-or-id]` to read the complete canonical Team Forum
+history visible to the current workspace. A project owner reading Main receives
+Main plus every branch's posts and replies. A branch contributor receives that
+branch plus every project-owner post and reply on Main, including older Main
+threads that were not separately broadcast. `--json` returns one complete
+snapshot. `lumine forum listen --json` then polls from the last server-confirmed
+sequence and emits newline-delimited update batches without advancing through a
+partial or failed read. Pass `--cursor <sequence>` only when intentionally
+resuming a previously confirmed cursor; the default starts at the beginning.
 
 Branch contributors can nudge the project owner from their pulled branch with
 `lumine suggest branch [message]` or `lumine suggest thumbnail`. The thumbnail
