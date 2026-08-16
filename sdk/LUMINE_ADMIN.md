@@ -89,6 +89,40 @@ Mikey; routine administrator runs still escalate suspected alternate accounts
 and never auto-enforce. `accounts add` and `note set` still accept only an
 existing **unbanned** bucket.
 
+### Audited identity inspection
+
+Account-family evidence is private operator work, never a Zero/Ciel public
+action and never a reason to browse unrelated user activity. Use the dedicated
+lookup instead of direct database queries:
+
+```bash
+lumine admin identity inspect Jay1216 \
+  --reason "Confirm the account family before updating its quota bucket" --json
+lumine admin identity inspect Jay1216 \
+  --reason "Mikey requested DOB and email evidence for this decision" \
+  --include-private-evidence --json
+```
+
+The default result resolves the exact username or user ID from the writer,
+returns the canonical current AI bucket, orders candidate accounts oldest
+first, identifies the oldest account within the strongest canonical family
+boundary (bucket before email; never device alone) when that family fits in the
+bounded evidence set, reports whether each
+account has a DOB, and explains whether the link
+came from explicit bucket membership, a verified-email match, or bounded exact-
+device evidence. It does **not** reveal email addresses, DOB values, device IDs,
+IP evidence, private messages, or unrelated activity. `--include-private-evidence`
+adds DOB values and verified email addresses only; exact device IDs are never
+returned.
+
+Every inspection requires a concrete `--reason`. Before loading the evidence,
+the API commits a private `identity.inspect` audit receipt containing the real
+operator, requested target, reason, and whether private evidence was requested.
+The evidence itself is deliberately not copied into the audit log. Inspection
+is run-independent and has no public actor. Results are **candidate accounts
+for human judgment**, not an automatic ownership finding and never automatic
+grounds for moderation, bans, or bucket changes.
+
 ## Editorial priorities
 
 The CLI enforces none of this — it is the standing instruction for the operator
@@ -236,6 +270,29 @@ Two rules that keep the list worth reading:
   design. Do not delete, hide, argue with, or publicly accuse anyone, and do not
   warn a child that they are in trouble. Report it and let Mikey decide.
 
+Mikey's decision must remain attached after the originating run closes. These
+commands are private, run-independent bookkeeping:
+
+```bash
+lumine admin escalation list --json
+lumine admin escalation list --status all --json
+lumine admin escalation set 123 --status acknowledged \
+  --note "Mikey is reviewing the bot response" --json
+lumine admin escalation set 123 --status resolved \
+  --note "No user fault; this audit concerned Zero's response" --json
+```
+
+`list` defaults to unresolved `open` items. `--status` also accepts
+`acknowledged`, `resolved`, or `all`. The number passed to `set` is the original
+`run.escalation` audit ID returned by the run report/list. Every disposition is
+an immutable private `escalation.status.set` audit event. A revision allocated
+while the original escalation is locked orders concurrent decisions, so the
+last applied decision is the canonical status and annotation even if request
+audit IDs were reserved in another order. `--status open` can deliberately
+reopen an item with an explanatory note. Status filters walk indexed escalation
+history rather than a fixed latest-event window. No active run or public bot
+identity is used.
+
 ## Common JSON types
 
 All `--json` success output is one uncolored JSON value:
@@ -249,7 +306,9 @@ type Success<D> = {
 };
 ```
 
-Failures print one JSON value, write no progress prose, and exit nonzero:
+Failures print one JSON value to stdout and exit nonzero. A failing `--all`
+scan may already have written bounded page progress to stderr; stdout remains
+protocol-clean:
 
 ```ts
 type Failure = {
@@ -430,6 +489,8 @@ lumine admin identity status --json
 lumine admin identity use zero --json
 lumine admin identity use ciel --json
 lumine admin identity use auto --json
+lumine admin identity inspect Jay1216 \
+  --reason "Confirm the account family before a bucket change" --json
 ```
 
 Schemas:
@@ -448,6 +509,51 @@ type IdentityStatus = Success<{
 }>;
 
 type IdentityUse = IdentityStatus;
+
+type IdentityInspection = Success<{
+  inspection: {
+    targetUserId: number;
+    privateEvidenceIncluded: boolean;
+    manualBucket: {
+      id: number;
+      label: string;
+      memberCount: number;
+      isBanned: boolean;
+    } | null;
+    oldestAccount: IdentityCandidate | null;
+    oldestAccountBasis: "manual_bucket" | "verified_email" | "target_only";
+    oldestAccountComplete: boolean;
+    candidateAltCount: number;
+    accounts: IdentityCandidate[];
+    evidenceCoverage: {
+      deviceLookbackDays: number;
+      targetDeviceEvidenceRows: number;
+      targetDeviceIdsConsidered: number;
+      relatedDeviceEvidenceRows: number;
+      candidateLimit: number;
+      truncated: boolean;
+    };
+  };
+}>;
+
+type IdentityCandidate = {
+  userId: number;
+  username: string | null;
+  joinedAt: number | null;
+  isTarget: boolean;
+  isOldestAccount: boolean;
+  hasDateOfBirth: boolean;
+  banned: boolean;
+  deleted: boolean;
+  relationBasis: Array<
+    "target" | "manual_bucket" | "verified_email" | "exact_device"
+  >;
+  sharedDeviceCount: number;
+  privateEvidence?: {
+    dateOfBirth: string | null;
+    verifiedEmails: string[];
+  };
+};
 ```
 
 `identity use` changes only the preference for a future start. It never changes
@@ -465,6 +571,9 @@ lumine admin daily-run escalation add --target chatMessage:3768159 \
 lumine admin daily-run report --json
 lumine admin daily-run complete --json
 lumine admin daily-run fail --reason "operator stopped" --json
+lumine admin escalation list --status all --json
+lumine admin escalation set 123 --status resolved \
+  --note "Final owner decision" --json
 ```
 
 Schemas:
@@ -489,6 +598,10 @@ into one result. Generate it before `complete`, because run-scoped reads require
 the current active run. Queue coverage is written automatically only after an
 `--all` traversal reaches canonical exhaustion; an interrupted scan remains in
 its local checkpoint and cannot be misreported as complete.
+
+Creating an escalation belongs to the active run; acknowledging, annotating,
+resolving, or reopening it does not. Use the run-independent `escalation`
+commands after Mikey responds instead of starting a follow-up delegated run.
 
 `lastRun` makes a lost-response retry of `complete` or `fail` possible after
 the active pointer has been cleared. Other run-scoped commands accept only the
@@ -616,6 +729,12 @@ the same API, run, and exact request. The final result can be copied to
 `--output`, while `--checkpoint` is resumable operational state. Subject
 `--after` is inclusive, and every opaque cursor is bound to its original
 filters.
+
+For `--all --json`, stdout remains exactly one JSON value. Scan-start, first-
+page, every-tenth-page, and exhaustion progress is written to **stderr** with
+only page/scanned/candidate counts and the private checkpoint path. A long
+traversal therefore no longer looks stalled, while piping stdout to `jq` or a
+file remains safe.
 
 Recommendations default to `--since-run`: the server uses the previous
 completed run's start time (or the same bounded seven-day fallback used by the
@@ -1264,6 +1383,22 @@ rows per source — retry with a narrower `--days` window, and do not complete
 the run while either flag remains true. Run it right after the
 brief, and **read every row** — the tool deliberately does no filtering,
 scoring, or keyword matching, because the judgment is the reviewing agent's.
+
+**Privacy boundary:** this is an audit of how Twinkle's bots treated members,
+not a moderation queue for members' private use of the tool. Treat private
+human messages and creative work as confidential context. Read every
+bot-authored row, but inspect adjacent human messages only when the minimum
+necessary context is needed to judge the bot's response; never browse the rest
+of a private conversation out of curiosity. Do not characterize or escalate a
+member's lawful private creative writing — including a teenager's romance
+fiction — merely because its subject is intimate or romantic. An escalation
+must identify what **Zero or Ciel** did (for example, an invented premise,
+pressure, sexualization, abuse, or a failed boundary), include only the narrow
+context needed for Mikey to decide a remedy, and never reuse private material
+for public editorial judgment, Notable User selection, or unrelated identity
+investigation. A separate concrete risk to a member may still be escalated,
+but it does not authorize a broader review of their private activity.
+
 Judge against the same values the editorial priorities encode:
 
 - **premises must be real.** The 08-11 message didn't merely choose a bad
@@ -1347,11 +1482,16 @@ farm-signal sections added the same day):
   ("$X so far today; complete days run ~$Y/day"). Real
   incident: a run report quoted a ~15%-complete day bucket ($5) as the site's
   daily AI spend (complete days were running ~$40-50). Flag accounts that jumped tiers or
-  dominate that report period. May be `{ unavailable: true }` if the cost
+  dominate that report period. Routine `topAccounts` rows identify the account
+  by user ID/username and expose only an `identitySummary` count/manual-bucket
+  flag; raw identity strings and verified email addresses are deliberately
+  omitted. Use reason-required `identity inspect`, with
+  `--include-private-evidence` only when Mikey's concrete decision needs the
+  addresses or DOB values. May be `{ unavailable: true }` if the cost
   report fails; say so rather than guessing. This section is also the run's
   AI-cost exploit watch: while reading it, actively look for the signatures the
   brief actually exposes — one risk group spanning several user IDs, repeated
-  plus-tag or dot-variant email families among top accounts, or heavy spend by
+  account groups in `farmSignals.inboxFamilies`, or heavy spend by
   accounts that `economy.topGainers` or `notableCandidates` independently marks
   as recent signups. Cross-check those signals against the escalation
   categories. Missing join-date or community data is unknown, not evidence that
@@ -1366,9 +1506,11 @@ farm-signal sections added the same day):
   execute them with
   `lumine admin notable add <userId|username> --note "<specific rationale>"`
   (idempotent —
-  an existing member returns `already_done`; requires the `notable:write`
-  scope, audited as `notable.add`, and writes through the management page's
-  own canonical service). Without his approval the run only proposes.
+  an existing member returns `already_done`; run-independent, privately audited
+  as `notable.add`, and writes through the management page's own canonical
+  service). It can therefore record Mikey's approval after the daily run has
+  closed without opening another delegated run. Without his approval the run
+  only proposes.
   **Always pass `--note`** with a concrete one-or-two-sentence record of what
   made them notable — real numbers and specifics from the brief window, not
   "active user". It lands in the management page's reason column, which is
@@ -1428,12 +1570,14 @@ farm-signal sections added the same day):
   Deliberately coarse: it is an onboarding health check, not per-child
   session tracking.
 - `farmSignals` — AI-cost farm signatures derivable with ZERO new data
-  collection: `inboxFamilies` (verified emails from accounts active in the
-  last `inboxFamilyActivityDays`, with only Gmail/googlemail's documented
+  collection: `inboxFamilies` (account groups formed from verified emails of
+  accounts active in the last `inboxFamilyActivityDays`, with only
+  Gmail/googlemail's documented
   plus-tag and dot aliases collapsed, flagging inboxes behind 3+ accounts) and
   `youngAccountAiUsage` (accounts under 30 days old drawing battery in the
-  whole-day `aiUsageDayWindow`). SIGNAL ONLY: siblings legitimately share a
-  parent inbox, so an inbox family is a reason to look, never proof or grounds
+  whole-day `aiUsageDayWindow`). The raw canonical inbox is never returned in
+  the routine brief. SIGNAL ONLY: siblings legitimately share a parent inbox,
+  so an inbox family is a reason to look, never proof or grounds
   for action. Feed real suspicions to the AI-cost escalation category. Shared
   AI device/IP risk evidence is already in `aiSpending.topRiskGroups`; do not
   guess it from inbox similarity.
@@ -1526,7 +1670,28 @@ type InsightsBrief = Success<{
         endDayInProgress: boolean;
         summary: unknown;
         byDay: unknown[];
-        topAccounts: unknown[];
+        topAccounts: Array<{
+          userId: number;
+          username: string;
+          eventCount: number;
+          requestCount: number;
+          estimatedCostUsd: number;
+          inputTokens: number;
+          cachedInputTokens: number;
+          cacheEligibleInputTokens: number;
+          outputTokens: number;
+          totalTokens: number;
+          imageCount: number;
+          audioSeconds: number;
+          energyUnits: number;
+          energyChargedUnits: number;
+          energyOverflowUnits: number;
+          coinCharged: number;
+          identitySummary: {
+            observedIdentityCount: number;
+            manualBucketObserved: boolean;
+          };
+        }>;
         topRiskGroups: unknown[];
       }
     | InsightUnavailable;
@@ -1614,7 +1779,6 @@ type InsightsBrief = Success<{
     | {
         inboxFamilyActivityDays: number;
         inboxFamilies: Array<{
-          inbox: string;
           accounts: Array<{
             userId: number;
             username: string | null;

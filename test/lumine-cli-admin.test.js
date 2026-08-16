@@ -255,6 +255,144 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   );
 });
 
+test("private identity inspection requires a reason and makes raw evidence explicit", () => {
+  const minimized = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "identity",
+      "inspect",
+      "Jay1216",
+      "--reason",
+      "Confirm the account family before updating its quota bucket.",
+    ]),
+  );
+  assert.deepEqual(minimized, {
+    name: "identity.inspect",
+    method: "POST",
+    path: "/cli/admin/identity/inspect",
+    body: {
+      target: "Jay1216",
+      reason: "Confirm the account family before updating its quota bucket.",
+      includePrivateEvidence: false,
+    },
+    mutates: true,
+  });
+  const privateEvidence = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "identity",
+      "inspect",
+      "42",
+      "--reason",
+      "DOB and email evidence are required for this owner decision.",
+      "--include-private-evidence",
+    ]),
+  );
+  assert.equal(privateEvidence.body.includePrivateEvidence, true);
+  assert.equal(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "identity",
+        "inspect",
+        "42",
+        "--reason",
+        "Minimized evidence is sufficient.",
+        "--include-private-evidence=false",
+      ]),
+    ).body.includePrivateEvidence,
+    false,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "identity", "inspect", "Jay1216"]),
+      ),
+    /--reason/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "identity",
+          "inspect",
+          "Jay1216",
+          "--reason",
+          "x".repeat(501),
+        ]),
+      ),
+    /at most 500 characters/,
+  );
+});
+
+test("escalation lifecycle commands map to run-independent private routes", () => {
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "escalation", "list"])),
+    {
+      name: "escalation.list",
+      method: "GET",
+      path: "/cli/admin/escalations?status=open&limit=50",
+      body: undefined,
+      mutates: false,
+    },
+  );
+  assert.match(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "escalation",
+        "list",
+        "--status",
+        "resolved",
+        "--limit",
+        "50",
+      ]),
+    ).path,
+    /status=resolved&limit=50/,
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "escalation",
+        "set",
+        "123",
+        "--status",
+        "resolved",
+        "--note",
+        "No user fault; this audit concerned the bot response.",
+      ]),
+    ),
+    {
+      name: "escalation.set",
+      method: "PUT",
+      path: "/cli/admin/escalations/123",
+      body: {
+        status: "resolved",
+        note: "No user fault; this audit concerned the bot response.",
+      },
+      mutates: true,
+    },
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "escalation",
+          "set",
+          "123",
+          "--status",
+          "closed",
+          "--note",
+          "Done.",
+        ]),
+      ),
+    /--status must be/,
+  );
+});
+
 test("AI bucket account batches are explicit, bounded, and run-independent", async (t) => {
   assert.deepEqual(
     parseAdminOperation(
@@ -445,6 +583,81 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
       ),
     /--note/,
   );
+});
+
+test("identity, escalation, and notable private bookkeeping do not open a daily run", async (t) => {
+  const fixture = await createFixtureServer(t);
+  const commands = [
+    [
+      "admin",
+      "identity",
+      "inspect",
+      "Jay1216",
+      "--reason",
+      "Confirm the account family before updating its quota bucket.",
+      "--include-private-evidence",
+      "--json",
+    ],
+    [
+      "admin",
+      "notable",
+      "add",
+      "Duck61004",
+      "--note",
+      "Approved after the daily report closed.",
+      "--json",
+    ],
+    ["admin", "escalation", "list", "--status", "all", "--json"],
+    [
+      "admin",
+      "escalation",
+      "set",
+      "123",
+      "--status",
+      "resolved",
+      "--note",
+      "No user fault; this audit concerned the bot response.",
+      "--json",
+    ],
+  ];
+  for (const command of commands) {
+    const result = await runCli([...command, ...fixture.cliArgs]);
+    assert.equal(result.code, 0, result.stderr);
+  }
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/daily-runs/status",
+    ),
+    false,
+  );
+  const inspection = fixture.requests.find(
+    (request) => request.url === "/cli/admin/identity/inspect",
+  );
+  assert.deepEqual(inspection?.body, {
+    target: "Jay1216",
+    reason: "Confirm the account family before updating its quota bucket.",
+    includePrivateEvidence: true,
+  });
+  assert.equal(inspection?.runId, null);
+  assert.match(inspection?.requestId, /^cli:[0-9a-f-]{36}$/);
+  const notable = fixture.requests.find(
+    (request) => request.url === "/cli/admin/notable-users",
+  );
+  assert.equal(notable?.runId, null);
+  const escalationList = fixture.requests.find(
+    (request) => request.url === "/cli/admin/escalations?status=all&limit=50",
+  );
+  assert.equal(escalationList?.runId, null);
+  assert.equal(escalationList?.requestId, null);
+  const disposition = fixture.requests.find(
+    (request) => request.url === "/cli/admin/escalations/123",
+  );
+  assert.deepEqual(disposition?.body, {
+    status: "resolved",
+    note: "No user fault; this audit concerned the bot response.",
+  });
+  assert.equal(disposition?.runId, null);
+  assert.match(disposition?.requestId, /^cli:[0-9a-f-]{36}$/);
 });
 
 test("skip and audit commands map to stable API contracts", () => {
@@ -1838,6 +2051,62 @@ test("automatic pagination checkpoints each canonical page and records coverage"
     exhausted: true,
     filters: {},
   });
+});
+
+test("JSON automatic scans report bounded progress without touching result output", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-progress-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const progress = [];
+  let pageNumber = 0;
+  const result = await runAutomaticPagination({
+    options: {
+      adminCheckpoint: checkpoint,
+      adminResume: false,
+      adminOutput: "",
+      json: true,
+    },
+    operation: {
+      name: "subjects.candidates",
+      path: "/cli/admin/subjects",
+      pagination: {
+        collectionKey: "subjects",
+        coverageQueue: "subjects",
+        coverageMode: "all",
+        after: null,
+        filters: {},
+      },
+    },
+    runId: 27,
+    fetchPage: async () => {
+      pageNumber += 1;
+      const exhausted = pageNumber === 12;
+      return {
+        ok: true,
+        status: "success",
+        data: {
+          subjects: [{ id: pageNumber }],
+          pagination: {
+            nextCursor: exhausted ? null : `page-${pageNumber + 1}`,
+            exhausted,
+            scannedCount: 25,
+            snapshotMaxId: 900,
+            snapshotTimeStamp: 150,
+            after: null,
+          },
+        },
+      };
+    },
+    transformPage: (page) => page,
+    reportProgress: (message) => progress.push(message),
+  });
+  assert.equal(result.data.subjects.length, 12);
+  assert.equal(progress.length, 4);
+  assert.match(progress[0], /starting canonical scan/);
+  assert.match(progress[1], /1 page\(s\).*continuing/);
+  assert.match(progress[2], /10 page\(s\).*250 row\(s\) scanned/);
+  assert.match(progress[3], /12 page\(s\).*canonical snapshot exhausted/);
+  assert.equal(progress.some((line) => line.includes("\"ok\"")), false);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("automatic pagination resumes only after the last confirmed page", async () => {

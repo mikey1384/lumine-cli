@@ -214,6 +214,8 @@ events.
 
 ```bash
 lumine admin identity list --json
+lumine admin identity inspect Jay1216 \
+  --reason "Confirm account family before a quota-bucket change" --json
 lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin recommendations list --all --checkpoint recommendations.json --json
 lumine admin recommendations list --after 2026-08-14T00:00:00Z --all --json
@@ -248,6 +250,9 @@ lumine admin daily-run escalation add --target subject:123 \
   --note "Concrete privacy issue requiring owner review" --json
 lumine admin daily-run report --json
 lumine admin daily-run complete --json
+lumine admin escalation list --status all --json
+lumine admin escalation set 123 --status resolved \
+  --note "Final owner decision" --json
 ```
 
 Numeric recommendation targets default to subjects. Use `comment:<id>`,
@@ -280,7 +285,8 @@ resumed with the exact generated key.
 Subject and queue listings use opaque, stable snapshot cursors. `--all`
 follows them automatically, saves a checkpoint after every canonical page,
 and records completed queue coverage in the run audit; `--resume` continues
-the exact same request. Recommendation scans default to the previous completed
+the exact same request. With `--all --json`, bounded progress goes to stderr so
+stdout remains one pipe-safe JSON value. Recommendation scans default to the previous completed
 run's start boundary for at-least-once coverage. Use `--after` for an explicit
 timestamp or `--include-legacy`
 for an intentional all-history scan. Subject `--after` is inclusive and
@@ -292,6 +298,12 @@ quote before submission; `news submit --claim` reads the lease identity from
 the claim file. `daily-run report` summarizes confirmed mutations, completed
 queue coverage, explicitly recorded escalations, and the run brief before the
 run is completed.
+
+Identity inspection, escalation dispositions, AI-bucket maintenance, and
+approved Notable User additions are private operator bookkeeping and do not
+require a delegated daily run. Identity inspection always requires an audited
+`--reason`; raw email/DOB evidence additionally requires
+`--include-private-evidence`. Routine briefs omit raw email identities.
 
 The complete run lifecycle, command contracts, nullable fields, Karma approval
 behavior, pagination semantics, secret-subject behavior, presence isolation,
