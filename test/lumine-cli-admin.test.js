@@ -27,6 +27,7 @@ import {
   createNewsEditorialScaffold,
   readAdminJsonFile,
   validateNewsEditorial,
+  writeAdminJsonFile,
 } from "../lib/admin-news.js";
 import {
   readBatchSkipTargets,
@@ -122,7 +123,10 @@ test("recommendation scans default to the run window and require explicit legacy
     "--resume",
   ]);
   assert.equal(parseRecommendationWindow(bounded).mode, "after");
-  assert.match(parseAdminOperation(bounded).path, /after=2026-08-14T00%3A00%3A00Z/);
+  assert.match(
+    parseAdminOperation(bounded).path,
+    /after=2026-08-14T00%3A00%3A00Z/,
+  );
   assert.equal(bounded.adminResume, true);
 
   const legacy = parseArgs([
@@ -418,8 +422,7 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
     },
   );
   assert.throws(
-    () =>
-      parseAdminOperation(parseArgs(["admin", "ai-bucket", "create"])),
+    () => parseAdminOperation(parseArgs(["admin", "ai-bucket", "create"])),
     /--label/,
   );
   assert.throws(
@@ -1687,18 +1690,9 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
     fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-announcement-")),
     "announcement.md",
   );
-  fs.writeFileSync(
-    announcementPath,
-    "Lumine can now use Grok 4.6.",
-  );
+  fs.writeFileSync(announcementPath, "Lumine can now use Grok 4.6.");
   const announce = parseAdminOperation(
-    parseArgs([
-      "admin",
-      "announcement",
-      "post",
-      "--file",
-      announcementPath,
-    ]),
+    parseArgs(["admin", "announcement", "post", "--file", announcementPath]),
   );
   assert.equal(announce.name, "announcement.post");
   assert.equal(announce.method, "POST");
@@ -1706,10 +1700,7 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   assert.equal(announce.body.content, "Lumine can now use Grok 4.6.");
   assert.equal(announce.mutates, true);
   assert.throws(
-    () =>
-      parseAdminOperation(
-        parseArgs(["admin", "announcement", "post"]),
-      ),
+    () => parseAdminOperation(parseArgs(["admin", "announcement", "post"])),
     /Pass composed text with --file/,
   );
 
@@ -1829,10 +1820,7 @@ test("newspaper claim scaffolds preserve exact quote evidence before submit", ()
   };
   const scaffold = createNewsEditorialScaffold(claim);
   assert.equal(scaffold.lead.eventKey, "subject:1");
-  assert.equal(
-    scaffold.lead.sourceQuote,
-    "An exact passage from the author.",
-  );
+  assert.equal(scaffold.lead.sourceQuote, "An exact passage from the author.");
   assert.equal(scaffold.stories[0].sourceQuote, "");
   scaffold.mastheadHeadline = "A Day of Making";
   scaffold.mastheadDeck = "Twinklers share an idea and a new app.";
@@ -2054,7 +2042,9 @@ test("automatic pagination checkpoints each canonical page and records coverage"
 });
 
 test("JSON automatic scans report bounded progress without touching result output", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-progress-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-progress-"),
+  );
   const checkpoint = path.join(dir, "checkpoint.json");
   const progress = [];
   let pageNumber = 0;
@@ -2105,12 +2095,17 @@ test("JSON automatic scans report bounded progress without touching result outpu
   assert.match(progress[1], /1 page\(s\).*continuing/);
   assert.match(progress[2], /10 page\(s\).*250 row\(s\) scanned/);
   assert.match(progress[3], /12 page\(s\).*canonical snapshot exhausted/);
-  assert.equal(progress.some((line) => line.includes("\"ok\"")), false);
+  assert.equal(
+    progress.some((line) => line.includes('"ok"')),
+    false,
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("automatic pagination resumes only after the last confirmed page", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-resume-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-resume-"),
+  );
   const checkpoint = path.join(dir, "checkpoint.json");
   const operation = {
     name: "recommendations.list",
@@ -2221,7 +2216,9 @@ test("automatic pagination resumes only after the last confirmed page", async ()
 });
 
 test("automatic pagination requires explicit exhaustion and stable snapshot boundaries", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-proof-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-proof-"),
+  );
   const baseOperation = {
     name: "recommendations.list",
     path: "/cli/admin/recommendations?sinceRun=true",
@@ -2288,7 +2285,9 @@ test("automatic pagination requires explicit exhaustion and stable snapshot boun
 });
 
 test("pagination checkpoints may exceed claim-file limits within a bounded cap", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-large-checkpoint-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-large-checkpoint-"),
+  );
   const checkpoint = path.join(dir, "checkpoint.json");
   const payload = "x".repeat(2 * 1024 * 1024 + 1);
   fs.writeFileSync(checkpoint, JSON.stringify({ payload }));
@@ -2303,6 +2302,26 @@ test("pagination checkpoints may exceed claim-file limits within a bounded cap",
     }).payload.length,
     payload.length,
   );
+});
+
+test("admin JSON writes clean exclusive randomized staging files on failure", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-json-write-"));
+  const output = path.join(dir, "occupied");
+  fs.mkdirSync(output);
+
+  assert.throws(() => writeAdminJsonFile(output, { secret: true }));
+  assert.deepEqual(
+    fs.readdirSync(dir).filter((name) => name.startsWith("occupied.tmp-")),
+    [],
+  );
+
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../lib/admin-news.js"),
+    "utf8",
+  );
+  assert.match(source, /randomUUID\(\)/);
+  assert.match(source, /flag: "wx"/);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("managed Build review receipts bind comments to one confirmed artifact", () => {
