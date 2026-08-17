@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import {
   adminCommand,
   assertComposedCommentDraftResult,
+  assertAdminTodoHandoffResult,
   assertRecommendationWindowResult,
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
@@ -397,6 +398,121 @@ test("escalation lifecycle commands map to run-independent private routes", () =
   );
 });
 
+test("todo lifecycle carries experiments between runs without requiring a public bot", () => {
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "todo", "list"])),
+    {
+      name: "todo.list",
+      method: "GET",
+      path: "/cli/admin/todos?status=pending&limit=50",
+      body: undefined,
+      mutates: false,
+    },
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "todo",
+        "add",
+        "--kind",
+        "experiment",
+        "--status",
+        "in_progress",
+        "--title",
+        "Validate Zero/Ciel cost optimization",
+        "--note",
+        "Replay baseline and optimized replies; complete only after response-quality parity.",
+      ]),
+    ),
+    {
+      name: "todo.add",
+      method: "POST",
+      path: "/cli/admin/todos",
+      body: {
+        kind: "experiment",
+        title: "Validate Zero/Ciel cost optimization",
+        details:
+          "Replay baseline and optimized replies; complete only after response-quality parity.",
+        status: "in_progress",
+      },
+      mutates: true,
+    },
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "todo",
+        "update",
+        "12",
+        "--status",
+        "blocked",
+        "--note",
+        "Waiting for a full completed UTC cost bucket and parity replay.",
+      ]),
+    ),
+    {
+      name: "todo.update",
+      method: "PUT",
+      path: "/cli/admin/todos/12",
+      body: {
+        status: "blocked",
+        note: "Waiting for a full completed UTC cost bucket and parity replay.",
+      },
+      mutates: true,
+    },
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "todo",
+          "add",
+          "--title",
+          "Missing handoff",
+        ]),
+      ),
+    /--note/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "todo",
+          "update",
+          "12",
+          "--status",
+          "done",
+          "--note",
+          "Finished.",
+        ]),
+      ),
+    /--status must be/,
+  );
+
+  assert.deepEqual(
+    assertAdminTodoHandoffResult({
+      data: {
+        run: { id: 31 },
+        carryoverTodos: {
+          items: [{ id: 12, status: "in_progress" }],
+          count: 1,
+          surfacedForRunId: 31,
+          newlySurfacedCount: 1,
+        },
+      },
+    }).items,
+    [{ id: 12, status: "in_progress" }],
+  );
+  assert.throws(
+    () => assertAdminTodoHandoffResult({ data: { run: { id: 31 } } }),
+    /did not confirm the canonical carry-over todo handoff/,
+  );
+});
+
 test("AI bucket account batches are explicit, bounded, and run-independent", async (t) => {
   assert.deepEqual(
     parseAdminOperation(
@@ -588,7 +704,7 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
   );
 });
 
-test("identity, escalation, and notable private bookkeeping do not open a daily run", async (t) => {
+test("identity, escalation, notable, and todo bookkeeping do not open a daily run", async (t) => {
   const fixture = await createFixtureServer(t);
   const commands = [
     [
@@ -620,6 +736,32 @@ test("identity, escalation, and notable private bookkeeping do not open a daily 
       "resolved",
       "--note",
       "No user fault; this audit concerned the bot response.",
+      "--json",
+    ],
+    ["admin", "todo", "list", "--json"],
+    [
+      "admin",
+      "todo",
+      "add",
+      "--kind",
+      "experiment",
+      "--status",
+      "in_progress",
+      "--title",
+      "Validate Zero/Ciel cost optimization",
+      "--note",
+      "Complete only after response-quality parity is demonstrated.",
+      "--json",
+    ],
+    [
+      "admin",
+      "todo",
+      "update",
+      "12",
+      "--status",
+      "blocked",
+      "--note",
+      "Waiting for tomorrow's complete cost bucket.",
       "--json",
     ],
   ];
@@ -661,6 +803,21 @@ test("identity, escalation, and notable private bookkeeping do not open a daily 
   });
   assert.equal(disposition?.runId, null);
   assert.match(disposition?.requestId, /^cli:[0-9a-f-]{36}$/);
+  const todoList = fixture.requests.find(
+    (request) => request.url === "/cli/admin/todos?status=pending&limit=50",
+  );
+  assert.equal(todoList?.runId, null);
+  assert.equal(todoList?.requestId, null);
+  const todoCreate = fixture.requests.find(
+    (request) => request.url === "/cli/admin/todos",
+  );
+  assert.equal(todoCreate?.runId, null);
+  assert.match(todoCreate?.requestId, /^cli:[0-9a-f-]{36}$/);
+  const todoUpdate = fixture.requests.find(
+    (request) => request.url === "/cli/admin/todos/12",
+  );
+  assert.equal(todoUpdate?.runId, null);
+  assert.match(todoUpdate?.requestId, /^cli:[0-9a-f-]{36}$/);
 });
 
 test("skip and audit commands map to stable API contracts", () => {

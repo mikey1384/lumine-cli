@@ -217,6 +217,12 @@ lumine admin identity list --json
 lumine admin identity inspect Jay1216 \
   --reason "Confirm account family before a quota-bucket change" --json
 lumine admin daily-run start --identity auto --comment-mode off --json
+lumine admin todo list --json
+lumine admin todo add --kind experiment --status in_progress \
+  --title "Validate Zero/Ciel cost optimization" \
+  --note "Complete only after old-vs-new response-quality parity." --json
+lumine admin todo update 12 --status blocked \
+  --note "Waiting for a complete cost bucket and parity replay." --json
 lumine admin recommendations list --all --checkpoint recommendations.json --json
 lumine admin recommendations list --after 2026-08-14T00:00:00Z --all --json
 lumine admin recommendations list --include-legacy --all --json
@@ -295,14 +301,19 @@ cursors are bound to the original date and effort filters.
 `news claim` can write both the canonical leased digest and an editable
 editorial scaffold. `news validate` is local and checks every citation and
 quote before submission; `news submit --claim` reads the lease identity from
-the claim file. `daily-run report` summarizes confirmed mutations, completed
-queue coverage, explicitly recorded escalations, and the run brief before the
-run is completed.
+the claim file. Every `daily-run start` response includes writer-confirmed
+unfinished private todos, with once-per-run surfacing telemetry, so an agent
+can resume earlier work without relying on conversation memory. Record progress
+with `todo update`; completing a run does not complete its todos. Experiments
+must meet their stated acceptance criteria—lower AI cost with weaker user
+responses is not a successful optimization. `daily-run report` summarizes
+confirmed mutations, completed queue coverage, explicitly recorded escalations,
+unfinished todos, and the run brief before the run is completed.
 
 Identity inspection, escalation dispositions, AI-bucket maintenance, and
-approved Notable User additions are private operator bookkeeping and do not
-require a delegated daily run. Identity inspection always requires an audited
-`--reason`; raw email/DOB evidence additionally requires
+approved Notable User additions and todos are private operator bookkeeping and
+do not require a delegated daily run. Identity inspection always requires an
+audited `--reason`; raw email/DOB evidence additionally requires
 `--include-private-evidence`. Routine briefs omit raw email identities.
 
 The complete run lifecycle, command contracts, nullable fields, Karma approval

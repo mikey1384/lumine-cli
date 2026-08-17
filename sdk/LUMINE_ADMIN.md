@@ -579,7 +579,10 @@ lumine admin escalation set 123 --status resolved \
 Schemas:
 
 ```ts
-type DailyRunStart = Success<{ run: DailyRun }>;
+type DailyRunStart = Success<{
+  run: DailyRun;
+  carryoverTodos: CarryoverTodos;
+}>;
 type DailyRunStatus = Success<{
   run: DailyRun | null;
   lastRun: DailyRun | null;
@@ -631,6 +634,86 @@ for a separate explicit run. `--idempotency-key` may be supplied to any
 mutation when a caller needs the same retry identity across processes. The CLI
 generates a fresh key for every mutation invocation; if a mutation fails, its
 JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
+
+## Private carry-over todos
+
+```bash
+lumine admin todo list --json
+lumine admin todo list --status all --json
+lumine admin todo add --kind experiment --status in_progress \
+  --title "Validate Zero/Ciel cost optimization" \
+  --note "Replay baseline and optimized conversations. Complete only after response-quality parity; lower cost with a weaker reply fails." --json
+lumine admin todo update 12 --status blocked \
+  --note "Implementation is ready; waiting for a complete cost bucket and old-vs-new quality replay." --json
+lumine admin todo update 12 --status completed \
+  --note "Blind parity comparison passed every required dimension; measured cost and latency evidence attached in this note." --json
+```
+
+Todos are private operator work, not Zero/Ciel public actions. They persist
+independently of daily runs and are therefore available before a run starts and
+after it closes. Creating or updating one uses the run-independent transactional
+audit path: canonical todo state and its private `todo.create` / `todo.update`
+audit response commit together, and no public bot, public mutation count, or
+rotation signal is involved.
+
+Every successful `daily-run start` response automatically includes all
+unfinished items under `data.carryoverTodos`. The same run ID increments an
+item's surfacing telemetry at most once, even when start is retried. This is the
+canonical handoff: read it before discretionary new work, resume what can safely
+progress after the run's mandatory newspaper/brief/conduct duties, and record a
+concrete progress note before the run closes. The daily-run report includes the
+still-unfinished set again. Completing a daily run never silently completes its
+todos. A CLI carrying this contract rejects a start response that does not echo
+the canonical handoff, so a newer CLI against an API deployed before the todo
+migration cannot quietly treat unsupported telemetry as an empty list.
+
+`kind` is `task` or `experiment`. New items may start `open`, `in_progress`, or
+`blocked`; updates may also use `completed` or `cancelled`. A progress note is
+required for every update. For experiments, put the acceptance criteria in the
+initial details and use evidence—not implementation status—as the completion
+boundary. In particular, an AI-cost experiment is not complete until old-vs-new
+response-quality parity is demonstrated; a cheaper but weaker user response is
+a failed experiment. Up to 50 unfinished items may be carried so the automatic
+start payload remains complete and bounded.
+
+```ts
+type AdminTodo = {
+  id: number;
+  kind: "task" | "experiment";
+  title: string;
+  details: string;
+  status: "open" | "in_progress" | "blocked" | "completed" | "cancelled";
+  revision: number;
+  createdRunId: number | null;
+  lastWorkedRunId: number | null;
+  lastSurfacedRunId: number | null;
+  surfaceCount: number;
+  lastProgressNote: string | null;
+  createdAt: number;
+  updatedAt: number;
+  lastSurfacedAt: number | null;
+  completedAt: number | null;
+  cancelledAt: number | null;
+};
+
+type AdminTodoList = Success<{
+  todos: AdminTodo[];
+  statusFilter:
+    | "pending"
+    | "all"
+    | AdminTodo["status"];
+  truncated: boolean;
+}>;
+
+type AdminTodoMutation = Success<{ todo: AdminTodo }>;
+
+type CarryoverTodos = {
+  items: AdminTodo[];
+  count: number;
+  surfacedForRunId: number;
+  newlySurfacedCount: number;
+};
+```
 
 ## Canonical lists and inspection
 
@@ -2176,9 +2259,12 @@ Public content actions use ordinary Twinkle fan-out:
 - effort/creator changes emit `edit_content`;
 - Featured changes emit a canonical `home_outdated` refresh.
 
-Apply `twinkle-api/scripts/migrations/add-lumine-admin-delegation.sql` and
-then `add-lumine-admin-comment-targets.sql` before deploying the API. They add
-only focused daily-run, rotation, draft, and audit tables/columns and indexes;
+Apply `twinkle-api/scripts/migrations/add-lumine-admin-delegation.sql`, then
+`add-lumine-admin-comment-targets.sql`, and apply
+`add-lumine-admin-todos.sql` before deploying an API that exposes carry-over
+todos. They add
+only focused daily-run, rotation, draft, audit, and private-todo tables/columns
+and indexes;
 there are no runtime schema checks. The comment-targets migration backfills
 existing subject drafts into the generalized target columns. The local CLI changes
 are not available to users until a separately authorized npm publication.
