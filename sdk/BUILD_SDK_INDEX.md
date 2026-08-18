@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.33.0
-Updated: 2026-08-15
-Generated: 2026-08-15T03:00:24.685Z
+Version: 1.35.0
+Updated: 2026-08-18
+Generated: 2026-08-18T06:06:02.345Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -112,6 +112,16 @@ files:read, user:read, users:read, dailyReflections:read, content:read, content:
   - Only recognized Twinkle content URLs are accepted. The parent preserves its current signed-in origin when opening the content.
   - Use navigate() for routes inside the current Build and openContent() for Twinkle subjects, comments, apps, profiles, and other content pages.
   - Example: await Twinkle.app.openContent('https://www.twin-kle.com/subjects/432');
+
+### Twinkle.appTools
+- async register({ handlers }) | scopes: none
+  - Returns: { success, session } when opened by lumine app-mcp
+  - Register the live iframe handlers for the published app's static MCP tool manifest.
+  - Tool discovery comes only from /app-tools.json in the pinned published artifact; runtime code cannot add or rename tools.
+  - Every declared tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers and resolves with active:false without starting a relay.
+  - Handlers run serially inside the visible app iframe and should return the confirmed post-action state.
+  - Do not synthesize server-owned state; await Twinkle SDK mutations before returning.
+  - Example: await Twinkle.appTools.register({ handlers: { get_state: () => ({ view, data }), open_view: ({ view }) => navigateTo(view) } });
 
 ### Twinkle.preview
 - getLayout() | scopes: none
@@ -302,6 +312,16 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Example: await Twinkle.files.delete(assetId);
 
 ### Twinkle.ai
+- async getUsagePolicy() | scopes: none
+  - Returns: BuildAiUsagePolicy | null
+  - Load the signed-in viewer's canonical current AI Energy battery policy.
+  - Signed-in viewers only.
+  - Returns canonical server state and does not consume AI Energy.
+  - Use energyPercent for a percentage meter and energySegments plus energySegmentsRemaining for segmented battery UI.
+  - The Build-safe response includes battery/day/usage fields only; account identity, email, risk, and recharge-eligibility metadata are not exposed to the app iframe.
+  - Successful AI calls return a newer aiUsagePolicy snapshot. Energy-related SDK errors expose the confirmed snapshot as error.aiUsagePolicy. Replace displayed state only from those confirmed values; do not decrement or synthesize battery state locally.
+  - Example: const policy = await Twinkle.ai.getUsagePolicy();
+renderBattery(policy?.energyPercent, policy?.energySegmentsRemaining);
 - async listPrompts() | scopes: none
   - Returns: Array<{ id, title, description }>
   - Legacy helper. Twinkle.ai.chat does not require promptId for default runtime text generation.
@@ -321,20 +341,25 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Use this for in-app AI replies instead of creating or fetching app-local endpoints such as /api/chat.
   - Example: const chatHistory = conversation.slice(-12).map((entry) => ({ role: entry.role === 'assistant' ? 'assistant' : 'user', content: entry.text }));
 const result = await Twinkle.ai.chat({ message, history: chatHistory, systemPrompt: 'You are a cheerful pirate helper who answers in one sentence.', onText: (text, meta) => renderReply(text), onStatus: (status) => setThinking(status === 'thinking') });
-- async generateObject({ prompt, expectedStructure, thinkingMode, mode, instructions, systemPrompt, webSearch } = {}) | scopes: none
-  - Returns: { object, result, model, provider, thinkingMode, requestedThinkingMode, webSearch, aiUsagePolicy }
-  - Generate a validated structured JSON object for app decisions, routing, grading, and game-state logic, optionally using live web search.
+- async generateObject({ prompt, expectedStructure, thinkingMode, mode, model, instructions, systemPrompt, webSearch, requestId, onText, onStatus } = {}) | scopes: none
+  - Returns: { object, result, model, provider, thinkingMode, requestedThinkingMode, requestedModel, webSearch, aiUsagePolicy }
+  - Generate a validated structured JSON object for app decisions, routing, grading, and game-state logic, with optional live output/status callbacks and web search.
   - Signed-in viewers only.
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
+  - Omit model to use the normal Lite/Medium/High routing. model accepts only claude-opus-5 or claude-fable-5, and either explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back.
   - thinkingMode low uses GPT-5.6 Luna and consumes the viewer's AI Energy from confirmed provider usage; its smaller model is usually cheaper than Medium or High.
   - thinkingMode medium uses Grok 4.6 with medium reasoning and consumes normal AI Energy.
   - thinkingMode high uses GPT-5.6 Sol with high reasoning and consumes high AI Energy.
-  - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
+  - claude-opus-5 uses Anthropic adaptive High thinking. claude-fable-5 uses Anthropic xhigh thinking and normally consumes more AI Energy for comparable token use. Both debit confirmed provider usage at the High tier.
+  - Pass onStatus and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
+  - onText receives accumulated structured-output text plus { done, delta, requestId, status }. Partial output is intentionally incomplete and may include provider formatting; parse only when done is true, when the callback receives the canonical object serialized as JSON, and use the resolved object as the source of truth.
+  - Streaming exposes app-visible structured output and high-level phases, not private model chain-of-thought. Put a user-facing field such as producerNotes in expectedStructure when the app should display model-authored commentary from the same generation.
+  - When AI Energy is empty, every automatic or named model choice rejects before new provider work; there is no free fallback mode.
   - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
-  - The SDK validates shape and retries malformed JSON, but app code should still validate business-specific enum values.
-  - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'medium', prompt: 'Classify the player intent from: ' + playerText, expectedStructure: { action: 'string', targetCharacter: 'string', confidence: 0, shouldAskFollowUp: false } });
+  - The server validates the final shape; automatic OpenAI/xAI routes can retry malformed output, while explicit Anthropic routes use native JSON Schema output. App code should still validate business-specific enum values.
+  - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'high', model: 'claude-opus-5', prompt: 'Plan the next section from: ' + currentState, expectedStructure: { producerNotes: 'string', action: 'string', confidence: 0 }, onStatus: (phase) => showPhase(phase), onText: (partialJson, meta) => showStructuredProgress(partialJson, meta) });
 - onChatStatus(listener) | scopes: none
   - Returns: unsubscribe function
   - Listen to shared runtime AI chat stream events.

@@ -113,6 +113,21 @@ Reference folders are marked `readOnly` in `.twinkle/lumine-project.json`.
 Running `lumine save` from a reference folder is blocked; fork the source Build
 first if you want an editable workspace.
 
+## Using a published app over MCP
+
+`lumine app-mcp <published-app-url-or-id>` turns an opted-in published Build
+app into a standard stdio MCP server. Lumine pins the current published
+artifact, reads its `/app-tools.json` manifest, and opens a dedicated signed-in
+app tab. Tool calls run serially in that visible iframe through handlers the app
+registered with `Twinkle.appTools.register({ handlers })`, so the agent and
+viewer operate the same live UI and state. Keep that tab open while the MCP
+client is connected. Pass `--no-open` only when you will open the URL printed on
+stderr yourself.
+
+Discovery is static and fail-closed: runtime code cannot add tools that were
+not declared in the pinned manifest, and a session refuses to connect if any
+declared handler is missing.
+
 ## Inspecting Build SDK data
 
 `lumine sdk call <namespace.method> '<jsonArgs>'` calls a build's data SDK
