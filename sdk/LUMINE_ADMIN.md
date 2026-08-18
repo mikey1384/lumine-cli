@@ -73,10 +73,12 @@ members. The response returns the canonical bucket, including its id for
 later `get` / `accounts add` / `note set` calls.
 
 `accounts add` accepts 1-500 unique positive user IDs, preflights the complete
-batch before writing, adds the canonical user and durable verified-email rules,
+batch before writing, adds one exact canonical user rule per requested account,
 re-attributes current-day AI usage, and returns the canonical bucket members.
-It is idempotent to retry. The API records the real operator in the private
-Lumine audit log; no public bot identity is involved.
+It never infers or adds email aliases: shared verified addresses can belong to
+unrelated accounts, so email rules require a separate explicit operator action.
+The command is idempotent to retry. The API records the real operator in the
+private Lumine audit log; no public bot identity is involved.
 
 `note set` records up to 255 characters of private operational context on the
 canonical bucket. Use it to distinguish quota bookkeeping from moderation;
