@@ -108,7 +108,47 @@ test("app-mcp serves pinned tools over clean stdio and closes its session", asyn
   );
 });
 
-async function createFixtureServer(t) {
+test("app-mcp closes a malformed session before failing", async (t) => {
+  const fixture = await createFixtureServer(t, { tools: [] });
+  const child = spawn(
+    process.execPath,
+    [
+      cliPath,
+      "app-mcp",
+      "73",
+      "--api-url",
+      fixture.apiUrl,
+      "--auth-file",
+      fixture.authFile,
+      "--no-open",
+      "--no-update-check",
+    ],
+    {
+      cwd: path.resolve(__dirname, ".."),
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  const [code] = await once(child, "close");
+  assert.notEqual(code, 0);
+  assert.match(stderr, /Twinkle did not return an app MCP session/);
+  assert.equal(
+    fixture.requests.some(
+      (request) =>
+        request.method === "DELETE" &&
+        request.url === `/cli/build/73/app-mcp/sessions/${sessionId}`,
+    ),
+    true,
+  );
+});
+
+async function createFixtureServer(t, { tools = null } = {}) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-app-mcp-"));
   const authFile = path.join(tmpDir, "auth.json");
   const requests = [];
@@ -144,16 +184,17 @@ async function createFixtureServer(t) {
               version: 1,
               name: "State Viewer",
               description: "Inspect the app",
-              tools: [
-                {
-                  name: "get_state",
-                  description: "Read the visible state",
-                  inputSchema: {
-                    type: "object",
-                    additionalProperties: false,
+              tools:
+                tools || [
+                  {
+                    name: "get_state",
+                    description: "Read the visible state",
+                    inputSchema: {
+                      type: "object",
+                      additionalProperties: false,
+                    },
                   },
-                },
-              ],
+                ],
             },
           },
         }),
