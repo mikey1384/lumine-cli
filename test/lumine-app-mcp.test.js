@@ -12,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
 const sessionId = "11111111-1111-4111-8111-111111111111";
 const callId = "22222222-2222-4222-8222-222222222222";
+const secondCallId = "33333333-3333-4333-8333-333333333333";
 
 test("app-mcp serves pinned tools over clean stdio and closes its session", async (t) => {
   const fixture = await createFixtureServer(t);
@@ -108,6 +109,62 @@ test("app-mcp serves pinned tools over clean stdio and closes its session", asyn
   );
 });
 
+test("app-mcp preserves burst tool order and accepts large pipe frames", async (t) => {
+  const fixture = await createFixtureServer(t, { probeOrdering: true });
+  const child = spawn(
+    process.execPath,
+    [
+      cliPath,
+      "app-mcp",
+      "73",
+      "--api-url",
+      fixture.apiUrl,
+      "--auth-file",
+      fixture.authFile,
+      "--no-open",
+      "--no-update-check",
+    ],
+    {
+      cwd: path.resolve(__dirname, ".."),
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+
+  const largeValue = "step-data:" + "x".repeat(32 * 1024);
+  const messages = [
+    {
+      jsonrpc: "2.0",
+      id: 10,
+      method: "tools/call",
+      params: { name: "get_state", arguments: { sequence: 1, largeValue } },
+    },
+    {
+      jsonrpc: "2.0",
+      id: 11,
+      method: "tools/call",
+      params: { name: "get_state", arguments: { sequence: 2 } },
+    },
+  ];
+  child.stdin.end(messages.map((message) => JSON.stringify(message)).join("\n") + "\n");
+
+  const [code] = await once(child, "close");
+  assert.equal(code, 0, stderr);
+  const responses = stdout.trim().split("\n").filter(Boolean).map(JSON.parse);
+  const byId = new Map(responses.map((response) => [response.id, response]));
+  assert.equal(byId.get(10).result.structuredContent.sequence, 1);
+  assert.equal(byId.get(10).result.structuredContent.largeValueLength, largeValue.length);
+  assert.equal(byId.get(11).result.structuredContent.sequence, 2);
+  assert.equal(fixture.probe.secondCreatedBeforeFirstCompleted, false);
+  assert.deepEqual(fixture.probe.createdSequences, [1, 2]);
+});
+
 test("app-mcp closes a malformed session before failing", async (t) => {
   const fixture = await createFixtureServer(t, { tools: [] });
   const child = spawn(
@@ -148,10 +205,19 @@ test("app-mcp closes a malformed session before failing", async (t) => {
   );
 });
 
-async function createFixtureServer(t, { tools = null } = {}) {
+async function createFixtureServer(
+  t,
+  { tools = null, probeOrdering = false } = {},
+) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-app-mcp-"));
   const authFile = path.join(tmpDir, "auth.json");
   const requests = [];
+  const calls = new Map();
+  const probe = {
+    firstCallCompleted: false,
+    secondCreatedBeforeFirstCompleted: false,
+    createdSequences: [],
+  };
   const server = http.createServer(async (req, res) => {
     const body = await readRequestBody(req);
     requests.push({ method: req.method, url: req.url, body });
@@ -205,21 +271,41 @@ async function createFixtureServer(t, { tools = null } = {}) {
       req.method === "POST" &&
       req.url === `/cli/build/73/app-mcp/sessions/${sessionId}/calls`
     ) {
+      const sequence = calls.size + 1;
+      const nextCallId = sequence === 1 ? callId : secondCallId;
+      calls.set(nextCallId, { sequence, arguments: body?.arguments || {} });
+      probe.createdSequences.push(Number(body?.arguments?.sequence || sequence));
+      if (sequence === 2 && !probe.firstCallCompleted) {
+        probe.secondCreatedBeforeFirstCompleted = true;
+      }
       res.statusCode = 202;
-      res.end(JSON.stringify({ call: { id: callId, status: "pending" } }));
+      res.end(JSON.stringify({ call: { id: nextCallId, status: "pending" } }));
       return;
     }
-    if (
-      req.method === "POST" &&
-      req.url ===
-        `/cli/build/73/app-mcp/sessions/${sessionId}/calls/${callId}/status`
-    ) {
+    const statusPrefix = `/cli/build/73/app-mcp/sessions/${sessionId}/calls/`;
+    if (req.method === "POST" && req.url?.startsWith(statusPrefix) && req.url.endsWith("/status")) {
+      const statusCallId = req.url.slice(statusPrefix.length, -"/status".length);
+      const call = calls.get(statusCallId);
+      if (!call) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: "call not found" }));
+        return;
+      }
+      if (probeOrdering && call.sequence === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        probe.firstCallCompleted = true;
+      }
       res.end(
         JSON.stringify({
           call: {
-            id: callId,
+            id: statusCallId,
             status: "completed",
-            result: [{ view: "home", ready: true }],
+            result: probeOrdering
+              ? {
+                  sequence: call.sequence,
+                  largeValueLength: String(call.arguments.largeValue || "").length,
+                }
+              : [{ view: "home", ready: true }],
           },
         }),
       );
@@ -248,7 +334,7 @@ async function createFixtureServer(t, { tools = null } = {}) {
     JSON.stringify({ token: "test-token", apiUrl }),
     "utf8",
   );
-  return { apiUrl, authFile, requests };
+  return { apiUrl, authFile, requests, probe };
 }
 
 async function readRequestBody(req) {
