@@ -1469,20 +1469,58 @@ the run while either flag remains true. Run it right after the
 brief, and **read every row** — the tool deliberately does no filtering,
 scoring, or keyword matching, because the judgment is the reviewing agent's.
 
-**Privacy boundary:** this is an audit of how Twinkle's bots treated members,
-not a moderation queue for members' private use of the tool. Treat private
-human messages and creative work as confidential context. Read every
-bot-authored row, but inspect adjacent human messages only when the minimum
-necessary context is needed to judge the bot's response; never browse the rest
-of a private conversation out of curiosity. Do not characterize or escalate a
-member's lawful private creative writing — including a teenager's romance
-fiction — merely because its subject is intimate or romantic. An escalation
-must identify what **Zero or Ciel** did (for example, an invented premise,
-pressure, sexualization, abuse, or a failed boundary), include only the narrow
-context needed for Mikey to decide a remedy, and never reuse private material
-for public editorial judgment, Notable User selection, or unrelated identity
-investigation. A separate concrete risk to a member may still be escalated,
-but it does not authorize a broader review of their private activity.
+**Purpose and privacy boundary:** this audits how Twinkle's bots treated
+members; it is not thought-policing or a moderation queue for members' private
+use of the tool. The question is whether Zero or Ciel inflicted, encouraged,
+or operationally facilitated potential harm — not whether a member's private
+idea is taboo, upsetting, sexual, violent, or angry. Treat private human
+messages and creative work as confidential context. Read every bot-authored
+row, but inspect adjacent human messages only when the minimum necessary
+context is needed to judge what the bot did; never browse the rest of a private
+conversation out of curiosity. Never reuse private material for public
+editorial judgment, Notable User selection, or unrelated identity
+investigation.
+
+**Private creative-expression rule (Mikey's direction, 2026-08-19):** Zero and
+Ciel are tools members may use to express lawful private fiction already in
+their imagination. A high-school member writing romantic or sexual fiction
+about fictional peers around their own age is not an escalation merely because
+the prose is explicit or set at a school. Sexual fantasy is not inherently a
+dangerous thought, just as violent or angry fantasy alone is not evidence of
+real-world intent. If the member requested the fictional content and the bot
+helped put it into words, that assistance is not by itself the bot encouraging
+the member to think or act that way. Do not characterize, flag, notify anyone
+about, or intervene in that private creative endeavor absent a separate
+concrete harm signal.
+
+**Real-world-harm boundary:** actionable assistance for poisoning someone,
+covertly hurting or tormenting a real target, evading detection, grooming,
+abuse, or another actual crime is categorically different from fantasy. A bot
+that supplies such operational instructions commits an urgent conduct
+violation. A bot that refuses and redirects safely has behaved correctly; the
+member's request becomes a separate private safety escalation only when the
+available context shows a concrete, credible bridge to real-world harm — such
+as an identifiable target, expressed intent, means, planning, or concealment —
+not merely because a disturbing thought or fictional premise exists.
+
+**Position-of-trust safeguarding rule (Mikey's direction, 2026-08-19):** an
+adult teacher, or another adult in a comparable position of authority and
+direct access to children, creating or requesting sexual content about an
+underage child is always a private safeguarding escalation, even when framed
+as fiction. The mandatory flag follows from the adult's power, duty of care,
+and access to students — not from treating sex as uniquely taboo. Preserve only
+the minimum necessary evidence and report it privately to Mikey so he can tell
+Andrew and decide the response. A flag is not a public accusation or automatic
+finding of guilt; do not contact the teacher, students, or families without
+Mikey's direction. An identifiable real student, grooming, planning,
+concealment, or actionable abuse makes the escalation urgent.
+
+Every escalation must state which rule was triggered and identify either what
+**Zero or Ciel** did (for example, an invented premise, pressure,
+sexualization of the member, actionable facilitation, abuse, or a failed
+boundary) or the concrete safeguarding signal. Include only the narrow context
+needed for Mikey to decide a remedy. A separate concrete risk may justify this
+minimal review, but it never authorizes browsing unrelated private activity.
 
 Judge against the same values the editorial priorities encode:
 
@@ -1510,11 +1548,12 @@ Judge against the same values the editorial priorities encode:
   enforce. Even a genuinely excessive routine warrants a question ("is this
   still helping you, or would a break feel better?"), never a decree.
 
-Anything over the line goes on the escalation list with the message text and
-the child's username — top of the list, alongside child-safety. Do not
-apologize as the bot, edit, or otherwise clean up without Mikey's direction;
-he decides the remedy. When he explicitly directs a private correction, use
-the composed-only existing-DM path (no model and no AI Energy):
+A bot-conduct violation or mandatory safeguarding signal goes on the
+escalation list with the smallest excerpt and identity needed to evaluate it —
+top of the list when urgent. Do not apologize as the bot, edit, contact the
+member, or otherwise clean up without Mikey's direction; he decides the
+remedy. When he explicitly directs a private correction, use the composed-only
+existing-DM path (no model and no AI Energy):
 
 ```bash
 lumine admin chat send <userId|username> --file message.md --json
