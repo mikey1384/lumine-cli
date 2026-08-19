@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.35.0
-Updated: 2026-08-18
-Generated: 2026-08-18T06:06:02.345Z
+Version: 1.36.0
+Updated: 2026-08-19
+Generated: 2026-08-19T05:45:14.858Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -645,6 +645,12 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Fetch the next sharedDb page.
   - Convenience alias for getEntries used by Load more buttons.
   - Pass the previous response cursor to fetch the next page using the same order and page size.
+- async getEntriesByIds(entryIds) | scopes: sharedDb:read
+  - Returns: { entries: [{ id, topicId, userId, username, profilePicUrl, data, createdAt, updatedAt }] }
+  - Read up to 100 shared rows by their app-scoped entry ids.
+  - Accepts 1-100 unique positive entry ids and returns the rows that still exist in the same order as requested.
+  - Ids from another Build app are never returned.
+  - Use this for bounded manifest references; use getEntries for browseable topic feeds.
 - async addEntry(topicName, data, { notify } = {}) | scopes: sharedDb:write
   - Returns: { entry: { id, topicId, userId, username, profilePicUrl, data, createdAt, updatedAt } }
   - Append a shared JSON row, optionally creating a Twinkle notification from the canonical write.
@@ -653,6 +659,14 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - notify may include eventKey, label, summary, recipients, and target. Supported recipients start with { kind: 'buildOwner' }.
   - Use target.focus, such as { kind: 'sharedDbEntry', entryId: '$createdEntryId' }, so Twinkle.notifications can focus the item when opened.
   - Use Twinkle.leaderboards for standard top-score rankings and personal-best scoreboards.
+- async addEntries(topicName, items) | scopes: sharedDb:write
+  - Returns: { entries: [{ id, topicId, userId, username, profilePicUrl, data, createdAt, updatedAt }] }
+  - Atomically append up to 100 owner-controlled JSON rows for one low-frequency user action.
+  - items must contain 1-100 JSON objects; each object remains capped at 10 KB.
+  - All rows are created atomically in one topic and returned as canonical server entries.
+  - Batch rows remain controlled by their creator or the Build owner, just like addEntry rows.
+  - This method intentionally does not support subjectRef or notifications; use addEntry when either is needed.
+  - Use for one bounded durable action, not per-frame or per-tick logging.
 - async updateEntry(entryId, data, { notify } = {}) | scopes: sharedDb:write
   - Returns: { entry: { id, topicId, userId, username, profilePicUrl, data, createdAt, updatedAt } }
   - Update a viewer-owned shared row, optionally notifying safe recipients from the canonical write.
@@ -662,6 +676,12 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 - async deleteEntry(entryId) | scopes: sharedDb:write
   - Returns: { success: true }
   - Deletes an entry. Only the entry creator or the build owner can delete.
+- async deleteEntries(entryIds) | scopes: sharedDb:write
+  - Returns: { success: true, deletedEntryIds: number[], missingEntryIds: number[] }
+  - Atomically delete up to 100 owned shared rows.
+  - Accepts 1-100 unique positive entry ids.
+  - Every existing target must be writable by the viewer or Build owner; otherwise the whole request rejects without deleting anything.
+  - Missing rows are reported and ignored, making cleanup idempotent.
 - async kv.get(namespace, key) | scopes: sharedDb:read
   - Returns: { item: { id, key, value, version, changeSeq, deleted, updatedBy, createdAt, updatedAt } | null }
   - Read one key from the keyed shared store (shared mutable state). Deleted keys read as null.
