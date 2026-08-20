@@ -1828,6 +1828,27 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   assert.equal(review.method, "GET");
   assert.equal(review.path, "/cli/admin/bot-output?days=3");
   assert.equal(review.mutates, false);
+  const continuedReview = parseAdminOperation(
+    parseArgs(["admin", "bot-output", "--cursor", "next-page"]),
+  );
+  assert.equal(
+    continuedReview.path,
+    "/cli/admin/bot-output?cursor=next-page",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "bot-output",
+          "--days",
+          "3",
+          "--cursor",
+          "next-page",
+        ]),
+      ),
+    /without changing its --days window/,
+  );
   assert.throws(
     () => parseAdminOperation(parseArgs(["admin", "bot-output", "extra"])),
     /Usage: lumine admin/,

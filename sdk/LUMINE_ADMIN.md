@@ -802,11 +802,13 @@ type BuildCandidates = Success<{
 }>;
 ```
 
-Subject cursors freeze a primary-key high-water mark and traverse descending
-IDs. Bounded recommendation cursors freeze both the feed-ID high-water mark and
-the server timestamp, then traverse the indexed `(timeStamp, id)` order; this
-also catches a Daily Reflection whose old feed row moved forward when it was
-reshared. Explicit legacy scans retain the descending primary-key walk. A page
+Subject cursors freeze a primary-key high-water mark plus the server snapshot
+timestamp and traverse descending IDs; bounded scans keep creation timestamps
+inside that confirmed interval. Bounded recommendation cursors freeze both the
+feed-ID high-water mark and the server timestamp, then traverse the indexed
+`(timeStamp, id)` order; this also catches a Daily Reflection whose old feed
+row moved forward when it was reshared. Explicit legacy scans retain the
+descending primary-key walk. A page
 can be empty while `hasMore` remains true; continue until `exhausted`. `--all`
 does that automatically and writes a private checkpoint after every
 server-confirmed page; `--resume` continues only when the checkpoint belongs to
@@ -1449,6 +1451,7 @@ type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 ```bash
 lumine admin bot-output --json
 lumine admin bot-output --days 3 --json
+lumine admin bot-output --cursor '<pagination.nextCursor>' --json
 ```
 
 **Every run reviews what Zero and Ciel themselves said since the last run.**
@@ -1463,11 +1466,19 @@ Reflections — and it surfaced only because the kid showed Mikey).
 (`--days 1..30` overrides): `chatMessages` (every stored Zero/Ciel chat and
 reflection reply, with full text and recipient metadata when its best-effort
 prompt audit exists) and `comments`
-(every public bot comment/reply). Truncation flags mark anything beyond 400
-rows per source — retry with a narrower `--days` window, and do not complete
-the run while either flag remains true. Run it right after the
-brief, and **read every row** — the tool deliberately does no filtering,
-scoring, or keyword matching, because the judgment is the reviewing agent's.
+(every public bot comment/reply). Individual utterances are returned in full;
+the API never clips their tails. The first response freezes a canonical
+high-water mark for both sources. Truncation flags mark another page beyond
+the 400-row or bounded-response-size budget; continue with the exact
+`pagination.nextCursor` until
+`pagination.exhausted` is true and both flags are false. A cursor retains the
+original time window and cannot be combined with `--days`. Do not complete the
+run while either flag remains true. The default window deliberately overlaps
+from the previous completed run's start, so output created after its review
+snapshot but before completion is reviewed again instead of being lost. Run it
+right after the brief, and **read every row** — the tool deliberately does no
+filtering, scoring, or keyword matching, because the judgment is the reviewing
+agent's.
 
 **Purpose and privacy boundary:** this audits how Twinkle's bots treated
 members; it is not thought-policing or a moderation queue for members' private
