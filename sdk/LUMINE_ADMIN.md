@@ -1480,6 +1480,82 @@ right after the brief, and **read every row** — the tool deliberately does no
 filtering, scoring, or keyword matching, because the judgment is the reviewing
 agent's.
 
+### API runtime-log review (same phase, every run)
+
+The bot-conduct review also owns a bounded production API log review. Bot
+responses, community-management reads, and delegated mutations can succeed at
+the HTTP layer while stdout records a degraded fallback/retry loop or stderr
+records a side-effect failure. Reviewing only `bot-output` can therefore miss
+the other half of what happened.
+
+The current API-side files are:
+
+- `/home/ec2-user/server/logs/twinkle-api.err.log`
+- `/home/ec2-user/server/logs/twinkle-api.out.log`
+- `/home/ec2-user/server/logs/twinkle-image-optimizer.err.log`
+- `/home/ec2-user/server/logs/twinkle-image-optimizer.out.log`
+
+Treat every current `/home/ec2-user/server/logs/*.err.log` and `*.out.log` as
+in scope so a later API-side worker is not silently omitted. Use the production
+SSH endpoint and key from the repository agent guide; all inspection commands
+are read-only.
+
+1. Immediately after `daily-run start`, record each matching file's inode and
+   byte size, inspect its current tail to establish service health, and read
+   every non-empty error log before accepting that position as the run
+   baseline. The prior run is supposed to leave the live API error log empty,
+   so unexplained pre-existing stderr is evidence, not a reason to skip ahead.
+2. Run and fully paginate `bot-output`, reading every row as required above.
+   In this same phase, read every byte appended to both error and normal-output
+   files since the recorded baseline. Refresh the offsets after inspection.
+   Do not rely on a fixed-line `tail`: a busy or multiline failure can begin
+   before that arbitrary window.
+3. Immediately before `daily-run report` and `daily-run complete`, inspect the
+   delta again. This catches failures caused by the curation actions performed
+   after the first conduct/log review. If a file's inode changed or its size
+   shrank, do not assume the missing range was clean: inspect the replacement
+   from byte zero, check the relevant `twinkle-api.service` or
+   `twinkle-image-optimizer.service` journal interval, and report the lost
+   boundary.
+
+For each warning, fallback, retry loop, or failure, correlate timestamps and
+request/target IDs with the canonical CLI response and private audit event.
+Distinguish an expected, handled condition from a real user-visible,
+reliability, security, or performance defect. A defensible defect is an
+in-scope bug report: trace its complete producer-to-consumer pipeline, fix the
+root cause in the canonical repository, add focused regression coverage, run
+the repository's normal validation ceiling, and verify the fix in production
+when deployment is authorized. Re-read the affected log boundary after live
+verification. Do not declare the run clean merely because a retry eventually
+succeeded if the underlying failure remains repeatable.
+
+Never silently complete a run with an unresolved log finding. If the fix needs
+new commit/deployment authority, external coordination, or more time than the
+active run safely permits, preserve the evidence, add or update a private
+carry-over todo with the exact finding and acceptance criteria, and tell Mikey
+in the run report. Do not mark that todo complete until the fix is verified
+live.
+
+Preserve all log evidence while any finding remains. Once every issue found in
+`/home/ec2-user/server/logs/twinkle-api.err.log` has been fixed and verified
+live, or conclusively classified as expected/non-defective, clear that exact
+live API stderr log through the only safe path:
+
+```bash
+ssh -i /Users/mikey/twinkle-api.pem -o IdentitiesOnly=yes \
+  ec2-user@api.twinkle.network \
+  'cd /home/ec2-user/server && npm run logs:clear-errors'
+```
+
+That command truncates the file through the service's inode-safe lifecycle; it
+does not restart the API. Never delete, recreate, editor-save, or manually
+truncate any log. Do not clear normal stdout or the optimizer logs. After the
+safe clear, inspect the error file and all bytes appended to the normal logs
+once more, and include the reviewed file set, boundaries, findings/fixes,
+live-verification result, clear result, and any remaining todo in the final run
+report. If any error-log issue remains unresolved or unverified, do not clear
+the error log.
+
 **Purpose and privacy boundary:** this audits how Twinkle's bots treated
 members; it is not thought-policing or a moderation queue for members' private
 use of the tool. The question is whether Zero or Ciel inflicted, encouraged,
