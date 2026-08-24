@@ -150,8 +150,9 @@ which can differ from a method's `Twinkle.*` SDK return shape — check
 ## Assets and AI image generation
 
 Binary media never lives in the workspace — assets are uploaded to Twinkle and
-referenced from code by URL. `lumine assets upload <file...>` uploads images or
-audio; `lumine assets list` prints your uploads and refreshes
+referenced from code by URL. `lumine assets upload <file...>` uploads images,
+audio, and MIDI data (`.mid`/`.midi`; playback still needs an app-side parser
+or synth); `lumine assets list` prints your uploads and refreshes
 `.twinkle/assets.json`.
 
 `lumine assets generate "<prompt>" --model <gpt-image-2|nano-banana>` creates
@@ -231,6 +232,10 @@ events.
 lumine admin identity list --json
 lumine admin identity inspect Jay1216 \
   --reason "Confirm account family before a quota-bucket change" --json
+lumine admin economy trace lock --days 3 \
+  --reason "Investigate the anomalous coin gain" --json
+lumine admin rescue wordle-audit --days 30 \
+  --reason "Identify recorded Wordle breaks and rescue status" --json
 lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin todo list --json
 lumine admin todo add --kind experiment --status in_progress \

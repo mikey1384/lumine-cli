@@ -331,6 +331,68 @@ test("private identity inspection requires a reason and makes raw evidence expli
   );
 });
 
+test("private economy and rescue investigations are bounded and reason-required", () => {
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "economy",
+        "trace",
+        "lock",
+        "--days",
+        "3",
+        "--reason",
+        "Investigate the anomalous three-day coin gain.",
+      ]),
+    ),
+    {
+      name: "economy.trace",
+      method: "POST",
+      path: "/cli/admin/economy/trace",
+      body: {
+        target: "lock",
+        reason: "Investigate the anomalous three-day coin gain.",
+        days: 3,
+      },
+      mutates: true,
+    },
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "rescue",
+        "wordle-audit",
+        "--reason",
+        "Identify lapsed launch offers and their streak lengths.",
+      ]),
+    ).body,
+    {
+      reason: "Identify lapsed launch offers and their streak lengths.",
+      days: 30,
+    },
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "economy", "trace", "lock"])),
+    /--reason/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "rescue",
+          "wordle-audit",
+          "--reason",
+          "Required audit reason.",
+          "--days",
+          "31",
+        ]),
+      ),
+    /integer 1-30/,
+  );
+});
+
 test("escalation lifecycle commands map to run-independent private routes", () => {
   assert.deepEqual(
     parseAdminOperation(parseArgs(["admin", "escalation", "list"])),
@@ -399,16 +461,13 @@ test("escalation lifecycle commands map to run-independent private routes", () =
 });
 
 test("todo lifecycle carries experiments between runs without requiring a public bot", () => {
-  assert.deepEqual(
-    parseAdminOperation(parseArgs(["admin", "todo", "list"])),
-    {
-      name: "todo.list",
-      method: "GET",
-      path: "/cli/admin/todos?status=pending&limit=50",
-      body: undefined,
-      mutates: false,
-    },
-  );
+  assert.deepEqual(parseAdminOperation(parseArgs(["admin", "todo", "list"])), {
+    name: "todo.list",
+    method: "GET",
+    path: "/cli/admin/todos?status=pending&limit=50",
+    body: undefined,
+    mutates: false,
+  });
   assert.deepEqual(
     parseAdminOperation(
       parseArgs([
@@ -466,13 +525,7 @@ test("todo lifecycle carries experiments between runs without requiring a public
   assert.throws(
     () =>
       parseAdminOperation(
-        parseArgs([
-          "admin",
-          "todo",
-          "add",
-          "--title",
-          "Missing handoff",
-        ]),
+        parseArgs(["admin", "todo", "add", "--title", "Missing handoff"]),
       ),
     /--note/,
   );
@@ -1831,10 +1884,7 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   const continuedReview = parseAdminOperation(
     parseArgs(["admin", "bot-output", "--cursor", "next-page"]),
   );
-  assert.equal(
-    continuedReview.path,
-    "/cli/admin/bot-output?cursor=next-page",
-  );
+  assert.equal(continuedReview.path, "/cli/admin/bot-output?cursor=next-page");
   assert.throws(
     () =>
       parseAdminOperation(

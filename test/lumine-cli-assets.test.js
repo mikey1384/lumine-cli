@@ -7,7 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { formatBatteryPercent } from "../lib/assets.js";
+import {
+  formatBatteryPercent,
+  readAssetUploadCandidate,
+} from "../lib/assets.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
@@ -260,6 +263,17 @@ test("assets upload rejects unsupported types before any network call", async ()
   fs.rmSync(tmpDir, { recursive: true, force: true });
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /Unsupported asset type for movie\.mp4/);
+});
+
+test("assets upload accepts both MIDI filename extensions with the canonical MIME type", async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-assets-midi-"));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  for (const extension of [".mid", ".midi"]) {
+    const filePath = path.join(tmpDir, `battle-theme${extension}`);
+    fs.writeFileSync(filePath, Buffer.from([0x4d, 0x54, 0x68, 0x64]));
+    const candidate = await readAssetUploadCandidate(filePath);
+    assert.equal(candidate.mimeType, "audio/midi");
+  }
 });
 
 test("assets upload rejects root-relative glTF companion URIs", async () => {

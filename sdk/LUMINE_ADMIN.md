@@ -125,6 +125,44 @@ is run-independent and has no public actor. Results are **candidate accounts
 for human judgment**, not an automatic ownership finding and never automatic
 grounds for moderation, bans, or bucket changes.
 
+### Audited private investigations
+
+Use reason-required, bounded drill-downs when an aggregate management signal
+needs causal evidence:
+
+```bash
+lumine admin economy trace lock --days 3 \
+  --reason "Investigate the anomalous three-day coin gain" --json
+lumine admin rescue wordle-audit --days 30 \
+  --reason "Identify recorded Wordle breaks, streak lengths, and rescue status" --json
+```
+
+`economy trace` reads the canonical append-only coin ledger for one exact
+account. It returns an exact action/target breakdown for the window, the largest
+ledger entries, direct transfer counterparties, AI Card sale/offer provenance,
+and whether a counterparty is already in the same effective exact-account AI
+bucket. It never reads or returns chat messages, bucket labels, verified
+addresses, device evidence, or private identity values. Same-bucket transfers and concentration are
+investigation signals, not automatic abuse findings.
+
+`rescue wordle-audit` separates expired unredeemed Wordle/strict-Wordle rescue
+offers from offers still inside their seven-day promise and from redeemed
+offers. Each row identifies the account and labels the cause: regular Wordle is
+an uncovered dodge, while strict Wordle is a completed but non-strict game. The
+stored offer-time streak snapshot is reported as the broken streak length.
+`claim_ready` requires a durable first user exchange in Lumine history; a
+reservation claim is reported separately and is not treated as completion. An
+open offer is never labelled a refusal, and non-redemption does not establish
+intent. The underlying rescue table stores one current row per account; an
+expired row may be replaced by a later offer, so the command reports exact
+current-row evidence and explicitly marks that it is not a complete immutable
+history of every offer ever shown.
+
+Both commands are run-independent private operator actions. Each requires a
+concrete reason and commits a minimized private access receipt before loading
+the evidence. Windows are limited to 1-30 days, and neither command mutates
+coins, streaks, buckets, messages, or public content.
+
 ## Editorial priorities
 
 The CLI enforces none of this — it is the standing instruction for the operator
@@ -1668,8 +1706,8 @@ end every run report with an **"Insights for Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
 
-Nine sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
-farm-signal sections added the same day):
+Ten sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
+farm-signal sections added that day; AI Card summon watch added 2026-08-24):
 
 - `economy` — `topGainers` (coin-ledger aggregation over the window: gained,
   spent, net, current balance per user, Zero/Ciel excluded) and `topBalances`
@@ -1709,6 +1747,26 @@ farm-signal sections added the same day):
   an account is young or empty. A run that reads the spending report without
   asking "could any of this be one person with many accounts?" has skipped a
   duty.
+- `aiCardSummoning` — the standing multi-alt Summoner watch for every website-
+  management run. It counts the authoritative `ai_card_summons` daily quota counters
+  over the whole-day `dayWindow`, so Mystery Cards and successful fallback
+  cards are included, then lists the most active summoning accounts. It groups
+  summons when the same exact-device hash was observed for more than one
+  summoning user within the bounded `deviceEvidenceLookbackDays`; that evidence
+  is correlated with the account/window, not asserted to be the device used for
+  every individual summon. Each group reports its maximum same-day account and
+  charged-summon totals, the multi-account days, and days above the shared
+  three-card limit. Review every `requiresIdentityInspection` group,
+  prioritizing `daysAboveSharedLimit > 0`, with reason-required `identity
+  inspect`. If
+  `riskGroupsTruncated` is true, report that the bounded watch has more groups
+  than it returned rather than calling the review exhaustive. Add only
+  operator-confirmed exact accounts to an unbanned quota bucket with
+  `ai-bucket accounts add`; never infer or auto-bucket a family from a device,
+  IP prefix, user agent, shared inbox, or anomaly alone. After a bucket update,
+  re-read its canonical members. This duty applies even when no group crossed
+  three cards, because the new enforcement prevents already-bucketed siblings
+  from producing an over-limit row.
 - `notableCandidates` — kids (never bots, staff `userType`s, or users already
   on the Notable Users list) ranked by authored activity in the window, with
   `isNewUser` marking window-new signups. Use it to find the overlooked and
@@ -1904,6 +1962,49 @@ type InsightsBrief = Success<{
           };
         }>;
         topRiskGroups: unknown[];
+      }
+    | InsightUnavailable;
+  aiCardSummoning:
+    | {
+        dayWindow: { startDayIndex: number; endDayIndex: number };
+        deviceEvidenceLookbackDays: number;
+        sharedDailyLimit: number;
+        summonsCharged: number;
+        summoningAccounts: number;
+        riskGroupsTruncated: boolean;
+        topAccounts: Array<{
+          userId: number;
+          username: string | null;
+          joinedAt: number | null;
+          summonsCharged: number;
+          activeDays: number;
+          lastSummonDayIndex: number | null;
+        }>;
+        multiAccountRiskGroups: Array<{
+          riskKeyType: string;
+          riskKeyHash: string;
+          accountCount: number;
+          summonsChargedOnMultiAccountDays: number;
+          multiAccountDays: number;
+          maxDailySummons: number;
+          maxDailyAccounts: number;
+          daysAboveSharedLimit: number;
+          requiresIdentityInspection: true;
+          dailyActivity: Array<{
+            dayIndex: number;
+            accountCount: number;
+            summonsCharged: number;
+          }>;
+          accounts: Array<{
+            userId: number;
+            username: string | null;
+            joinedAt: number | null;
+            summonsCharged: number;
+            activeDays: number;
+            lastSummonDayIndex: number | null;
+          }>;
+        }>;
+        notes: string;
       }
     | InsightUnavailable;
   engagementPulse:
