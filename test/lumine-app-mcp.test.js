@@ -205,9 +205,103 @@ test("app-mcp closes a malformed session before failing", async (t) => {
   );
 });
 
+test("app-mcp explains how to recover an expired session", async (t) => {
+  const fixture = await createFixtureServer(t, { staleSession: true });
+  const child = spawn(
+    process.execPath,
+    [
+      cliPath,
+      "app-mcp",
+      "73",
+      "--api-url",
+      fixture.apiUrl,
+      "--auth-file",
+      fixture.authFile,
+      "--no-open",
+      "--no-update-check",
+    ],
+    {
+      cwd: path.resolve(__dirname, ".."),
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  child.stdin.end(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 41,
+      method: "tools/call",
+      params: { name: "get_state", arguments: {} },
+    })}\n`,
+  );
+
+  const [code] = await once(child, "close");
+  assert.equal(code, 0, stderr);
+  const response = JSON.parse(stdout.trim());
+  assert.equal(response.result.isError, true);
+  const payload = JSON.parse(response.result.content[0].text);
+  assert.match(payload.error, /Restart the Lumine app-mcp driver/);
+  assert.match(payload.error, /reopen its new appUrl/);
+});
+
+test("app-mcp surfaces an unresponsive browser heartbeat without waiting for its local timeout", async (t) => {
+  const fixture = await createFixtureServer(t, { unresponsiveCall: true });
+  const child = spawn(
+    process.execPath,
+    [
+      cliPath,
+      "app-mcp",
+      "73",
+      "--api-url",
+      fixture.apiUrl,
+      "--auth-file",
+      fixture.authFile,
+      "--no-open",
+      "--no-update-check",
+    ],
+    {
+      cwd: path.resolve(__dirname, ".."),
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  child.stdin.end(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 42,
+      method: "tools/call",
+      params: { name: "get_state", arguments: {} },
+    })}\n`,
+  );
+
+  const [code] = await once(child, "close");
+  assert.equal(code, 0, stderr);
+  const payload = JSON.parse(JSON.parse(stdout.trim()).result.content[0].text);
+  assert.match(payload.error, /MCP session unresponsive/);
+  assert.match(payload.error, /Reload the appUrl tab/);
+  assert.match(payload.error, /verify state, then retry/);
+});
+
 async function createFixtureServer(
   t,
-  { tools = null, probeOrdering = false } = {},
+  {
+    tools = null,
+    probeOrdering = false,
+    staleSession = false,
+    unresponsiveCall = false,
+  } = {},
 ) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-app-mcp-"));
   const authFile = path.join(tmpDir, "auth.json");
@@ -271,6 +365,11 @@ async function createFixtureServer(
       req.method === "POST" &&
       req.url === `/cli/build/73/app-mcp/sessions/${sessionId}/calls`
     ) {
+      if (staleSession) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: "MCP session not found" }));
+        return;
+      }
       const sequence = calls.size + 1;
       const nextCallId = sequence === 1 ? callId : secondCallId;
       calls.set(nextCallId, { sequence, arguments: body?.arguments || {} });
@@ -299,13 +398,18 @@ async function createFixtureServer(
         JSON.stringify({
           call: {
             id: statusCallId,
-            status: "completed",
-            result: probeOrdering
-              ? {
-                  sequence: call.sequence,
-                  largeValueLength: String(call.arguments.largeValue || "").length,
-                }
-              : [{ view: "home", ready: true }],
+            status: unresponsiveCall ? "failed" : "completed",
+            errorMessage: unresponsiveCall
+              ? "MCP session unresponsive. The call may have partially run. Reload the appUrl tab, verify state, then retry, or restart the Lumine app-mcp driver and reopen its new appUrl."
+              : null,
+            result: unresponsiveCall
+              ? null
+              : probeOrdering
+                ? {
+                    sequence: call.sequence,
+                    largeValueLength: String(call.arguments.largeValue || "").length,
+                  }
+                : [{ view: "home", ready: true }],
           },
         }),
       );
