@@ -267,7 +267,8 @@ lumine admin post recommend comment:456 --anyone-can-reward --reward-twinkles 3 
 lumine admin post reward comment:456 --twinkles 3 --json
 lumine admin post skip-batch --target-file skipped.json --checkpoint skip-progress.json --json
 lumine admin comment draft build:884 --file comment.md \
-  --review-receipt /path/from-build-review/review.json --json
+  --review-receipt /path/from-build-review/review.json \
+  --review-context build-context.json --json
 lumine admin comment post --draft-id 77 --json
 lumine admin news claim --output claim.json --scaffold editorial.json --json
 lumine admin news validate --claim claim.json --file editorial.json --json
@@ -285,9 +286,9 @@ Numeric recommendation targets default to subjects. Use `comment:<id>`,
 `aiStory:<id>`, `dailyReflection:<id>`, a canonical URL, or the matching
 `--type` for another post kind. Commenting is always `off` for a new run unless
 `--comment-mode draft` or `--comment-mode post` is explicitly supplied. Drafts
-and posts use the selected bot's server-owned canonical persona; a later human
-reply is handled by Twinkle's existing autonomous Zero/Ciel responder without
-Lumine remaining active.
+and posts use the selected bot's server-owned canonical persona. Outside Build
+threads, a later human reply is handled by Twinkle's existing autonomous
+Zero/Ciel responder without Lumine remaining active.
 
 Management agents also inspect recent public Build candidates during each run.
 `builds review` opens one published app in an isolated temporary Chromium
@@ -297,8 +298,23 @@ subdirectory. A direct Build comment is never server-generated: review the
 runtime (or pull and read an
 open-source app), compose with `--file`, and attach the receipt. The server
 rejects missing or stale review evidence and any app/thread change before
-publication. Manual `--reviewed-version` / `--reviewed-via` evidence remains
-available for genuine code reviews.
+publication. Also pass `--review-context` with a private JSON file containing
+only an `understanding` string: the concrete app behavior and design the agent
+actually learned during that review. The server stamps the canonical Build,
+published version, review method, and review time around that understanding;
+none of it is exposed in the public comment payload. Manual
+`--reviewed-version` / `--reviewed-via` evidence remains available for genuine
+code reviews.
+
+When a human directly replies to that management comment, or to a later
+Zero/Ciel reply descended from it, the same bot may answer from the stored
+historical understanding. That answer uses the commenter's normal AI Energy
+path, including the usual reply-or-Like decision; if their battery is empty,
+the ordinary sponsor placeholder and button are shown. Build mentions and
+replies without this private management provenance remain disabled. A newer
+published Build version does not rewrite history: the bot is told that its
+understanding came from the older reviewed version and must not claim it
+rechecked the app.
 
 Every operation is noninteractive when its required arguments are present.
 `--json` prints exactly one uncolored JSON value and returns a nonzero status

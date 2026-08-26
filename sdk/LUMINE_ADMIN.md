@@ -34,8 +34,10 @@ canonical structured data.
   ordering key for the People directory, so the bots now surface there after a
   run; that is the intended consequence of the timestamp being truthful.
 - A later human reply to a delegated Zero/Ciel comment enters the existing
-  server-side autonomous comment-assistant pipeline. Lumine does not need to
-  remain running.
+  server-side autonomous comment-assistant pipeline. For Build threads this is
+  limited to comments carrying the private reviewed-management provenance
+  described below. The human's normal AI Energy and sponsor path applies;
+  Lumine does not need to remain running.
 
 `auto` selects Zero first when no completed rotation exists, then alternates
 after a successfully completed run that performed a mutation. Failed,
@@ -887,8 +889,11 @@ captures a screenshot and bounded console evidence, then fetches the identity
 again. It writes `review.json` in a unique per-review subdirectory only when
 the browser completed, the screenshot exists, and the artifact did not change
 mid-review. Attach the returned `receiptPath` with
-`comment draft ... --review-receipt review.json`; this binds the draft to the
-exact reviewed artifact without copying a version number by hand.
+`comment draft ... --review-receipt review.json`, and pass a separate private
+`--review-context context.json` containing only the concrete `understanding`
+learned during that review. The receipt binds the draft to the exact reviewed
+artifact without copying a version number by hand; the server owns the Build,
+version, method, and review-time fields around that understanding.
 
 During every management run, scan recent Build candidates back through the
 run's review window alongside Subjects and the recommendation queue. An app
@@ -2315,8 +2320,15 @@ to the exact published artifact you saw:
 
 ```bash
 lumine admin comment draft build:884 --file comment.md \
-  --reviewed-version 4512 --reviewed-via runtime --json
+  --reviewed-version 4512 --reviewed-via runtime \
+  --review-context context.json --json
 lumine admin comment post --draft-id 77 --json
+```
+
+```json
+{
+  "understanding": "The start screen pairs a green zombie with a sci-fi soldier, and the first interaction teaches the player to select a zombie before firing the railgun."
+}
 ```
 
 Use `--reviewed-via code` only when you actually pulled and read the project;
@@ -2327,9 +2339,20 @@ published version, a private/noncanonical Build, or any Build/comment-context
 change between draft and publication. A changed version means review the new
 project state and compose again. The flags are an auditable statement of what
 the management agent did, not permission to infer experience from metadata.
-Autonomous mention/reply generation and sponsored AI replies are disabled in
-Build threads. The generic `comment edit` shortcut is also disabled there;
-review the current version and post a version-bound correction reply instead.
+The review-context JSON is private server-owned conversation provenance; it is
+not included in the public comment, draft response, socket payload, or audit
+metadata. A direct human reply to the resulting Zero/Ciel management comment,
+or to a later reply by that same bot descended from it, may enter the ordinary
+comment-assistant pipeline using this stored historical understanding. It uses
+the human commenter's normal AI Energy and reply-or-Like gate. If that user has
+no remaining AI Energy, the normal sponsor placeholder/button is shown and a
+sponsor pays from their own battery. Mentions elsewhere in a Build, replies to
+unlinked or legacy bot comments, replies to humans, and the other bot remain
+ineligible. If the published version has changed, the responder is told the
+stored understanding belongs to the reviewed older version and must say it has
+not checked behavior that could have changed. The generic `comment edit`
+shortcut is also disabled there; review the current version and post a
+version-bound correction reply instead.
 
 **Offer a Lumine prompt when the moment invites it (Mikey's direction,
 2026-08-10).** Zero and Ciel may include one concrete, copy-pasteable Lumine
@@ -2362,6 +2385,11 @@ silently ignores `content` and generates with the server's model instead. The
 CLI therefore requires the ready draft response to echo the exact submitted
 text with `reason: "operator-composed"`; otherwise it stops with
 `LUMINE_ADMIN_COMPOSED_COMMENT_UNSUPPORTED`. Never publish that rejected draft.
+For Build drafts it additionally requires
+`buildReviewContextStored: true`; an older API that ignores the private context
+fails closed with `LUMINE_ADMIN_BUILD_REVIEW_CONTEXT_UNSUPPORTED`. Deploy the
+context-aware API, then retry with a new idempotency key rather than publishing
+the unconfirmed draft.
 Placement stays on the requested target: compose replies via `comment:<id>`
 targets (the generated path's model-chosen
 `replyTargetCommentId` does not apply). Everything below about targets,
@@ -2379,14 +2407,17 @@ A draft targets one of:
 
 A reply's container resolves canonically from the target comment: its subject,
 Build, or AI Story / Daily Reflection root. Comments under any other root are
-rejected with `CLI_ADMIN_UNSUPPORTED_REPLY_ROOT`. Build replies require the
-same exact-version review evidence as top-level Build comments. Replies to
+rejected with `CLI_ADMIN_UNSUPPORTED_REPLY_ROOT`. Build replies authored by the
+management agent require the same exact-version review evidence and private
+review context as top-level Build comments. Replies to
 Zero/Ciel comments and to notification comments are rejected with
 `CLI_ADMIN_INVALID_REPLY_TARGET` — the bots never thread with themselves or
-each other, and a human's later reply to a delegated comment still enters the
-existing autonomous comment-assistant pipeline. Published replies carry the
-ordinary thread linkage (thread root and reply-to), and notification fan-out
-uses the normal canonical path.
+each other through the delegated CLI. A human's later direct reply to a
+context-backed Build management comment may enter the energy-gated autonomous
+pipeline described above; ordinary human replies elsewhere follow the existing
+comment-assistant rules. Published replies carry the ordinary thread linkage
+(thread root and reply-to), and notification fan-out uses the normal canonical
+path.
 
 ```ts
 type CommentDraft = Success<{
@@ -2402,6 +2433,7 @@ type CommentDraft = Success<{
     commentMode: "draft" | "post";
     personaRevision: string; // SHA-256; raw prompt is never returned
     contextRevision: string; // SHA-256 of canonical container/comments/target
+    buildReviewContextStored: boolean; // true before a Build draft may publish
     decision: "draft" | "skip";
     reason: string | null;
     content: string | null;

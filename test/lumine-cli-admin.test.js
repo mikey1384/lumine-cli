@@ -1216,6 +1216,43 @@ test("comment draft --file sends operator-composed persona content", () => {
       },
     }),
   );
+  assert.doesNotThrow(() =>
+    assertComposedCommentDraftResult({
+      expectedContent: "Reviewed Build feedback",
+      requiresBuildReviewContext: true,
+      result: {
+        data: {
+          draft: {
+            decision: "draft",
+            reason: "operator-composed",
+            content: "Reviewed Build feedback",
+            status: "ready",
+            buildReviewContextStored: true,
+          },
+        },
+      },
+    }),
+  );
+  assert.throws(
+    () =>
+      assertComposedCommentDraftResult({
+        expectedContent: "Reviewed Build feedback",
+        requiresBuildReviewContext: true,
+        result: {
+          data: {
+            draft: {
+              decision: "draft",
+              reason: "operator-composed",
+              content: "Reviewed Build feedback",
+              status: "ready",
+            },
+          },
+        },
+      }),
+    (error) =>
+      error.code === "LUMINE_ADMIN_BUILD_REVIEW_CONTEXT_UNSUPPORTED" &&
+      /Stop without publishing/.test(error.message),
+  );
   assert.throws(
     () =>
       assertComposedCommentDraftResult({
@@ -1242,9 +1279,17 @@ test("management Build comments require an actual version-bound review", () => {
     path.join(os.tmpdir(), "lumine-build-review-"),
   );
   const composedPath = path.join(reviewDir, "comment.md");
+  const contextPath = path.join(reviewDir, "context.json");
   fs.writeFileSync(
     composedPath,
     "I played the published version and liked the pacing.",
+  );
+  fs.writeFileSync(
+    contextPath,
+    JSON.stringify({
+      understanding:
+        "The published start screen explains the railgun mechanic after the player taps to begin.",
+    }),
   );
 
   const candidateOperation = parseAdminOperation(
@@ -1317,6 +1362,8 @@ test("management Build comments require an actual version-bound review", () => {
       "4512",
       "--reviewed-via",
       "runtime",
+      "--review-context",
+      contextPath,
     ]),
   );
   assert.deepEqual(draft.body, {
@@ -1326,6 +1373,8 @@ test("management Build comments require an actual version-bound review", () => {
     content: "I played the published version and liked the pacing.",
     reviewedBuildVersionId: 4512,
     buildReviewMethod: "runtime",
+    buildReviewUnderstanding:
+      "The published start screen explains the railgun mechanic after the player taps to begin.",
   });
 
   assert.throws(
@@ -1347,7 +1396,7 @@ test("management Build comments require an actual version-bound review", () => {
           composedPath,
         ]),
       ),
-    /both --reviewed-version/,
+    /review evidence and --review-context/,
   );
   assert.throws(
     () =>
@@ -1380,11 +1429,65 @@ test("management Build comments require an actual version-bound review", () => {
       "4512",
       "--reviewed-via",
       "code",
+      "--review-context",
+      contextPath,
     ]),
   );
   assert.equal(buildReply.body.targetType, "comment");
   assert.equal(buildReply.body.reviewedBuildVersionId, 4512);
   assert.equal(buildReply.body.buildReviewMethod, "code");
+  assert.equal(
+    buildReply.body.buildReviewUnderstanding,
+    "The published start screen explains the railgun mechanic after the player taps to begin.",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "comment",
+          "reply",
+          "comment:456",
+          "--file",
+          composedPath,
+          "--reviewed-version",
+          "4512",
+          "--reviewed-via",
+          "code",
+        ]),
+      ),
+    /review evidence requires --review-context/,
+  );
+
+  const invalidContextPath = path.join(reviewDir, "invalid-context.json");
+  fs.writeFileSync(
+    invalidContextPath,
+    JSON.stringify({
+      understanding: "Useful context",
+      reviewedBuildVersionId: 4512,
+    }),
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "comment",
+          "draft",
+          "build:884",
+          "--file",
+          composedPath,
+          "--reviewed-version",
+          "4512",
+          "--reviewed-via",
+          "runtime",
+          "--review-context",
+          invalidContextPath,
+        ]),
+      ),
+    /only the understanding field/,
+  );
+  fs.rmSync(reviewDir, { recursive: true, force: true });
 });
 
 test("comment drafts target replies and standalone posts through one operation", () => {
@@ -2576,7 +2679,15 @@ test("managed Build review receipts bind comments to one confirmed artifact", ()
   );
   assert.equal(parseBuildReviewReceipt(receiptPath).buildId, 884);
   const commentPath = path.join(dir, "comment.md");
+  const contextPath = path.join(dir, "context.json");
   fs.writeFileSync(commentPath, "The navigation felt clear and deliberate.");
+  fs.writeFileSync(
+    contextPath,
+    JSON.stringify({
+      understanding:
+        "The published runtime opens on a navigation screen with three clearly labeled destinations.",
+    }),
+  );
   const operation = parseAdminOperation(
     parseArgs([
       "admin",
@@ -2587,15 +2698,22 @@ test("managed Build review receipts bind comments to one confirmed artifact", ()
       commentPath,
       "--review-receipt",
       receiptPath,
+      "--review-context",
+      contextPath,
     ]),
   );
   assert.equal(operation.body.reviewedBuildVersionId, 4512);
   assert.equal(operation.body.buildReviewMethod, "runtime");
   assert.equal(
+    operation.body.buildReviewUnderstanding,
+    "The published runtime opens on a navigation screen with three clearly labeled destinations.",
+  );
+  assert.equal(
     parseAdminOperation(parseArgs(["admin", "builds", "review", "884"]))
       .buildId,
     884,
   );
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("operator view filter narrows lists without hiding unknown state", () => {
