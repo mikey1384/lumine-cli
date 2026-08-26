@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.37.1
+Version: 1.37.2
 Updated: 2026-08-26
-Generated: 2026-08-26T14:21:36.684Z
+Generated: 2026-08-26T15:17:11.027Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -743,7 +743,8 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Signed-in player identity comes from the canonical Twinkle user record; player.profilePicUrl is only used for guests and is returned only when it is a valid absolute HTTPS URL.
   - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles and reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
   - Use updatePresence for live avatar snapshots and send for lightweight actions such as emotes, interactions, and chat bubbles.
-  - Throttle movement updates in app code, usually 5-15 updates per second. Do not call updatePresence from every animation frame. The parent limits updatePresence and send together to protect the website connection; WORLD_EVENT_RATE_LIMITED is recoverable, so drop that transient update and keep the current session.
+  - Treat the render/input loop as local-only. Queue presence only after relevant fields change, replace any queued snapshot with the newest one, and flush on a fixed 5-15 updates-per-second schedule with at most one updatePresence request in flight. Never call or await updatePresence every animation frame, resend unchanged snapshots, overlap requests, or build a backlog.
+  - Send discrete actions only when they happen; do not poll or automatically retry them. The parent limits updatePresence and send together to protect the website connection. WORLD_EVENT_RATE_LIMITED is recoverable: drop that attempted update without an immediate retry and keep the current session.
   - Rooms are addressed by worldKey, roomKey, and instanceId so the contract can later move to sharded or dedicated game backends.
   - Example: const world = await Twinkle.world.join({ roomKey: 'town-square', presence: { x: 0, y: 0, z: 0, facing: 'south' }, player: { name: avatarName } });
 world.subscribe((event) => updateRemotePlayers(event.players));
@@ -752,7 +753,7 @@ world.updatePresence({ x, y, z, facing });
   - Returns: boolean
   - Return true when a world request error is expected to be handled by app code instead of crashing.
   - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, rate-limited, preview-updating, and timed-out world session requests.
-  - Only session-ended errors prove that the current handle should be discarded. WORLD_EVENT_RATE_LIMITED, timed-out, or preview-updating presence/action requests can be dropped without reconnecting.
+  - Only session-ended errors prove that the current handle should be discarded. WORLD_EVENT_RATE_LIMITED, timed-out, or preview-updating presence/action requests must be dropped without reconnecting and without an immediate retry.
   - For durable game state, write through sharedDb/privateDb instead of relying on world presence — but LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick).
   - Example: try {
   await world.updatePresence({ x, y, z, facing });
@@ -1029,59 +1030,104 @@ Keywords: multiplayer, mmo, town, presence, avatars, movement, three.js, realtim
 
 ```js
 let world = null;
+let worldConnection = null;
 let reconnectTimer = 0;
+let reconnectDelayMs = 1000;
+let latestPresence = { x: 0, y: 0, z: 0, facing: 'south', animation: 'idle' };
+let latestPresenceKey = JSON.stringify(latestPresence);
+let queuedPresence = null;
+let presenceInFlight = false;
 
 async function connectWorld() {
   if (world) return world;
-  world = await Twinkle.world.join({
-    worldKey: 'town',
-    roomKey: 'square',
-    presence: { x: 0, y: 0, z: 0, facing: 'south', animation: 'idle' },
+  if (worldConnection) return worldConnection;
+  const presenceAtJoin = latestPresence;
+  const presenceKeyAtJoin = latestPresenceKey;
+  worldConnection = Twinkle.world.join({
+    worldKey: 'town', roomKey: 'square', presence: presenceAtJoin,
     player: { name: avatarName }
   });
-
-  world.subscribe((event) => {
-    renderPlayers(event.players);
-    if (event.type === 'session.ended') {
-      handleWorldDrop();
-    }
-    if (event.type === 'action.received' && event.action?.type === 'emote') {
-      showEmote(event.sessionId, event.action.data.emote);
-    }
-  });
-  return world;
-}
-
-function handleWorldDrop() {
-  world = null;
-  if (!reconnectTimer) {
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = 0;
-      connectWorld().catch(handleWorldDrop);
-    }, 1000);
+  try {
+    const session = await worldConnection;
+    world = session;
+    reconnectDelayMs = 1000;
+    session.subscribe((event) => {
+      renderPlayers(event.players);
+      if (event.type === 'session.ended') handleWorldDrop(session);
+      if (event.type === 'action.received' && event.action?.type === 'emote') {
+        showEmote(event.sessionId, event.action.data.emote);
+      }
+    });
+    if (latestPresenceKey !== presenceKeyAtJoin) queuedPresence = latestPresence;
+    return session;
+  } finally {
+    worldConnection = null;
   }
 }
 
-async function syncPresence() {
+function handleWorldConnectError(error) {
+  if (Twinkle.world.isRecoverableSessionError(error)) {
+    scheduleReconnect();
+  } else {
+    console.error('World connection failed', error);
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer || world || worldConnection) return;
+  const delay = reconnectDelayMs;
+  reconnectDelayMs = Math.min(30000, reconnectDelayMs * 2);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = 0;
+    connectWorld().catch(handleWorldConnectError);
+  }, delay);
+}
+
+function handleWorldDrop(session = world) {
+  if (session && world && world !== session) return;
+  world = null;
+  queuedPresence = null;
+  scheduleReconnect();
+}
+
+function queuePresence(next) {
+  const key = JSON.stringify(next);
+  if (key === latestPresenceKey) return;
+  latestPresenceKey = key;
+  latestPresence = next;
+  if (world) queuedPresence = next; // Coalesce to the newest unsent snapshot.
+}
+
+async function flushPresence() {
+  if (presenceInFlight || !queuedPresence || !world) return;
+  const session = world;
+  const next = queuedPresence;
+  queuedPresence = null;
+  presenceInFlight = true;
   try {
-    const session = await connectWorld();
-    // Throttle this in the game loop, for example 5-15 times per second.
-    await session.updatePresence({ x: player.x, y: player.y, z: player.z, facing });
+    await session.updatePresence(next);
   } catch (error) {
     if (Twinkle.world.isSessionEndedError(error)) {
-      handleWorldDrop();
-      return;
+      handleWorldDrop(session);
+    } else if (!Twinkle.world.isRecoverableSessionError(error)) {
+      console.error('World update failed', error);
     }
-    if (Twinkle.world.isRecoverableSessionError(error)) {
-      // Drop this transient presence update and keep the current handle.
-      return;
-    }
-    throw error;
+    // Recoverable errors drop this transient snapshot without an immediate retry.
+  } finally {
+    presenceInFlight = false;
   }
 }
 
-await connectWorld();
-await syncPresence();
+// The render/input loop only queues changed local state.
+function onPlayerStateChanged() {
+  queuePresence({
+    x: player.x, y: player.y, z: player.z,
+    facing, animation: player.animation
+  });
+}
+
+connectWorld().catch(handleWorldConnectError);
+setInterval(() => { void flushPresence(); }, 100); // Fixed 10 Hz cap.
 ```
 
 ### Play chess against the computer
