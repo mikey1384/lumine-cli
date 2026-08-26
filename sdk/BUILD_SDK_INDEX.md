@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.37.0
-Updated: 2026-08-25
-Generated: 2026-08-25T02:01:15.207Z
+Version: 1.37.1
+Updated: 2026-08-26
+Generated: 2026-08-26T14:21:36.684Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -341,7 +341,7 @@ renderBattery(policy?.energyPercent, policy?.energySegmentsRemaining);
   - Use this for in-app AI replies instead of creating or fetching app-local endpoints such as /api/chat.
   - Example: const chatHistory = conversation.slice(-12).map((entry) => ({ role: entry.role === 'assistant' ? 'assistant' : 'user', content: entry.text }));
 const result = await Twinkle.ai.chat({ message, history: chatHistory, systemPrompt: 'You are a cheerful pirate helper who answers in one sentence.', onText: (text, meta) => renderReply(text), onStatus: (status) => setThinking(status === 'thinking') });
-- async generateObject({ prompt, expectedStructure, thinkingMode, mode, model, instructions, systemPrompt, webSearch, requestId, onText, onStatus } = {}) | scopes: none
+- async generateObject({ prompt, expectedStructure, thinkingMode, mode, model, instructions, systemPrompt, webSearch, requestId, onText, onStatus, onReasoning } = {}) | scopes: none
   - Returns: { object, result, model, provider, thinkingMode, requestedThinkingMode, requestedModel, webSearch, aiUsagePolicy }
   - Generate a validated structured JSON object for app decisions, routing, grading, and game-state logic, with optional live output/status callbacks and web search.
   - Signed-in viewers only.
@@ -353,13 +353,14 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - thinkingMode medium uses Grok 4.6 with medium reasoning and consumes normal AI Energy.
   - thinkingMode high without model uses GPT-5.6 Sol with high reasoning and consumes high AI Energy. Explicit model: 'gpt-5.6-sol' selects Sol with xhigh reasoning at the same High AI Energy tier.
   - claude-opus-5 uses Anthropic adaptive High thinking. claude-fable-5 uses Anthropic xhigh thinking and normally consumes more AI Energy for comparable token use. Both debit confirmed provider usage at the High tier.
-  - Pass onStatus and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
+  - Pass onStatus, onReasoning, and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
+  - onReasoning receives accumulated provider-supplied, app-visible reasoning summaries plus { done, delta, requestId, status }. A provider retry may replace the accumulated summary; treat each callback's first argument as the current source of truth. This callback never exposes hidden/private model chain-of-thought.
   - onText receives accumulated structured-output text plus { done, delta, requestId, status }. Partial output is intentionally incomplete and may include provider formatting; parse only when done is true, when the callback receives the canonical object serialized as JSON, and use the resolved object as the source of truth.
-  - Streaming exposes app-visible structured output and high-level phases, not private model chain-of-thought. Put a user-facing field such as producerNotes in expectedStructure when the app should display model-authored commentary from the same generation.
+  - Put a user-facing field such as producerNotes in expectedStructure when commentary must be part of the validated final object rather than transient reasoning progress.
   - When AI Energy is empty, every automatic or named model choice rejects before new provider work; there is no free fallback mode.
   - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
-  - The server validates the final shape; automatic OpenAI/xAI routes can retry malformed output, while explicit Anthropic routes use native JSON Schema output. App code should still validate business-specific enum values.
-  - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'high', model: 'claude-opus-5', prompt: 'Plan the next section from: ' + currentState, expectedStructure: { producerNotes: 'string', action: 'string', confidence: 0 }, onStatus: (phase) => showPhase(phase), onText: (partialJson, meta) => showStructuredProgress(partialJson, meta) });
+  - The server validates the final shape; automatic OpenAI/xAI routes can retry malformed output, while explicit Anthropic routes use native JSON Schema output and retry one malformed or shape-invalid result. App code should still validate business-specific enum values.
+  - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'high', model: 'claude-opus-5', prompt: 'Plan the next section from: ' + currentState, expectedStructure: { producerNotes: 'string', action: 'string', confidence: 0 }, onStatus: (phase) => showPhase(phase), onReasoning: (summary, meta) => showReasoningProgress(summary, meta), onText: (partialJson, meta) => showStructuredProgress(partialJson, meta) });
 - onChatStatus(listener) | scopes: none
   - Returns: unsubscribe function
   - Listen to shared runtime AI chat stream events.
@@ -742,7 +743,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Signed-in player identity comes from the canonical Twinkle user record; player.profilePicUrl is only used for guests and is returned only when it is a valid absolute HTTPS URL.
   - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles and reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
   - Use updatePresence for live avatar snapshots and send for lightweight actions such as emotes, interactions, and chat bubbles.
-  - Throttle movement updates in app code, usually 5-15 updates per second. Do not call updatePresence from every animation frame.
+  - Throttle movement updates in app code, usually 5-15 updates per second. Do not call updatePresence from every animation frame. The parent limits updatePresence and send together to protect the website connection; WORLD_EVENT_RATE_LIMITED is recoverable, so drop that transient update and keep the current session.
   - Rooms are addressed by worldKey, roomKey, and instanceId so the contract can later move to sharded or dedicated game backends.
   - Example: const world = await Twinkle.world.join({ roomKey: 'town-square', presence: { x: 0, y: 0, z: 0, facing: 'south' }, player: { name: avatarName } });
 world.subscribe((event) => updateRemotePlayers(event.players));
@@ -750,8 +751,8 @@ world.updatePresence({ x, y, z, facing });
 - isRecoverableSessionError(error) | scopes: none
   - Returns: boolean
   - Return true when a world request error is expected to be handled by app code instead of crashing.
-  - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, preview-updating, and timed-out world session requests.
-  - Only session-ended errors prove that the current handle should be discarded. Timed-out or preview-updating presence requests can be dropped without reconnecting.
+  - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, rate-limited, preview-updating, and timed-out world session requests.
+  - Only session-ended errors prove that the current handle should be discarded. WORLD_EVENT_RATE_LIMITED, timed-out, or preview-updating presence/action requests can be dropped without reconnecting.
   - For durable game state, write through sharedDb/privateDb instead of relying on world presence — but LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick).
   - Example: try {
   await world.updatePresence({ x, y, z, facing });
