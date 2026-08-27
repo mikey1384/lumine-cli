@@ -139,6 +139,8 @@ methods. The JSON args are sent as the request body (shapes follow
 ```bash
 lumine sdk call aiStories.chapters '{"limit": 5}'
 lumine sdk call aiStories.list '{"difficulty": 1}' --repeat 5 --build 1374
+lumine sdk call live.list '{}'
+lumine sdk call live.get '{"sessionId": "..."}'
 ```
 
 It targets the build in the current workspace, or pass `--build <id>`. Add
@@ -146,6 +148,10 @@ It targets the build in the current workspace, or pass `--build <id>`. Add
 which can differ from a method's `Twinkle.*` SDK return shape — check
 `TWINKLE_BUILD_SDK.md` for SDK return shapes. Methods that change data require
 `--allow-write`.
+Stopping a hosted stream is available as
+`lumine sdk call live.stop '{"sessionId":"..."}' --allow-write`; the command
+prints canonical server state and refuses to mint `live:write` without the
+explicit write flag.
 
 ## Assets and AI image generation
 

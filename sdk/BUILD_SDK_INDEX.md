@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.38.0
+Version: 1.38.1
 Updated: 2026-08-27
-Generated: 2026-08-27T05:33:24.896Z
+Generated: 2026-08-27T08:47:07.845Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -28,7 +28,7 @@ Generated: 2026-08-27T05:33:24.896Z
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
 - Use Twinkle.media for camera photos and camera-only two-second clips. Twinkle confirms each capture or paid processing action. Clips are processed to canonical 480p MP4 assets before they become visible; use sharedDb or privateDb to publish/store the returned asset metadata.
 - Static media published through sharedDb is app-owned feed data, not part of Twinkle.live's host-enforced report-and-end path. A public user-generated feed must provide a visible report flow and owner removal, and must not claim that Twinkle globally moderates those posts.
-- Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps a host-owned report-and-end control above every active viewer session, so app code cannot hide or replace the safety path.
+- Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active host and viewer sessions, so app code cannot hide or replace the safety path.
 - Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
 
 ## Token Scopes
@@ -357,11 +357,12 @@ renderBattery(mediaEnergy.energyPercent);
 
 ### Twinkle.live
 - async start({ previewElement?, facingMode?, audio?, durationSeconds?, maxViewers?, requestId? } = {}) | scopes: live:write
-  - Returns: { session: { id, buildId, hostUserId, status, maxViewers, viewersGranted, durationSeconds, hardEndsAt }, mediaEnergy }
+  - Returns: { session: { id, buildId, hostUserId, status, maxViewers, viewersGranted, durationSeconds, updatedAt, hardEndsAt }, mediaEnergy }
   - Create an ephemeral IVS channel, attach the camera/microphone, begin broadcasting, and return a shareable session ID.
   - Call from an explicit viewer action. Twinkle confirms each new broadcast before camera/microphone permission or paid channel creation.
   - previewElement must be a canvas element or selector because the IVS Broadcast SDK draws a composited preview.
   - Free sessions broadcast at 854x480 and are capped server-side at 15 minutes and 10 private viewer grants. Lower durationSeconds/maxViewers values are allowed.
+  - Twinkle confirms that a platform-owned live indicator and End stream action are present before returning broadcast credentials to the app, and keeps the control until server cleanup is canonically terminal. Fullscreen and Picture-in-Picture are unavailable while hosting or watching so these safety controls stay visible.
   - The SDK does not include broadcast credentials in its returned value. Credentials are ephemeral, and the SDK stops local broadcasting at hardEndsAt while the API independently stops and deletes the IVS channel.
   - Example: const { session } = await Twinkle.live.start({ previewElement: '#broadcastPreview', audio: true });
 await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
