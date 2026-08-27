@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.38.1
+Version: 1.38.2
 Updated: 2026-08-27
-Generated: 2026-08-27T11:02:56.742Z
+Generated: 2026-08-27T12:11:09.595Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -27,8 +27,8 @@ Generated: 2026-08-27T11:02:56.742Z
 - Interface text must not be selectable on touch devices: apply user-select: none plus -webkit-user-select: none and -webkit-touch-callout: none to interface text (HUD, buttons, labels, menus, scores, game controls) so mobile long-press does not highlight UI. Keep text inputs and genuinely user-copyable content selectable.
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
 - Use Twinkle.media for camera photos and camera-only two-second clips. Twinkle confirms each capture or paid processing action. Clips are processed to canonical 480p MP4 assets before they become visible; use sharedDb or privateDb to publish/store the returned asset metadata.
-- Static media published through sharedDb is app-owned feed data, not part of Twinkle.live's host-enforced report-and-end path. A public user-generated feed must provide a visible report flow and owner removal, and must not claim that Twinkle globally moderates those posts.
-- Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active host and viewer sessions, so app code cannot hide or replace the safety path.
+- Static media published through sharedDb is app-owned feed data. A public user-generated feed must provide a visible report flow and owner removal, and must not claim that Twinkle globally moderates those posts.
+- Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active hosts, so app code cannot hide or replace the broadcaster's Stop path.
 - Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
 
 ## Token Scopes
@@ -364,7 +364,7 @@ renderBattery(mediaEnergy.energyPercent);
   - Replay storage is included in the live Media Energy reservation. Replay viewing has its own Media Energy reservation.
   - previewElement must be a canvas element or selector because the IVS Broadcast SDK draws a composited preview.
   - Free sessions broadcast at 854x480 and are capped server-side at 15 minutes and 10 private viewer grants. Lower durationSeconds/maxViewers values are allowed.
-  - Twinkle confirms that a platform-owned live indicator and End stream action are present before returning broadcast credentials to the app, and keeps the control until server cleanup is canonically terminal. Fullscreen and Picture-in-Picture are unavailable while hosting or watching so these safety controls stay visible.
+  - Twinkle confirms that a platform-owned live indicator and End stream action are present before returning broadcast credentials to the app, and keeps the control until server cleanup is canonically terminal. Fullscreen and Picture-in-Picture are unavailable while hosting so that Stop control stays visible.
   - The SDK does not include broadcast credentials in its returned value. Credentials are ephemeral, and the SDK stops local broadcasting at hardEndsAt while the API independently stops and deletes the IVS channel.
   - Example: const { session } = await Twinkle.live.start({ previewElement: '#broadcastPreview', audio: true });
 await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
@@ -381,23 +381,15 @@ await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
   - Returns: { session, viewerGrantId, mediaEnergy, playbackStarted }
   - Use a private single-use playback grant to attach a livestream to an HTML video element.
   - Call from an explicit viewer action. Twinkle confirms admission before allocating the private viewer grant or using Media Energy.
-  - The first watch action consumes one of at most 10 grants for the session. Repeated watch() calls in the same page reuse the local grant until leave() or report().
+  - The first watch action consumes one of at most 10 grants for the session. Repeated watch() calls in the same page reuse the local grant until leave().
   - Playback authorization is single-use and capped at SD. The watch() result omits the signed playback URL; bridge traffic is still app-visible and must be treated as ephemeral.
-  - If browser autoplay is blocked, playbackStarted is false and the video controls remain available so the viewer can start playback explicitly.
+  - playbackStarted becomes true only after IVS or the HTML video element confirms a playing state. If browser autoplay is blocked or no playing state is confirmed, it is false and the video controls remain available so the viewer can start playback explicitly.
+  - Viewers may use the video element's ordinary fullscreen and Picture-in-Picture controls.
   - Example: await Twinkle.live.watch(session.id, { videoElement: '#liveVideo' });
 - async leave(sessionId) | scopes: live:write
   - Returns: { success }
   - Destroy the local player and revoke/settle its private viewer session.
   - Example: await Twinkle.live.leave(sessionId);
-- async report(sessionId, { reason, requestId? }) | scopes: live:write
-  - Returns: { report: { id, sessionId, reason, createdAt }, session, cleanupInProgress, mediaEnergy }
-  - Report the livestream currently being watched and end it through the canonical server cleanup path.
-  - Twinkle asks for an action-specific confirmation before recording the report and ending the stream for everyone.
-  - Reasons are privacy, harassment, explicit-content, violence, dangerous-activity, or other.
-  - The first valid report ends the session. Reports are audited and the reporter's identity is never returned to app code.
-  - Twinkle also displays its own report-and-end control above the app while a viewer grant is active. This safety control is not owned by app code and remains available even when the app does not render a report button.
-  - Use a stable requestId when retrying the same report action, and replace displayed session/Media Energy only from the canonical response.
-  - Example: await Twinkle.live.report(sessionId, { reason: 'harassment' });
 - async stop(sessionId) | scopes: live:write
   - Returns: { session, cleanupInProgress, mediaEnergy }
   - Stop local broadcasting and ask the server to stop and delete the host's ephemeral IVS channel.
@@ -420,22 +412,14 @@ await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
   - Call from an explicit viewer action. Twinkle confirms each playback grant before using Media Energy.
   - Admission reserves the replay's maximum delivery estimate; leave, page close, or playback end settles the canonical elapsed viewing window instead of charging unused playback time.
   - The grant lasts at most 20 minutes and is settled automatically when playback ends, on leaveReplay(), when the page closes, or at server expiry.
-  - Twinkle displays a platform-owned report-and-remove control while playback is active. Fullscreen and Picture-in-Picture remain unavailable so that control stays visible.
-  - If browser autoplay is blocked, playbackStarted is false and the video controls remain available so the viewer can start playback explicitly.
+  - playbackStarted becomes true only after IVS or the HTML video element confirms a playing state. If browser autoplay is blocked or no playing state is confirmed, it is false and the video controls remain available so the viewer can start playback explicitly.
+  - Viewers may use the video element's ordinary fullscreen and Picture-in-Picture controls.
   - Example: await Twinkle.live.watchReplay(replay.id, { videoElement: '#replayVideo' });
 - async leaveReplay(replayId) | scopes: live:write
   - Returns: { success }
   - Destroy the local replay player and canonically settle its private viewer grant.
   - The returned canonical settlement charges the conservative elapsed playback estimate, capped by the replay duration.
   - Example: await Twinkle.live.leaveReplay(replayId);
-- async reportReplay(replayId, { reason, requestId? }) | scopes: live:write
-  - Returns: { report: { id, replayId, reason, createdAt }, replay, cleanupInProgress, mediaEnergy }
-  - Report the replay currently being watched, hide it immediately, and start canonical private-recording deletion.
-  - Twinkle asks for an action-specific confirmation before recording the report and removing the replay.
-  - Reasons are privacy, harassment, explicit-content, violence, dangerous-activity, or other.
-  - The reporter's identity is kept in Twinkle's private moderation record and is never returned to app code.
-  - Use a stable requestId when retrying the same report action, and replace displayed replay/Media Energy only from the canonical response.
-  - Example: await Twinkle.live.reportReplay(replayId, { reason: 'privacy' });
 - async deleteReplay(replayId, { requestId? } = {}) | scopes: live:write
   - Returns: { replay, cleanupInProgress, mediaEnergy }
   - Permanently remove an opted-in replay through the canonical private-storage cleanup path.
