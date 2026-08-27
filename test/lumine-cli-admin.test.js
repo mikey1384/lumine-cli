@@ -1160,6 +1160,34 @@ test("monthly AI costs map to the calendar-month read route", () => {
   );
 });
 
+test("monthly media costs map to the canonical feature-cost route", () => {
+  const monthly = parseAdminOperation(
+    parseArgs(["admin", "media-costs", "monthly"]),
+  );
+  assert.equal(monthly.name, "media-costs.monthly");
+  assert.equal(monthly.method, "GET");
+  assert.equal(monthly.mutates, false);
+  assert.equal(monthly.path, "/cli/admin/media-costs/monthly");
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "media-costs"])),
+    /media-costs monthly/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "media-costs", "monthly", "unexpected"]),
+      ),
+    /media-costs monthly/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "media-costs", "monthly", "--days", "30"]),
+      ),
+    /does not accept --days/,
+  );
+});
+
 test("comment draft --file sends operator-composed persona content", () => {
   const composedPath = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), "lumine-comment-")),
@@ -1945,6 +1973,187 @@ test("monthly AI costs preserve JSON and label both human projections", async (t
   );
 });
 
+test("monthly media costs preserve JSON and surface headroom plus operational alerts", async (t) => {
+  const kind = ({
+    actionCount,
+    committedCount,
+    activeReservedCount,
+    cancelledCount,
+    estimatedSpentUsd,
+    activeReservedUsd,
+  }) => ({
+    actionCount,
+    committedCount,
+    activeReservedCount,
+    cancelledCount,
+    estimatedSpentUsd,
+    activeReservedUsd,
+    originalReservedCapacityUsd: estimatedSpentUsd + activeReservedUsd,
+  });
+  const monthlyMediaCostsResponse = {
+    ok: true,
+    status: "success",
+    data: {
+      monthlyMediaCosts: {
+        schemaVersion: 1,
+        generatedAt: Date.UTC(2026, 7, 27, 6) / 1000,
+        timezone: "UTC",
+        currency: "USD",
+        status: "attention",
+        source: {
+          basis: "canonical_build_media_energy_ledger",
+          costNature: "conservative_provider_cost_estimate_not_aws_invoice",
+          photoStorageAttribution:
+            "shared_build_runtime_image_storage_not_capture_only",
+          awsInvoiceReconciliationRequired: true,
+        },
+        previousMonth: {
+          monthKey: "2026-07",
+          limitUsd: 40,
+          estimatedSpentUsd: 0,
+          activeReservedUsd: 0,
+          carryoverUsd: 0,
+          guardedTotalUsd: 0,
+          remainingUsd: 40,
+          percentUsed: 0,
+        },
+        currentMonth: {
+          monthKey: "2026-08",
+          limitUsd: 40,
+          estimatedSpentUsd: 0.023667,
+          activeReservedUsd: 0.003,
+          carryoverUsd: 0,
+          guardedTotalUsd: 0.026667,
+          remainingUsd: 39.973333,
+          percentUsed: 0.0667,
+          reservationTotals: {
+            actionCount: 6,
+            distinctUserCount: 3,
+            distinctBuildCount: 2,
+          },
+          byKind: {
+            clip: kind({
+              actionCount: 3,
+              committedCount: 2,
+              activeReservedCount: 1,
+              cancelledCount: 0,
+              estimatedSpentUsd: 0.006,
+              activeReservedUsd: 0.003,
+            }),
+            liveInput: kind({
+              actionCount: 1,
+              committedCount: 1,
+              activeReservedCount: 0,
+              cancelledCount: 0,
+              estimatedSpentUsd: 0.016667,
+              activeReservedUsd: 0,
+            }),
+            liveViewer: kind({
+              actionCount: 2,
+              committedCount: 2,
+              activeReservedCount: 0,
+              cancelledCount: 0,
+              estimatedSpentUsd: 0.001,
+              activeReservedUsd: 0,
+            }),
+          },
+          reconciliation: {
+            consistent: true,
+            usageSpentUsd: 0.023667,
+            committedReservationUsd: 0.023667,
+            spentDeltaUsd: 0,
+            usageReservedUsd: 0.003,
+            activeReservationUsd: 0.003,
+            reservedDeltaUsd: 0,
+          },
+        },
+        currentUtcDay: {
+          dayKey: "2026-08-27",
+          reservationsCreated: 6,
+          commitmentsSettled: 5,
+          cancellationsSettled: 0,
+          estimatedCostSettledUsd: 0.023667,
+        },
+        overdueReservations: { count: 1, reservedUsd: 0.003 },
+        operations: {
+          clips: {
+            completingCount: 0,
+            processingCount: 1,
+            staleCount: 0,
+            staleAfterSeconds: 900,
+          },
+          live: {
+            provisioningCount: 0,
+            readyCount: 0,
+            liveCount: 1,
+            endingCount: 0,
+            cleanupFailedCount: 0,
+            costBearingChannelCount: 1,
+            cleanupOverdueCount: 0,
+          },
+          viewers: { activeGrantCount: 1, expiredActiveGrantCount: 0 },
+          runtimeStorage: {
+            readyImages: { assetCount: 4, totalBytes: 122880 },
+            readyClips: { assetCount: 2, totalBytes: 262144 },
+          },
+        },
+        alerts: [
+          {
+            severity: "warning",
+            code: "media_reservations_overdue",
+            message:
+              "1 Media Energy reservation(s) are past expiry and still unsettled.",
+          },
+        ],
+      },
+    },
+  };
+  const fixture = await createFixtureServer(t, {
+    monthlyMediaCostsResponse,
+  });
+
+  const jsonResult = await runCli([
+    "admin",
+    "media-costs",
+    "monthly",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(jsonResult.code, 0, jsonResult.stderr);
+  assert.deepEqual(JSON.parse(jsonResult.stdout), monthlyMediaCostsResponse);
+  assert.equal(
+    fixture.requests.find(
+      (request) => request.url === "/cli/admin/media-costs/monthly",
+    )?.runId,
+    "91",
+  );
+
+  const humanResult = await runCli([
+    "admin",
+    "media-costs",
+    "monthly",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(humanResult.code, 0, humanResult.stderr);
+  assert.match(
+    humanResult.stdout,
+    /2026-08: \$0\.023667 settled estimate \+ \$0\.003 active reservations.*\$39\.973333 remaining/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /2026-08-27 so far: 6 action\(s\) reserved, 5 committed.*\$0\.023667 settled estimate/,
+  );
+  assert.match(humanResult.stdout, /Ledger reconciliation: consistent/);
+  assert.match(
+    humanResult.stdout,
+    /Media-cost alert \[WARNING\] media_reservations_overdue/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /conservative provider-cost ledger estimates, not an AWS invoice/,
+  );
+});
+
 test("existing public command parsing is unaffected", () => {
   const workspace = parseArgs(["884"]);
   assert.equal(workspace.command, "workspace");
@@ -1960,6 +2169,7 @@ async function createFixtureServer(
     adminError = null,
     runStatusResponse = null,
     monthlyAiCostsResponse = null,
+    monthlyMediaCostsResponse = null,
   } = {},
 ) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-"));
@@ -2043,6 +2253,14 @@ async function createFixtureServer(
       monthlyAiCostsResponse
     ) {
       res.end(JSON.stringify(monthlyAiCostsResponse));
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/admin/media-costs/monthly" &&
+      monthlyMediaCostsResponse
+    ) {
+      res.end(JSON.stringify(monthlyMediaCostsResponse));
       return;
     }
     if (req.url.startsWith("/cli/admin/")) {

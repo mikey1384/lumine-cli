@@ -1698,6 +1698,7 @@ A run report that skipped the conduct review is incomplete.
 lumine admin brief --json
 lumine admin brief --days 3 --json
 lumine admin ai-costs monthly --json
+lumine admin media-costs monthly --json
 lumine admin notable add 12647 --note "Top authored-activity kid of the window: 11 subjects, 61 comments." --json
 lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
@@ -1811,6 +1812,43 @@ owned. Deploy and verify the compatible `twinkle-api` route before publishing
 or installing the Lumine CLI release that invokes it; an older API will reject
 the new command instead of synthesizing figures locally.
 
+### Lumine media feature cost and cleanup watch (standing duty, every run)
+
+Run `lumine admin media-costs monthly --json` during every website-management
+run. This read-only, delegated-run-gated command reports the canonical Media
+Energy ledger for short clips and livestream input/viewer usage. Include in
+**"Insights for Mikey"** on every run:
+
+- current-month settled estimated cost, active reservations, cross-month
+  carryover, guarded total, global limit, remaining headroom, and percent used;
+- the current UTC day's reservations, settlements, cancellations, and settled
+  estimated cost;
+- clip, live-input, and live-viewer action/cost breakdowns;
+- whether the global usage row reconciles exactly with reservation rows;
+- every returned alert, plus incomplete clip jobs, cost-bearing IVS channels,
+  overdue cleanup, and expired-active viewer grants;
+- ready image/clip storage counts and bytes as scale context.
+
+Treat `status: "critical"`, any reconciliation mismatch, or any overdue IVS
+cleanup as an operational incident to investigate in the same run. Treat
+`status: "attention"` as a required finding, not a decorative warning. The
+server's request-time global Media Energy guardrail defaults to **$40/month**;
+the separate AWS Budget is **$50/month**, leaving provider-billing and shared-
+infrastructure headroom. Never infer or locally decrement either value.
+
+The ledger is the immediate application source of truth and deliberately uses
+conservative provider-cost estimates. It is not an AWS invoice. Photo capture
+uses existing Build runtime file storage rather than the paid Media Energy
+ledger; `operations.runtimeStorage.readyImages` therefore reports all ready
+Build runtime images, not camera captures alone. Reconcile delayed AWS
+MediaConvert and IVS service charges every run as described below. S3 is shared
+with other Twinkle uploads, so report its service-level cost as shared context,
+not as photo-only spend.
+
+Release boundary: `/cli/admin/media-costs/monthly` owns the canonical ledger,
+reconciliation, resource-state checks, and alerts. Deploy and verify that API
+route before publishing or installing the Lumine CLI release that invokes it.
+
 ### AWS monthly bill expectation (standing duty, every run)
 
 Starting 2026-08-27, every website-management run must also check AWS Cost
@@ -1838,6 +1876,11 @@ aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
   --time-period Start=<month-start-YYYY-MM-01>,End=<today-UTC> \
   --granularity MONTHLY --metrics UnblendedCost
 
+aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
+  --time-period Start=<month-start-YYYY-MM-01>,End=<today-UTC> \
+  --granularity MONTHLY --metrics UnblendedCost \
+  --group-by Type=DIMENSION,Key=SERVICE
+
 aws ce get-cost-forecast --profile mikey-iam --region us-east-1 \
   --time-period Start=<today-UTC>,End=<next-month-YYYY-MM-01> \
   --metric UNBLENDED_COST --granularity MONTHLY \
@@ -1858,6 +1901,9 @@ is unavailable, report the available component and say why a complete
 full-month expectation is unavailable instead of extrapolating it locally. A
 previous closed month may be quoted for context when the difference is
 material, but it is not a replacement for the current-month expectation.
+For the media watch, separately identify AWS Elemental MediaConvert and Amazon
+Interactive Video Service rows when present. Also report Amazon S3 as shared
+storage context, without attributing the whole S3 row to Lumine media.
 
 Ten sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
 farm-signal sections added that day; AI Card summon watch added 2026-08-24):
