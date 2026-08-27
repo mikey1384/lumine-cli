@@ -1132,6 +1132,34 @@ test("insights brief maps to the read-only route with an optional window", () =>
   );
 });
 
+test("monthly AI costs map to the calendar-month read route", () => {
+  const monthly = parseAdminOperation(
+    parseArgs(["admin", "ai-costs", "monthly"]),
+  );
+  assert.equal(monthly.name, "ai-costs.monthly");
+  assert.equal(monthly.method, "GET");
+  assert.equal(monthly.mutates, false);
+  assert.equal(monthly.path, "/cli/admin/ai-costs/monthly");
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "ai-costs"])),
+    /ai-costs monthly/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "ai-costs", "monthly", "unexpected"]),
+      ),
+    /ai-costs monthly/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "ai-costs", "monthly", "--days", "30"]),
+      ),
+    /does not accept --days/,
+  );
+});
+
 test("comment draft --file sends operator-composed persona content", () => {
   const composedPath = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), "lumine-comment-")),
@@ -1792,6 +1820,131 @@ test("per-command identity assertions cannot override the canonical run actor", 
   );
 });
 
+test("monthly AI costs preserve JSON and label both human projections", async (t) => {
+  const monthlyAiCostsResponse = {
+    ok: true,
+    status: "success",
+    data: {
+      monthlyAiCosts: {
+        schemaVersion: 1,
+        generatedAt: Date.UTC(2026, 7, 27, 3) / 1000,
+        timezone: "UTC",
+        currency: "USD",
+        source: {
+          basis: "canonical_deduplicated_ai_cost_report",
+          reportDays: 58,
+          reportStartDayIndex: 1642,
+          reportEndDayIndex: 1699,
+          mtdIncludesInProgressDay: false,
+          projectionsIncludeInProgressDayActual: false,
+        },
+        previousMonth: {
+          status: "closed",
+          monthKey: "2026-07",
+          startDayKey: "2026-07-01",
+          endDayKeyExclusive: "2026-08-01",
+          calendarDayCount: 31,
+          estimatedCostUsd: 1317.21664434,
+        },
+        currentMonth: {
+          status: "in_progress",
+          monthKey: "2026-08",
+          startDayKey: "2026-08-01",
+          endDayKeyExclusive: "2026-09-01",
+          calendarDayCount: 31,
+          completed: {
+            dayCount: 26,
+            throughDayKey: "2026-08-26",
+            estimatedCostUsd: 907.00778625,
+            dailyAverageUsd: 34.88491486,
+          },
+          inProgressDay: {
+            dayIndex: 1699,
+            dayKey: "2026-08-27",
+            estimatedCostUsd: 0.1177081,
+            eventCount: 8,
+            requestCount: 8,
+          },
+          daysToEstimate: 5,
+          projections: {
+            allCompletedDaysPace: {
+              basis: "all_completed_days",
+              basisStartDayKey: "2026-08-01",
+              basisEndDayKey: "2026-08-26",
+              basisDayCount: 26,
+              dailyAverageUsd: 34.88491486,
+              remainingDayCount: 5,
+              estimatedMonthTotalUsd: 1081.43236053,
+              comparisonToPreviousMonth: {
+                estimatedCostDeltaUsd: -235.78428381,
+                percentChange: -17.90019013,
+              },
+            },
+            recentSevenCompletedDaysPace: {
+              basis: "recent_7_completed_days",
+              basisStartDayKey: "2026-08-20",
+              basisEndDayKey: "2026-08-26",
+              basisDayCount: 7,
+              dailyAverageUsd: 23.72784732,
+              remainingDayCount: 5,
+              estimatedMonthTotalUsd: 1025.64702286,
+              comparisonToPreviousMonth: {
+                estimatedCostDeltaUsd: -291.56962148,
+                percentChange: -22.13528221,
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+  const fixture = await createFixtureServer(t, { monthlyAiCostsResponse });
+
+  const jsonResult = await runCli([
+    "admin",
+    "ai-costs",
+    "monthly",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(jsonResult.code, 0, jsonResult.stderr);
+  assert.deepEqual(JSON.parse(jsonResult.stdout), monthlyAiCostsResponse);
+  assert.equal(
+    fixture.requests.find(
+      (request) => request.url === "/cli/admin/ai-costs/monthly",
+    )?.runId,
+    "91",
+  );
+
+  const humanResult = await runCli([
+    "admin",
+    "ai-costs",
+    "monthly",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(humanResult.code, 0, humanResult.stderr);
+  assert.match(
+    humanResult.stdout,
+    /2026-07 closed month: \$1,317\.22 estimated cost/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /completed-day MTD through 2026-08-26: \$907\.01 across 26/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /2026-08-27 in progress: \$0\.12 so far \(excluded from completed-day MTD and both projections\)/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /All-completed-days pace full-month projection: \$1,081\.43.*17\.90% below 2026-07/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /Recent-seven-completed-day pace full-month projection: \$1,025\.65.*2026-08-20 through 2026-08-26.*22\.14% below 2026-07/,
+  );
+});
+
 test("existing public command parsing is unaffected", () => {
   const workspace = parseArgs(["884"]);
   assert.equal(workspace.command, "workspace");
@@ -1803,7 +1956,11 @@ test("existing public command parsing is unaffected", () => {
 
 async function createFixtureServer(
   t,
-  { adminError = null, runStatusResponse = null } = {},
+  {
+    adminError = null,
+    runStatusResponse = null,
+    monthlyAiCostsResponse = null,
+  } = {},
 ) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-"));
   const authFile = path.join(tmpDir, "auth.json");
@@ -1878,6 +2035,14 @@ async function createFixtureServer(
       req.url === "/cli/admin/subjects/123?includeComments=true"
     ) {
       res.end(JSON.stringify(subjectResponse));
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/admin/ai-costs/monthly" &&
+      monthlyAiCostsResponse
+    ) {
+      res.end(JSON.stringify(monthlyAiCostsResponse));
       return;
     }
     if (req.url.startsWith("/cli/admin/")) {

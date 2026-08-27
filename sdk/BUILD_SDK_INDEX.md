@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.37.2
-Updated: 2026-08-26
-Generated: 2026-08-26T15:17:11.027Z
+Version: 1.38.0
+Updated: 2026-08-27
+Generated: 2026-08-27T05:33:24.896Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -26,9 +26,13 @@ Generated: 2026-08-26T15:17:11.027Z
 - Live web search is enabled by default for Twinkle.ai.chat and for Medium/High Twinkle.ai.generateObject and Twinkle.characters.chat requests. App authors can pass webSearch: false to disable it for their app. Search uses the provider's live web-search tool and is included in AI Energy usage; structured and character Lite Mode remains tool-free.
 - Interface text must not be selectable on touch devices: apply user-select: none plus -webkit-user-select: none and -webkit-touch-callout: none to interface text (HUD, buttons, labels, menus, scores, game controls) so mobile long-press does not highlight UI. Keep text inputs and genuinely user-copyable content selectable.
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
+- Use Twinkle.media for camera photos and camera-only two-second clips. Twinkle confirms each capture or paid processing action. Clips are processed to canonical 480p MP4 assets before they become visible; use sharedDb or privateDb to publish/store the returned asset metadata.
+- Static media published through sharedDb is app-owned feed data, not part of Twinkle.live's host-enforced report-and-end path. A public user-generated feed must provide a visible report flow and owner removal, and must not claim that Twinkle globally moderates those posts.
+- Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps a host-owned report-and-end control above every active viewer session, so app code cannot hide or replace the safety path.
+- Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
 
 ## Token Scopes
-files:read, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
+files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
 
 ## Namespaces
 
@@ -282,7 +286,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Simple visible same-origin images can still use normal browser anchors with href and download.
   - Example: await Twinkle.files.saveAs({ fileName: 'fashion-guide.png', dataUrl: imageUrl, mimeType: 'image/png' });
 - async uploadGenerated({ fileName, url, dataUrl, data, text, json, bytes, blob, file, mimeType } = {}) | scopes: files:write
-  - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
+  - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, mediaKind, durationMs, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
   - Upload an app-generated file to Twinkle-hosted cloud storage without opening a picker, then store the returned asset refs in sharedDb/privateDb/userDb.
   - Signed-in viewers only.
   - Uploads generated blobs, files, bytes, data URLs, or fetchable URLs to Twinkle-hosted cloud storage.
@@ -290,7 +294,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Store the returned asset metadata in sharedDb/privateDb/userDb instead of storing raw file bytes in a DB record.
   - Example: const { assets } = await Twinkle.files.uploadGenerated({ fileName: 'fashion-guide.png', dataUrl: generatedImageUrl, mimeType: 'image/png' });
 - async pickAndUpload({ accept, multiple } = {}) | scopes: files:write
-  - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
+  - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, mediaKind, durationMs, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
   - Pick supported local files and upload them to Twinkle-hosted cloud storage, then store the returned asset refs in sharedDb/privateDb/userDb.
   - Signed-in viewers only.
   - Uploads to Twinkle-hosted cloud storage and returns asset references.
@@ -299,7 +303,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Store the returned asset metadata in sharedDb/privateDb/userDb instead of storing raw file bytes in a DB record.
   - Example: const { assets, canceled } = await Twinkle.files.pickAndUpload({ accept: 'image/*,.pdf', multiple: true });
 - async list({ cursor, limit } = {}) | scopes: files:read
-  - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, uploadedByUserId, createdAt }], nextCursor, usage: { totalBytes, fileCount, maxRuntimeFileStorageBytes, remainingBytes } | null }
+  - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, mediaKind, durationMs, uploadedByUserId, createdAt }], nextCursor, usage: { totalBytes, fileCount, maxRuntimeFileStorageBytes, remainingBytes } | null }
   - List the current viewer's uploaded runtime files for this build.
   - Signed-in viewers only.
   - Lists the current viewer's ready uploads for this build only.
@@ -310,6 +314,92 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Signed-in viewers only.
   - Deletes one of the current viewer's uploaded runtime files and updates quota usage.
   - Example: await Twinkle.files.delete(assetId);
+
+### Twinkle.media
+- async capturePhoto({ facingMode?, maxWidth?, quality?, settleMs?, fileName? } = {}) | scopes: files:write
+  - Returns: { asset, assets, failed }
+  - Ask for camera permission, capture one JPEG photo, and upload it to the current viewer's Twinkle file storage.
+  - Signed-in viewers only. Call from an explicit viewer action; Twinkle shows its own one-action confirmation before the browser may show camera permission.
+  - The photo is saved in the viewer's Twinkle file storage. The returned asset is canonical server state and can be stored in sharedDb/privateDb/userDb.
+  - Example: const { asset } = await Twinkle.media.capturePhoto({ facingMode: 'user' });
+if (asset) await Twinkle.sharedDb.addEntry('photos', asset);
+- async recordClip({ previewElement?, facingMode?, fileName?, waitForReady?, timeoutMs? } = {}) | scopes: media:write
+  - Returns: { clip: { id, status, durationMs, failureCode, asset }, mediaEnergy }
+  - Record a camera-only short video, upload it, and by default wait for the canonical two-second 480p MP4 asset.
+  - Call from an explicit viewer action. Twinkle confirms each recording before requesting camera permission.
+  - The recording is camera-only; use Twinkle.live when audio is part of the experience.
+  - The server targets a two-second maximum input window and processes it to 480p MP4. Encoder frame boundaries can differ by one frame; app code cannot raise the limit.
+  - By default this method polls confirmed server state until ready. Pass waitForReady: false to receive the processing ID immediately, then call getClip().
+  - Example: const { clip } = await Twinkle.media.recordClip({ previewElement: '#cameraPreview' });
+await Twinkle.sharedDb.addEntry('clips', clip.asset);
+- async uploadClip({ file?, blob?, fileName?, mimeType?, requestId?, waitForReady?, timeoutMs? }) | scopes: media:write
+  - Returns: { clip: { id, status, durationMs, failureCode, asset }, mediaEnergy }
+  - Upload a generated or selected video through the same server-bounded two-second clip pipeline.
+  - Call from an explicit viewer action. Twinkle confirms each selected or generated video before upload and paid processing.
+  - Input is limited to 8 MB. The canonical output is a server-produced 480p MP4 targeting a two-second maximum, with at most a frame of encoder-boundary variance.
+  - Use a stable requestId when retrying the same user action.
+  - Example: const result = await Twinkle.media.uploadClip({ file: recordedFile });
+- async getClip(assetId) | scopes: media:read
+  - Returns: { clip: { id, status, durationMs, failureCode, asset }, mediaEnergy }
+  - Load and reconcile canonical processing state for one of the current viewer's clips.
+  - Example: const { clip } = await Twinkle.media.getClip(assetId);
+- async listClips({ cursor?, limit? } = {}) | scopes: media:read
+  - Returns: { assets, nextCursor, mediaEnergy }
+  - List the current viewer's ready short clips for this Build app.
+  - Example: const { assets } = await Twinkle.media.listClips({ limit: 20 });
+- async getUsage() | scopes: media:read
+  - Returns: { monthKey, resetsAt, global, user, build, energyPercent, energySegments, energySegmentsRemaining }
+  - Load canonical current Media Energy for this viewer and app.
+  - Replace displayed state only from this response or a newer mediaEnergy response. Never decrement or synthesize the battery locally.
+  - global.carryoverMicroUsd accounts for reservations that crossed the UTC month boundary so the global reset cannot double the budget.
+  - Example: const mediaEnergy = await Twinkle.media.getUsage();
+renderBattery(mediaEnergy.energyPercent);
+
+### Twinkle.live
+- async start({ previewElement?, facingMode?, audio?, durationSeconds?, maxViewers?, requestId? } = {}) | scopes: live:write
+  - Returns: { session: { id, buildId, hostUserId, status, maxViewers, viewersGranted, durationSeconds, hardEndsAt }, mediaEnergy }
+  - Create an ephemeral IVS channel, attach the camera/microphone, begin broadcasting, and return a shareable session ID.
+  - Call from an explicit viewer action. Twinkle confirms each new broadcast before camera/microphone permission or paid channel creation.
+  - previewElement must be a canvas element or selector because the IVS Broadcast SDK draws a composited preview.
+  - Free sessions broadcast at 854x480 and are capped server-side at 15 minutes and 10 private viewer grants. Lower durationSeconds/maxViewers values are allowed.
+  - The SDK does not include broadcast credentials in its returned value. Credentials are ephemeral, and the SDK stops local broadcasting at hardEndsAt while the API independently stops and deletes the IVS channel.
+  - Example: const { session } = await Twinkle.live.start({ previewElement: '#broadcastPreview', audio: true });
+await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
+- async list() | scopes: live:read
+  - Returns: Array<LiveSession>
+  - List currently available livestream sessions for this Build app.
+  - Only sessions canonically acknowledged as live are listed; channels still being prepared are never advertised to viewers.
+  - Example: const sessions = await Twinkle.live.list();
+- async get(sessionId) | scopes: live:read
+  - Returns: LiveSession | null
+  - Load canonical server status for a livestream in this Build app.
+  - Example: const session = await Twinkle.live.get(sessionId);
+- async watch(sessionId, { videoElement, requestId? }) | scopes: live:write
+  - Returns: { session, viewerGrantId, mediaEnergy, playbackStarted }
+  - Use a private single-use playback grant to attach a livestream to an HTML video element.
+  - Call from an explicit viewer action. Twinkle confirms admission before allocating the private viewer grant or using Media Energy.
+  - The first watch action consumes one of at most 10 grants for the session. Repeated watch() calls in the same page reuse the local grant until leave() or report().
+  - Playback authorization is single-use and capped at SD. The watch() result omits the signed playback URL; bridge traffic is still app-visible and must be treated as ephemeral.
+  - If browser autoplay is blocked, playbackStarted is false and the video controls remain available so the viewer can start playback explicitly.
+  - Example: await Twinkle.live.watch(session.id, { videoElement: '#liveVideo' });
+- async leave(sessionId) | scopes: live:write
+  - Returns: { success }
+  - Destroy the local player and revoke/settle its private viewer session.
+  - Example: await Twinkle.live.leave(sessionId);
+- async report(sessionId, { reason, requestId? }) | scopes: live:write
+  - Returns: { report: { id, sessionId, reason, createdAt }, session, cleanupInProgress, mediaEnergy }
+  - Report the livestream currently being watched and end it through the canonical server cleanup path.
+  - Twinkle asks for an action-specific confirmation before recording the report and ending the stream for everyone.
+  - Reasons are privacy, harassment, explicit-content, violence, dangerous-activity, or other.
+  - The first valid report ends the session. Reports are audited and the reporter's identity is never returned to app code.
+  - Twinkle also displays its own report-and-end control above the app while a viewer grant is active. This safety control is not owned by app code and remains available even when the app does not render a report button.
+  - Use a stable requestId when retrying the same report action, and replace displayed session/Media Energy only from the canonical response.
+  - Example: await Twinkle.live.report(sessionId, { reason: 'harassment' });
+- async stop(sessionId) | scopes: live:write
+  - Returns: { session, cleanupInProgress, mediaEnergy }
+  - Stop local broadcasting and ask the server to stop and delete the host's ephemeral IVS channel.
+  - Use the returned canonical session state. Do not locally synthesize an ended status.
+  - Example: await Twinkle.live.stop(sessionId);
 
 ### Twinkle.ai
 - async getUsagePolicy() | scopes: none

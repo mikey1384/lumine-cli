@@ -740,10 +740,7 @@ type AdminTodo = {
 
 type AdminTodoList = Success<{
   todos: AdminTodo[];
-  statusFilter:
-    | "pending"
-    | "all"
-    | AdminTodo["status"];
+  statusFilter: "pending" | "all" | AdminTodo["status"];
   truncated: boolean;
 }>;
 
@@ -1700,6 +1697,7 @@ A run report that skipped the conduct review is incomplete.
 ```bash
 lumine admin brief --json
 lumine admin brief --days 3 --json
+lumine admin ai-costs monthly --json
 lumine admin notable add 12647 --note "Top authored-activity kid of the window: 11 subjects, 61 comments." --json
 lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
@@ -1710,6 +1708,156 @@ operator's last completed run by default (`--days 1..30` overrides; capped at
 end every run report with an **"Insights for Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
+
+### Application AI calendar-month cost (standing duty, every run)
+
+Run `lumine admin ai-costs monthly --json` during every website-management
+run. This read-only command requires the active delegated run and returns one
+server-owned calendar summary from the canonical deduplicated application AI-
+cost ledger. It deliberately takes no `--days`: all boundaries are UTC calendar
+months, so the result is directly comparable from one run to the next.
+
+The previous month is a closed-calendar-month estimated total. Current-month
+MTD contains only completed UTC days and names its inclusive `throughDayKey`.
+The current UTC day's still-filling bucket is returned separately as
+`inProgressDay`; **never add it to MTD or either projection**. A missing daily
+aggregate inside the covered calendar is a recorded zero-cost day, not a
+reason to shrink the denominator.
+
+Two clearly different full-month projections are returned:
+
+- `allCompletedDaysPace` retains completed-day spend, then applies the average
+  across every completed calendar day (including recorded zero days) to the
+  current and remaining UTC days;
+- `recentSevenCompletedDaysPace` retains completed-day spend, then applies the
+  average of the latest seven completed UTC days to the current and remaining
+  days. It is `null` until seven days have completed.
+
+Both projections exclude the partial day's actual cost, replace every not-yet-
+completed day with their stated daily pace, and compare their projected total
+with the previous closed month. They are run-rate scenarios, not forecasts
+from a billing provider. All ledger values are pricing-based estimates rather
+than invoices and can change if canonical usage attribution or pricing is
+corrected.
+
+The stable JSON payload is `data.monthlyAiCosts`:
+
+```ts
+type MonthlyAiCosts = {
+  schemaVersion: 1;
+  generatedAt: number; // Unix seconds
+  timezone: "UTC";
+  currency: "USD";
+  source: {
+    basis: "canonical_deduplicated_ai_cost_report";
+    reportDays: number;
+    reportStartDayIndex: number;
+    reportEndDayIndex: number;
+    mtdIncludesInProgressDay: false;
+    projectionsIncludeInProgressDayActual: false;
+  };
+  previousMonth: {
+    status: "closed";
+    monthKey: string; // YYYY-MM
+    startDayKey: string;
+    endDayKeyExclusive: string;
+    calendarDayCount: number;
+    estimatedCostUsd: number;
+  };
+  currentMonth: {
+    status: "in_progress";
+    monthKey: string;
+    startDayKey: string;
+    endDayKeyExclusive: string;
+    calendarDayCount: number;
+    completed: {
+      dayCount: number;
+      throughDayKey: string | null;
+      estimatedCostUsd: number;
+      dailyAverageUsd: number | null;
+    };
+    inProgressDay: {
+      dayIndex: number;
+      dayKey: string;
+      estimatedCostUsd: number;
+      eventCount: number;
+      requestCount: number;
+    };
+    daysToEstimate: number;
+    projections: {
+      allCompletedDaysPace: MonthlyAiCostProjection | null;
+      recentSevenCompletedDaysPace: MonthlyAiCostProjection | null;
+    };
+  };
+};
+
+type MonthlyAiCostProjection = {
+  basis: "all_completed_days" | "recent_7_completed_days";
+  basisStartDayKey: string;
+  basisEndDayKey: string;
+  basisDayCount: number;
+  dailyAverageUsd: number;
+  remainingDayCount: number;
+  estimatedMonthTotalUsd: number;
+  comparisonToPreviousMonth: {
+    estimatedCostDeltaUsd: number;
+    percentChange: number | null; // null when the prior total is zero
+  };
+};
+```
+
+Release boundary: `/cli/admin/ai-costs/monthly` and all calendar math are API-
+owned. Deploy and verify the compatible `twinkle-api` route before publishing
+or installing the Lumine CLI release that invokes it; an older API will reject
+the new command instead of synthesizing figures locally.
+
+### AWS monthly bill expectation (standing duty, every run)
+
+Starting 2026-08-27, every website-management run must also check AWS Cost
+Explorer and include the current calendar month's expected AWS bill in
+**"Insights for Mikey"**. This is an account-level infrastructure cost check,
+not the `aiSpending` application-cost section above; never substitute one for
+the other or combine their totals.
+
+First verify the Twinkle AWS principal exactly as required by the repository
+agent guide. Use profile `mikey-iam`, pass an explicit region on every command,
+and stop rather than reading another account if the ARN is not
+`arn:aws:iam::019490893667:user/twinkle-admin`:
+
+```bash
+aws sts get-caller-identity --profile mikey-iam --region us-east-1
+```
+
+Then use UTC calendar boundaries and Cost Explorer's unblended-cost metric.
+`End` is exclusive: the month-to-date query below covers completed dates before
+`<today-UTC>`. On the first UTC day of a month, report that no completed-day MTD
+period exists instead of sending an empty interval.
+
+```bash
+aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
+  --time-period Start=<month-start-YYYY-MM-01>,End=<today-UTC> \
+  --granularity MONTHLY --metrics UnblendedCost
+
+aws ce get-cost-forecast --profile mikey-iam --region us-east-1 \
+  --time-period Start=<today-UTC>,End=<next-month-YYYY-MM-01> \
+  --metric UNBLENDED_COST --granularity MONTHLY \
+  --prediction-interval-level 80
+```
+
+Report the Cost Explorer snapshot date, currency, estimated MTD amount and its
+through-date, plus the returned **remaining-period** forecast mean and 80%
+lower/upper bounds. `GetCostForecast` forecasts exactly its requested
+`Start`-inclusive, `End`-exclusive interval, so calculate the expected
+full-calendar-month mean and bounds by adding completed-day MTD to each returned
+remaining-period value. This split deliberately forecasts the current UTC day
+instead of mixing its incomplete actual into MTD. Label current-month actuals
+when `Estimated` is true, and describe the result as a Cost Explorer expectation
+rather than a final invoice because reporting lags and later credits, refunds,
+taxes, or adjustments can change the bill. If either the forecast or MTD query
+is unavailable, report the available component and say why a complete
+full-month expectation is unavailable instead of extrapolating it locally. A
+previous closed month may be quoted for context when the difference is
+material, but it is not a replacement for the current-month expectation.
 
 Ten sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
 farm-signal sections added that day; AI Card summon watch added 2026-08-24):
@@ -1762,8 +1910,8 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   every individual summon. Each group reports its maximum same-day account and
   charged-summon totals, the multi-account days, and days above the shared
   three-card limit. Review every `requiresIdentityInspection` group,
-  prioritizing `daysAboveSharedLimit > 0`, with reason-required `identity
-  inspect`. If
+  prioritizing `daysAboveSharedLimit > 0`, with reason-required
+  `identity inspect`. If
   `riskGroupsTruncated` is true, report that the bounded watch has more groups
   than it returned rather than calling the review exhaustive. Add only
   operator-confirmed exact accounts to an unbanned quota bucket with
