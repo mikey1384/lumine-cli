@@ -52,9 +52,33 @@ test("CLI exposes canonical Lumine media and live diagnostics", () => {
     scopes: ["live:write"],
     write: true,
   });
+  assert.deepEqual(SDK_CLI_METHODS["live.listReplays"], {
+    path: "api/live/replays/list",
+    scopes: ["live:read"],
+    sdkReshape: "the SDK returns the replays array directly",
+  });
+  assert.deepEqual(SDK_CLI_METHODS["live.getReplay"], {
+    path: "api/live/replays/status",
+    scopes: ["live:read"],
+    sdkReshape: "the SDK returns the replay object directly",
+  });
+  assert.deepEqual(SDK_CLI_METHODS["live.deleteReplay"], {
+    path: "api/live/replays/delete",
+    scopes: ["live:write"],
+    write: true,
+  });
   assert.equal(SDK_CLI_READ_SCOPES.includes("media:read"), true);
   assert.equal(SDK_CLI_READ_SCOPES.includes("live:read"), true);
   assert.deepEqual(SDK_CLI_METHOD_NAMES_BY_PATH.get("api/live/list"), [
     "live.list",
+  ]);
+  assert.deepEqual(SDK_CLI_METHOD_NAMES_BY_PATH.get("api/live/replays/list"), [
+    "live.listReplays",
+  ]);
+  assert.deepEqual(SDK_CLI_METHOD_NAMES_BY_PATH.get("api/live/replays/status"), [
+    "live.getReplay",
+  ]);
+  assert.deepEqual(SDK_CLI_METHOD_NAMES_BY_PATH.get("api/live/replays/delete"), [
+    "live.deleteReplay",
   ]);
 });

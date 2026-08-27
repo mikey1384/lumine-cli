@@ -141,6 +141,8 @@ lumine sdk call aiStories.chapters '{"limit": 5}'
 lumine sdk call aiStories.list '{"difficulty": 1}' --repeat 5 --build 1374
 lumine sdk call live.list '{}'
 lumine sdk call live.get '{"sessionId": "..."}'
+lumine sdk call live.listReplays '{"limit": 20}'
+lumine sdk call live.getReplay '{"replayId": "..."}'
 ```
 
 It targets the build in the current workspace, or pass `--build <id>`. Add
@@ -152,6 +154,9 @@ Stopping a hosted stream is available as
 `lumine sdk call live.stop '{"sessionId":"..."}' --allow-write`; the command
 prints canonical server state and refuses to mint `live:write` without the
 explicit write flag.
+Replay listing and status are available without exposing private playback
+grants. A creator or app owner can remove one with
+`lumine sdk call live.deleteReplay '{"replayId":"..."}' --allow-write`.
 
 ## Assets and AI image generation
 
