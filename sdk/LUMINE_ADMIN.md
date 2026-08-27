@@ -1816,21 +1816,28 @@ the new command instead of synthesizing figures locally.
 
 Run `lumine admin media-costs monthly --json` during every website-management
 run. This read-only, delegated-run-gated command reports the canonical Media
-Energy ledger for short clips and livestream input/viewer usage. Include in
+Energy ledger for short clips, livestream input/viewer usage, and replay
+storage/viewing. Include in
 **"Insights for Mikey"** on every run:
 
 - current-month settled estimated cost, active reservations, cross-month
   carryover, guarded total, global limit, remaining headroom, and percent used;
 - the current UTC day's reservations, settlements, cancellations, and settled
   estimated cost;
-- clip, live-input, and live-viewer action/cost breakdowns;
+- the current UTC day's privacy-safe stream-attempt cohort: attempted,
+  reached-live, ended-after-live, failed, cancelled-before-live, still in
+  progress, and grouped server failure-code counts;
+- clip, live-input, live-viewer, and replay-viewer action/cost breakdowns;
 - whether the global usage row reconciles exactly with reservation rows;
 - every returned alert, plus incomplete clip jobs, cost-bearing IVS channels,
-  overdue cleanup, and expired-active viewer grants;
+  active-or-cleanup-pending sessions, possible orphaned sessions, overdue
+  cleanup, replay finalization/deletion state, retained replay bytes/objects,
+  and expired-active live or replay viewer grants;
 - ready image/clip storage counts and bytes as scale context.
 
-Treat `status: "critical"`, any reconciliation mismatch, or any overdue IVS
-cleanup as an operational incident to investigate in the same run. Treat
+Treat `status: "critical"`, any reconciliation mismatch, overdue IVS cleanup,
+or overdue replay finalization/deletion as an operational incident to
+investigate in the same run. Treat
 `status: "attention"` as a required finding, not a decorative warning. The
 server's request-time global Media Energy guardrail defaults to **$40/month**;
 the separate AWS Budget is **$50/month**, leaving provider-billing and shared-
@@ -1848,6 +1855,24 @@ not as photo-only spend.
 Release boundary: `/cli/admin/media-costs/monthly` owns the canonical ledger,
 reconciliation, resource-state checks, and alerts. Deploy and verify that API
 route before publishing or installing the Lumine CLI release that invokes it.
+
+`currentUtcDay.streamAttempts` is a `createdAt` cohort for that UTC day. Its
+outcomes partition every attempt into `endedCount` (reached live, then ended),
+`failedCount` (failed or cleanup-failed), `cancelledCount` (ended before ever
+reaching live), or `inProgressCount`; `reachedLiveCount` is the overlapping
+milestone count. `failureCodeCounts` contains only server-defined codes and
+counts—never usernames, Build ids, titles, viewer identities, or report
+identities. `operations.live.stillActiveOrCleanupPendingCount` and
+`possibleOrphanedCount` are current global counts, not members of the daily
+cohort.
+
+Replay storage and write cost is conservatively embedded in an opted-in
+`live-input` reservation; `replay-viewer` is a separate kind. Report
+`operations.replays` (pending, processing, ready, failed, deleting,
+delete-failed, overdue finalization/deletion, expired-ready, bytes, and object
+count) and `operations.replayViewers` on every run. A replay finalization or
+deletion alert is an operational incident because private recording cleanup is
+part of the feature contract.
 
 ### AWS monthly bill expectation (standing duty, every run)
 
@@ -1883,17 +1908,22 @@ aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
 
 aws ce get-cost-forecast --profile mikey-iam --region us-east-1 \
   --time-period Start=<today-UTC>,End=<next-month-YYYY-MM-01> \
-  --metric UNBLENDED_COST --granularity MONTHLY \
+  --metric UNBLENDED_COST --granularity DAILY \
   --prediction-interval-level 80
 ```
 
 Report the Cost Explorer snapshot date, currency, estimated MTD amount and its
 through-date, plus the returned **remaining-period** forecast mean and 80%
-lower/upper bounds. `GetCostForecast` forecasts exactly its requested
-`Start`-inclusive, `End`-exclusive interval, so calculate the expected
-full-calendar-month mean and bounds by adding completed-day MTD to each returned
-remaining-period value. This split deliberately forecasts the current UTC day
-instead of mixing its incomplete actual into MTD. Label current-month actuals
+lower/upper bounds. Verify that the first and last returned daily periods cover
+exactly the requested `Start`-inclusive, `End`-exclusive interval before doing
+any arithmetic; reject or separately explain a response with expanded or
+missing dates. Calculate the expected full-calendar-month mean and bounds by
+adding completed-day MTD to the sums of the returned daily mean, lower, and
+upper values. Do not use monthly granularity for this mid-month remainder:
+Cost Explorer can return the whole calendar month even when the requested
+start is mid-month, and adding MTD to that result would double-count. This
+split deliberately forecasts the current UTC day instead of mixing its
+incomplete actual into MTD. Label current-month actuals
 when `Estimated` is true, and describe the result as a Cost Explorer expectation
 rather than a final invoice because reporting lags and later credits, refunds,
 taxes, or adjustments can change the bill. If either the forecast or MTD query

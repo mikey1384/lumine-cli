@@ -2,7 +2,7 @@
 
 Version: 1.38.1
 Updated: 2026-08-27
-Generated: 2026-08-27T08:47:07.845Z
+Generated: 2026-08-27T11:02:56.742Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -356,10 +356,12 @@ await Twinkle.sharedDb.addEntry('clips', clip.asset);
 renderBattery(mediaEnergy.energyPercent);
 
 ### Twinkle.live
-- async start({ previewElement?, facingMode?, audio?, durationSeconds?, maxViewers?, requestId? } = {}) | scopes: live:write
-  - Returns: { session: { id, buildId, hostUserId, status, maxViewers, viewersGranted, durationSeconds, updatedAt, hardEndsAt }, mediaEnergy }
-  - Create an ephemeral IVS channel, attach the camera/microphone, begin broadcasting, and return a shareable session ID.
+- async start({ previewElement?, facingMode?, audio?, durationSeconds?, maxViewers?, saveReplay?, requestId? } = {}) | scopes: live:write
+  - Returns: { session: { id, replayId, buildId, hostUserId, status, maxViewers, viewersGranted, durationSeconds, saveReplay, updatedAt, hardEndsAt }, mediaEnergy }
+  - Create an IVS channel, attach the camera/microphone, begin broadcasting, and optionally save a seven-day replay.
   - Call from an explicit viewer action. Twinkle confirms each new broadcast before camera/microphone permission or paid channel creation.
+  - saveReplay defaults to false. When true, the same action confirmation says the stream will be saved, and Twinkle records it to private storage for seven days after it becomes ready.
+  - Replay storage is included in the live Media Energy reservation. Replay viewing has its own Media Energy reservation.
   - previewElement must be a canvas element or selector because the IVS Broadcast SDK draws a composited preview.
   - Free sessions broadcast at 854x480 and are capped server-side at 15 minutes and 10 private viewer grants. Lower durationSeconds/maxViewers values are allowed.
   - Twinkle confirms that a platform-owned live indicator and End stream action are present before returning broadcast credentials to the app, and keeps the control until server cleanup is canonically terminal. Fullscreen and Picture-in-Picture are unavailable while hosting or watching so these safety controls stay visible.
@@ -401,6 +403,44 @@ await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
   - Stop local broadcasting and ask the server to stop and delete the host's ephemeral IVS channel.
   - Use the returned canonical session state. Do not locally synthesize an ended status.
   - Example: await Twinkle.live.stop(sessionId);
+- async listReplays({ limit? } = {}) | scopes: live:read
+  - Returns: Array<LiveReplay>
+  - List canonical saved replays for this Build app.
+  - Ready, unexpired replays are visible to viewers in the app. A creator can also see processing or failed state for their own opted-in stream.
+  - Replays expire seven days after becoming ready. Replace displayed state from this canonical response; do not synthesize processing or ready state locally.
+  - Example: const replays = await Twinkle.live.listReplays({ limit: 20 });
+- async getReplay(replayId) | scopes: live:read
+  - Returns: LiveReplay | null
+  - Load canonical processing, ready, or failed state for a visible replay.
+  - Only the creator can see a processing or failed replay; ready replays are visible to signed-in viewers in this app.
+  - Example: const replay = await Twinkle.live.getReplay(replayId);
+- async watchReplay(replayId, { videoElement, requestId? }) | scopes: live:write
+  - Returns: { replay, viewerGrantId, mediaEnergy, playbackStarted }
+  - Open a short-lived private playback grant and attach a saved replay to an HTML video element.
+  - Call from an explicit viewer action. Twinkle confirms each playback grant before using Media Energy.
+  - Admission reserves the replay's maximum delivery estimate; leave, page close, or playback end settles the canonical elapsed viewing window instead of charging unused playback time.
+  - The grant lasts at most 20 minutes and is settled automatically when playback ends, on leaveReplay(), when the page closes, or at server expiry.
+  - Twinkle displays a platform-owned report-and-remove control while playback is active. Fullscreen and Picture-in-Picture remain unavailable so that control stays visible.
+  - If browser autoplay is blocked, playbackStarted is false and the video controls remain available so the viewer can start playback explicitly.
+  - Example: await Twinkle.live.watchReplay(replay.id, { videoElement: '#replayVideo' });
+- async leaveReplay(replayId) | scopes: live:write
+  - Returns: { success }
+  - Destroy the local replay player and canonically settle its private viewer grant.
+  - The returned canonical settlement charges the conservative elapsed playback estimate, capped by the replay duration.
+  - Example: await Twinkle.live.leaveReplay(replayId);
+- async reportReplay(replayId, { reason, requestId? }) | scopes: live:write
+  - Returns: { report: { id, replayId, reason, createdAt }, replay, cleanupInProgress, mediaEnergy }
+  - Report the replay currently being watched, hide it immediately, and start canonical private-recording deletion.
+  - Twinkle asks for an action-specific confirmation before recording the report and removing the replay.
+  - Reasons are privacy, harassment, explicit-content, violence, dangerous-activity, or other.
+  - The reporter's identity is kept in Twinkle's private moderation record and is never returned to app code.
+  - Use a stable requestId when retrying the same report action, and replace displayed replay/Media Energy only from the canonical response.
+  - Example: await Twinkle.live.reportReplay(replayId, { reason: 'privacy' });
+- async deleteReplay(replayId, { requestId? } = {}) | scopes: live:write
+  - Returns: { replay, cleanupInProgress, mediaEnergy }
+  - Permanently remove an opted-in replay through the canonical private-storage cleanup path.
+  - Twinkle asks for an action-specific confirmation. Use the canonical returned state; cleanupInProgress means provider recording finalization or deletion is still being confirmed.
+  - Example: await Twinkle.live.deleteReplay(replayId);
 
 ### Twinkle.ai
 - async getUsagePolicy() | scopes: none

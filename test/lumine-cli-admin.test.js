@@ -1995,7 +1995,7 @@ test("monthly media costs preserve JSON and surface headroom plus operational al
     status: "success",
     data: {
       monthlyMediaCosts: {
-        schemaVersion: 1,
+        schemaVersion: 3,
         generatedAt: Date.UTC(2026, 7, 27, 6) / 1000,
         timezone: "UTC",
         currency: "USD",
@@ -2005,6 +2005,8 @@ test("monthly media costs preserve JSON and surface headroom plus operational al
           costNature: "conservative_provider_cost_estimate_not_aws_invoice",
           photoStorageAttribution:
             "shared_build_runtime_image_storage_not_capture_only",
+          streamAttemptBasis: "current_utc_day_created_at_cohort",
+          replayStorageCostAttribution: "embedded_in_live_input_reservations",
           awsInvoiceReconciliationRequired: true,
         },
         previousMonth: {
@@ -2056,6 +2058,14 @@ test("monthly media costs preserve JSON and surface headroom plus operational al
               estimatedSpentUsd: 0.001,
               activeReservedUsd: 0,
             }),
+            replayViewer: kind({
+              actionCount: 0,
+              committedCount: 0,
+              activeReservedCount: 0,
+              cancelledCount: 0,
+              estimatedSpentUsd: 0,
+              activeReservedUsd: 0,
+            }),
           },
           reconciliation: {
             consistent: true,
@@ -2073,6 +2083,15 @@ test("monthly media costs preserve JSON and surface headroom plus operational al
           commitmentsSettled: 5,
           cancellationsSettled: 0,
           estimatedCostSettledUsd: 0.023667,
+          streamAttempts: {
+            attemptedCount: 3,
+            reachedLiveCount: 2,
+            endedCount: 1,
+            failedCount: 1,
+            cancelledCount: 0,
+            inProgressCount: 1,
+            failureCodeCounts: [{ code: "ivs_create_unresolved", count: 1 }],
+          },
         },
         overdueReservations: { count: 1, reservedUsd: 0.003 },
         operations: {
@@ -2090,8 +2109,27 @@ test("monthly media costs preserve JSON and surface headroom plus operational al
             cleanupFailedCount: 0,
             costBearingChannelCount: 1,
             cleanupOverdueCount: 0,
+            stillActiveOrCleanupPendingCount: 1,
+            possibleOrphanedCount: 0,
           },
           viewers: { activeGrantCount: 1, expiredActiveGrantCount: 0 },
+          replays: {
+            pendingCount: 0,
+            processingCount: 0,
+            readyCount: 1,
+            failedCount: 0,
+            deletePendingCount: 0,
+            deleteFailedCount: 0,
+            expiredReadyCount: 0,
+            finalizationOverdueCount: 0,
+            deletionOverdueCount: 0,
+            storedBytes: 262144,
+            storedObjectCount: 15,
+          },
+          replayViewers: {
+            activeGrantCount: 1,
+            expiredActiveGrantCount: 0,
+          },
           runtimeStorage: {
             readyImages: { assetCount: 4, totalBytes: 122880 },
             readyClips: { assetCount: 2, totalBytes: 262144 },
@@ -2143,7 +2181,24 @@ test("monthly media costs preserve JSON and surface headroom plus operational al
     humanResult.stdout,
     /2026-08-27 so far: 6 action\(s\) reserved, 5 committed.*\$0\.023667 settled estimate/,
   );
+  assert.match(
+    humanResult.stdout,
+    /Stream attempts created 2026-08-27 UTC: 3 attempted \/ 2 reached live \/ 1 ended after live \/ 1 failed \/ 0 cancelled before live \/ 1 still in progress/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /Stream failure codes: ivs_create_unresolved=1/,
+  );
+  assert.match(
+    humanResult.stdout,
+    /1 active-or-cleanup-pending.*0 possible orphan\(s\)/,
+  );
   assert.match(humanResult.stdout, /Ledger reconciliation: consistent/);
+  assert.match(humanResult.stdout, /Replay viewers: 0 action\(s\)/);
+  assert.match(
+    humanResult.stdout,
+    /Replays: 0 pending \/ 0 processing \/ 1 ready[\s\S]*256 KB across 15 canonical object\(s\)/,
+  );
   assert.match(
     humanResult.stdout,
     /Media-cost alert \[WARNING\] media_reservations_overdue/,
@@ -2161,6 +2216,21 @@ test("existing public command parsing is unaffected", () => {
   const save = parseArgs(["save", "--publish"]);
   assert.equal(save.command, "save");
   assert.equal(save.publish, true);
+});
+
+test("management cost guidance prevents mid-month forecast double counting", () => {
+  const guide = fs.readFileSync(
+    fileURLToPath(new URL("../sdk/LUMINE_ADMIN.md", import.meta.url)),
+    "utf8",
+  );
+  const forecastStart = guide.indexOf("aws ce get-cost-forecast");
+  const forecastEnd = guide.indexOf("```", forecastStart);
+  const forecastCommand = guide.slice(forecastStart, forecastEnd);
+  assert.match(forecastCommand, /--granularity DAILY/);
+  assert.doesNotMatch(forecastCommand, /--granularity MONTHLY/);
+  assert.match(guide, /returned daily periods cover[\s\S]*?requested `Start`/);
+  assert.match(guide, /would double-count/);
+  assert.match(guide, /failureCodeCounts[\s\S]*?never usernames/);
 });
 
 async function createFixtureServer(
