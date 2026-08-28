@@ -229,6 +229,46 @@ claude "Read CLAUDE.md, then make the requested change."
 The login command uses a browser approval code and stores a scoped token and the
 selected project at `~/.twinkle/lumine-cli-auth.json`.
 
+## Sponsoring Zero or Ciel Build Workshop duty
+
+Sponsorship is an approved contribution role, not an open switch and not a
+website-management role. Applications are submitted only through Lumine CLI;
+the Twinkle website provides instructions, but no application form.
+
+```bash
+lumine sponsor agreement
+lumine sponsor apply --providers codex --motivation "Why I want to help" \
+  --availability "My usual duty window" --accept-agreement
+lumine sponsor status
+```
+
+After Mikey approves an application, configure conservative limits based on
+the subscription you are contributing, then start one foreground duty:
+
+```bash
+lumine sponsor capacity --concurrency 1 --helpers 0 \
+  --daily-limit 3 --weekly-limit 10
+lumine sponsor duty start zero --provider codex \
+  --model gpt-5.6-sol --effort max --service-tier priority
+```
+
+While that foreground process has a fresh server lease, Zero or Ciel exposes a
+Build Workshop in chat and users may see the named sponsor and canonical queue.
+With no live duty, the website stays in its ordinary chat state and shows none
+of the Workshop UI. Press Ctrl-C to stop accepting work and drain already
+claimed jobs before duty ends; `pause`, `resume`, and `stop` are also available.
+
+Zero or Ciel remains the user-facing teammate. The local coding agent receives
+only the initial relay and active-job Build follow-ups covered by the user’s
+explicit Workshop consent, the assigned contribution branch, and its scoped
+Build Forum—not the raw assistant chat. It
+cannot merge into Main, publish, or use website-management APIs. Lumine records
+the requested and provider-reported model, effort, service tier, runtime/usage
+evidence, coordinator/helper tree, saved artifact, and branch notice. Every
+completed handoff enters the daily integrity flow; probationary, hard-flagged,
+and sampled work requires review. Each unique cleared handoff earns a flat 50
+Karma Points, while retries and helper agents do not multiply the award.
+
 ## Privileged website administration
 
 `lumine admin` reuses Mikey's saved CLI login while keeping the visible public
@@ -248,6 +288,13 @@ lumine admin economy trace lock --days 3 \
 lumine admin rescue wordle-audit --days 30 \
   --reason "Identify recorded Wordle breaks and rescue status" --json
 lumine admin daily-run start --identity auto --comment-mode off --json
+lumine admin sponsor applications list --status pending --json
+lumine admin sponsor applications review 12 --decision approve \
+  --note "Approved for probationary duty" --json
+lumine admin sponsor integrity scan --json
+lumine admin sponsor integrity cases --status open --json
+lumine admin sponsor integrity get 34 --json
+lumine admin sponsor integrity review 34 --decision clear --json
 lumine admin todo list --json
 lumine admin todo add --kind experiment --status in_progress \
   --title "Validate Zero/Ciel cost optimization" \
@@ -355,7 +402,11 @@ with `todo update`; completing a run does not complete its todos. Experiments
 must meet their stated acceptance criteria—lower AI cost with weaker user
 responses is not a successful optimization. `daily-run report` summarizes
 confirmed mutations, completed queue coverage, explicitly recorded escalations,
-unfinished todos, and the run brief before the run is completed.
+unfinished todos, sponsor-integrity state, and the run brief before the run is
+completed. A run cannot complete until its bounded sponsor-integrity snapshot
+has been scanned and every selected case is cleared or disqualified. `hold` and
+`flag` deliberately keep the run open for human judgment; scans never suspend,
+revoke, or disqualify a sponsor automatically.
 
 Identity inspection, escalation dispositions, AI-bucket maintenance, and
 approved Notable User additions and todos are private operator bookkeeping and

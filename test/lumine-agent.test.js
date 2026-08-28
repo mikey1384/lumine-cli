@@ -67,7 +67,9 @@ test("agent request size is rejected locally before authentication", async () =>
   const requestLimit = source.indexOf(
     "userMessage.length > MAX_AGENT_REQUEST_LENGTH",
   );
-  const authentication = source.indexOf("const auth = await resolveAuth(options)");
+  const authentication = source.indexOf(
+    "const auth = await resolveAuth(options)",
+  );
   assert.ok(requestLimit >= 0 && authentication > requestLimit);
   assert.match(source, /const MAX_AGENT_REQUEST_LENGTH = 20_000/);
 });
@@ -136,9 +138,7 @@ test("tool session applies only the project snapshot returned by Lumine and reco
     runtime: { maxToolRounds: 1, phase: "implementation" },
     traceFile,
     provider: "codex",
-    initialFiles: [
-      { path: "/index.html", content: "<main>SECRET old</main>" },
-    ],
+    initialFiles: [{ path: "/index.html", content: "<main>SECRET old</main>" }],
   });
   const output = await session.call("edit_project_file", {
     path: "/index.html",
@@ -160,15 +160,12 @@ test("tool session applies only the project snapshot returned by Lumine and reco
   );
   assert.deepEqual(events[1].changedPaths, ["/index.html"]);
   for (let call = 2; call <= 8; call += 1) {
-    const withinHostedRoundAllowance = await session.call(
-      "edit_project_file",
-      {
-        path: "/index.html",
-        old_string: "unused",
-        new_string: `unused-${call}`,
-        replace_all: false,
-      },
-    );
+    const withinHostedRoundAllowance = await session.call("edit_project_file", {
+      path: "/index.html",
+      old_string: "unused",
+      new_string: `unused-${call}`,
+      replace_all: false,
+    });
     assert.equal(withinHostedRoundAllowance.ok, true);
   }
   const overCallSafetyCeiling = await session.call("edit_project_file", {});
@@ -313,9 +310,7 @@ test("tool snapshots cannot write through a workspace symlink", async (t) => {
     runtime: { maxToolRounds: 1, phase: "implementation" },
     traceFile: path.join(dir, "trace.jsonl"),
     provider: "codex",
-    initialFiles: [
-      { path: "/index.html", content: "<main>safe</main>" },
-    ],
+    initialFiles: [{ path: "/index.html", content: "<main>safe</main>" }],
   });
 
   await assert.rejects(
@@ -351,15 +346,21 @@ input.on("line", (line) => {
   const message = JSON.parse(line);
   if (message.method === "initialize") {
     if (message.params?.capabilities?.experimentalApi !== true) process.exit(4);
-    send({ id: message.id, result: {} });
+    send({ id: message.id, result: { userAgent: "codex-cli/1.2.3" } });
   }
-  if (message.method === "thread/start") send({ jsonrpc: "2.0", id: message.id, result: { thread: { id: "thread-1" } } });
+  if (message.method === "thread/start") {
+    if (message.params?.model !== "gpt-5.6" || message.params?.serviceTier !== "priority") process.exit(5);
+    send({ jsonrpc: "2.0", id: message.id, result: { thread: { id: "thread-1" }, model: "gpt-5.6", reasoningEffort: "medium", serviceTier: "priority" } });
+  }
   if (message.method === "mcpServerStatus/list") send({ id: message.id, result: { data: [], nextCursor: null } });
   if (message.method === "turn/start") {
+    if (message.params?.effort !== "max") process.exit(6);
     send({ jsonrpc: "2.0", id: message.id, result: { turn: { id: "turn-1" } } });
+    send({ jsonrpc: "2.0", method: "thread/settings/updated", params: { threadId: "thread-1", threadSettings: { model: "gpt-5.6-sol", effort: "max", serviceTier: "priority" } } });
     send({ jsonrpc: "2.0", id: 91, method: "item/tool/call", params: { tool: "read_project_files", arguments: { paths: ["/index.html"] } } });
   }
   if (message.id === 91 && !message.method) {
+    send({ jsonrpc: "2.0", method: "thread/tokenUsage/updated", params: { threadId: "thread-1", turnId: "turn-1", tokenUsage: { last: { inputTokens: 120, outputTokens: 30 } } } });
     send({ jsonrpc: "2.0", method: "item/completed", params: { item: { type: "agentMessage", text: "Changed through Lumine." } } });
     send({ jsonrpc: "2.0", method: "turn/completed", params: { turn: { status: "completed", error: null } } });
   }
@@ -370,7 +371,12 @@ input.on("line", (line) => {
   await fs.chmod(fakeCodex, 0o755);
   const calls = [];
   const result = await runCodexAgentPass({
-    options: { providerPath: fakeCodex, model: "", agentEffort: "" },
+    options: {
+      providerPath: fakeCodex,
+      model: "gpt-5.6",
+      agentEffort: "max",
+      serviceTier: "priority",
+    },
     runtime: {
       systemPrompt: "Lumine system",
       initialPrompt: "Do the work",
@@ -392,6 +398,14 @@ input.on("line", (line) => {
     isolationDir: dir,
   });
   assert.equal(result.finalText, "Changed through Lumine.");
+  assert.deepEqual(result.provenance, {
+    resolvedModel: "gpt-5.6-sol",
+    resolvedEffort: "max",
+    resolvedServiceTier: "priority",
+    runtimeVersion: "codex-cli/1.2.3",
+    evidenceTier: "runtime_observed",
+    usage: { inputTokens: 120, outputTokens: 30 },
+  });
   assert.deepEqual(calls, [
     {
       name: "read_project_files",
@@ -401,14 +415,17 @@ input.on("line", (line) => {
 });
 
 test("Claude Code adapter uses the selected local subscription CLI", async (t) => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-claude-adapter-"));
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-claude-adapter-"),
+  );
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const fakeClaude = path.join(dir, "fake-claude");
   await fs.writeFile(
     fakeClaude,
     `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Worked through MCP." }] } }) + "\\n");
-process.stdout.write(JSON.stringify({ type: "result", result: "Worked through MCP." }) + "\\n");
+process.stdout.write(JSON.stringify({ type: "system", subtype: "init", claude_code_version: "2.1.0" }) + "\\n");
+process.stdout.write(JSON.stringify({ type: "assistant", message: { model: "claude-opus-5", effort: "high", usage: { input_tokens: 80 }, content: [{ type: "text", text: "Worked through MCP." }] } }) + "\\n");
+process.stdout.write(JSON.stringify({ type: "result", result: "Worked through MCP.", service_tier: "subscription", usage: { output_tokens: 20 } }) + "\\n");
 `,
     { mode: 0o755 },
   );
@@ -437,6 +454,14 @@ process.stdout.write(JSON.stringify({ type: "result", result: "Worked through MC
     },
   });
   assert.equal(result.finalText, "Worked through MCP.");
+  assert.deepEqual(result.provenance, {
+    resolvedModel: "claude-opus-5",
+    resolvedEffort: "high",
+    resolvedServiceTier: "subscription",
+    runtimeVersion: "2.1.0",
+    evidenceTier: "provider_reported",
+    usage: { input_tokens: 80, output_tokens: 20 },
+  });
 });
 
 test("Claude Code loop review excludes inherited tools and MCP servers", async (t) => {
@@ -570,9 +595,7 @@ test("agent command completes the Lumine tool-validation-save pipeline without a
       assert.deepEqual(body.readPaths, ["/index.html"]);
       return res.end(
         JSON.stringify({
-          projectFiles: [
-            { path: "/index.html", content: "<main>new</main>" },
-          ],
+          projectFiles: [{ path: "/index.html", content: "<main>new</main>" }],
           readPaths: ["/index.html"],
           output: { ok: true, path: "/index.html" },
         }),
@@ -610,7 +633,9 @@ test("agent command completes the Lumine tool-validation-save pipeline without a
       );
     }
     res.statusCode = 404;
-    return res.end(JSON.stringify({ error: `Unhandled ${req.method} ${req.url}` }));
+    return res.end(
+      JSON.stringify({ error: `Unhandled ${req.method} ${req.url}` }),
+    );
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -620,10 +645,7 @@ test("agent command completes the Lumine tool-validation-save pipeline without a
   const authFile = path.join(metadataDir, "auth.json");
   await fs.mkdir(metadataDir);
   await fs.writeFile(path.join(dir, "index.html"), "<main>old</main>");
-  await fs.writeFile(
-    authFile,
-    JSON.stringify({ token: "test-token", apiUrl }),
-  );
+  await fs.writeFile(authFile, JSON.stringify({ token: "test-token", apiUrl }));
   await fs.writeFile(
     path.join(metadataDir, "lumine-project.json"),
     JSON.stringify({
@@ -716,9 +738,7 @@ input.on("line", (line) => {
     "<main>canonical</main>",
   );
   assert.equal(
-    requests.some((request) =>
-      String(request.url).includes("build_generate"),
-    ),
+    requests.some((request) => String(request.url).includes("build_generate")),
     false,
   );
 });

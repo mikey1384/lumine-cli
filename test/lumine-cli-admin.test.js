@@ -3307,3 +3307,50 @@ test("--unviewed and --viewed parse as boolean flags", () => {
   assert.equal(parsed.adminViewed, false);
   assert.equal(parsed.json, true);
 });
+
+test("sponsor administration commands preserve their audited targets and decisions", () => {
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "sponsor",
+        "applications",
+        "review",
+        "12",
+        "--decision",
+        "approve",
+        "--note",
+        "Probationary approval",
+      ]),
+    ),
+    {
+      name: "sponsor.application.review",
+      method: "POST",
+      path: "/cli/admin/sponsors/applications/12/review",
+      body: { decision: "approve", note: "Probationary approval" },
+      mutates: true,
+    },
+  );
+
+  const integrityReview = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "sponsor",
+      "integrity",
+      "review",
+      "34",
+      "--decision",
+      "disqualify",
+      "--note",
+      "Artifact mismatch",
+    ]),
+  );
+  assert.equal(
+    integrityReview.path,
+    "/cli/admin/daily-runs/sponsor-integrity/cases/34/review",
+  );
+  assert.deepEqual(integrityReview.body, {
+    decision: "disqualify",
+    note: "Artifact mismatch",
+  });
+});

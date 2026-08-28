@@ -636,6 +636,40 @@ type DailyRunComplete = Success<{
 type DailyRunFail = DailyRunComplete;
 ```
 
+### Build Workshop sponsor applications and integrity
+
+This is the approved Zero/Ciel Build Workshop sponsor role, not the ordinary
+AI Energy sponsor flow. Applications originate only from `lumine sponsor`.
+Website-management agents review them inside an active daily run:
+
+```bash
+lumine admin sponsor applications list --status pending --json
+lumine admin sponsor applications review 12 --decision approve \
+  --note "Approved for probationary duty" --json
+lumine admin sponsor status set 45 --status trusted \
+  --note "Cleared probationary handoffs" --json
+lumine admin sponsor integrity scan --json
+lumine admin sponsor integrity cases --status open --json
+lumine admin sponsor integrity get 34 --json
+lumine admin sponsor integrity review 34 --decision clear --json
+```
+
+Run `sponsor integrity scan` until its bounded snapshot reaches
+`awaiting_review` or `completed`. Every pending completed handoff receives the
+deterministic checks. Probationary work, hard-flagged evidence, and a stable
+random sample become review cases; clean trusted work outside the sample is
+cleared automatically. A case includes the approved structured relay, canonical
+artifact snapshot, branch-notice evidence, and requested/resolved provider,
+model, effort, service-tier, runtime, usage, and agent-tree records. It never
+includes raw Zero/Ciel chat.
+
+`clear` qualifies that unique handoff for its flat 50 KP award;
+`disqualify` makes it ineligible. `hold` and `flag` require an evidence note and
+remain open. The scan itself never changes sponsor status or applies a sanction.
+Use the separate, audited `sponsor status set` command for an explicit human
+decision. `daily-run complete` is rejected until the scan has covered its full
+snapshot and no pending, held, or flagged case remains.
+
 Record only qualifying escalations as they are confirmed. `daily-run report`
 then composes the active run's canonical audit events, successful mutations,
 completed queue scans, recorded escalations, and the most useful brief deltas
