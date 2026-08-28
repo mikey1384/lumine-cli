@@ -794,13 +794,19 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   );
 });
 
-test("ending a failed job preserves its unfinished workspace", async (t) => {
+test("ending a failed job preserves work but removes its credential", async (t) => {
   const tmpDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "lumine-sponsor-failed-job-test-"),
   );
   const authFile = path.join(tmpDir, "auth.json");
+  const jobAuthFile = path.join(tmpDir, "job-auth.json");
   const workspaceDir = path.join(tmpDir, "unfinished-workspace");
   await fs.mkdir(workspaceDir);
+  await fs.writeFile(
+    jobAuthFile,
+    JSON.stringify({ token: "failed-workspace-access" }),
+    { mode: 0o600 },
+  );
   await fs.writeFile(
     path.join(workspaceDir, "index.html"),
     "<!doctype html><title>Unfinished work</title>",
@@ -868,6 +874,8 @@ test("ending a failed job preserves its unfinished workspace", async (t) => {
           leaseExpiresAt: 220,
           workspaceDir,
           tempDir: tmpDir,
+          authFile: jobAuthFile,
+          workspaceToken: null,
         },
       },
       preservedWorkspaces: [],
@@ -903,6 +911,149 @@ test("ending a failed job preserves its unfinished workspace", async (t) => {
     await fs.readFile(path.join(workspaceDir, "index.html"), "utf8"),
     "<!doctype html><title>Unfinished work</title>",
   );
+  await assert.rejects(fs.stat(jobAuthFile), { code: "ENOENT" });
+});
+
+test("stopping duty archives recoverable work without credentials", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-stop-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const jobTempDir = path.join(tmpDir, "lumine-zero-job-9-stopped");
+  const workspaceDir = path.join(jobTempDir, "workspace");
+  const jobAuthFile = path.join(jobTempDir, "job-auth.json");
+  const legacyJobTempDir = path.join(tmpDir, "lumine-ciel-job-8-preserved");
+  const legacyWorkspaceDir = path.join(legacyJobTempDir, "workspace");
+  const legacyJobAuthFile = path.join(legacyJobTempDir, "job-auth.json");
+  await fs.mkdir(workspaceDir, { recursive: true });
+  await fs.mkdir(legacyWorkspaceDir, { recursive: true });
+  await fs.writeFile(
+    path.join(workspaceDir, "index.html"),
+    "<!doctype html><title>Recoverable work</title>",
+    "utf8",
+  );
+  await fs.writeFile(
+    jobAuthFile,
+    JSON.stringify({ token: "archived-job-auth-token" }),
+    { mode: 0o600 },
+  );
+  await fs.writeFile(
+    path.join(legacyWorkspaceDir, "index.html"),
+    "<!doctype html><title>Previously preserved work</title>",
+    "utf8",
+  );
+  await fs.writeFile(
+    legacyJobAuthFile,
+    JSON.stringify({ token: "legacy-preserved-job-auth-token" }),
+    { mode: 0o600 },
+  );
+  const duty = canonicalDuty();
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/sponsor/status") {
+      res.end(JSON.stringify({ duties: [duty] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/state") {
+      assert.equal(body.dutySessionId, duty.id);
+      assert.equal(body.state, "stopped");
+      res.end(JSON.stringify({ duty: { ...duty, state: "stopped" } }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const environment = codexEnvironment("stopped-job-owner-session");
+  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  await fs.writeFile(
+    statePath,
+    JSON.stringify({
+      version: 1,
+      apiUrl,
+      sponsorUserId: 5,
+      operatorSession: detectSponsorAgentSession({
+        environment,
+        ancestry: { codex: null, claude: null },
+      }),
+      duty: { ...duty, leaseToken: "archived-duty-lease" },
+      jobs: {
+        9: {
+          job: { id: 9, status: "working" },
+          attempt: {
+            id: 11,
+            number: 1,
+            token: "archived-attempt-token",
+          },
+          workspaceToken: {
+            accessToken: "archived-workspace-token",
+            expiresAt: 7200,
+          },
+          workspaceDir,
+          tempDir: jobTempDir,
+          authFile: jobAuthFile,
+        },
+      },
+      preservedWorkspaces: [
+        {
+          jobId: 8,
+          workspaceDir: legacyWorkspaceDir,
+          reason: "Previously preserved by Lumine 0.2.58",
+          preservedAt: new Date().toISOString(),
+        },
+      ],
+    }),
+    { mode: 0o600 },
+  );
+
+  const stopped = await runCli(
+    [
+      "sponsor",
+      "duty",
+      "stop",
+      "--json",
+      "--api-url",
+      apiUrl,
+      "--auth-file",
+      authFile,
+      "--no-update-check",
+    ],
+    { environment },
+  );
+
+  assert.equal(stopped.code, 0, stopped.stderr);
+  const archivePath = JSON.parse(stopped.stdout).localArchive;
+  const archiveText = await fs.readFile(archivePath, "utf8");
+  const archived = JSON.parse(archiveText);
+  assert.equal(archived.duty.leaseToken, null);
+  assert.equal(archived.jobs["9"].attempt.token, null);
+  assert.equal(archived.jobs["9"].workspaceToken, null);
+  assert.equal(archived.jobs["9"].authFile, null);
+  assert(archived.jobs["9"].credentialsRemovedAt);
+  assert(archived.preservedWorkspaces[0].credentialsRemovedAt);
+  assert.doesNotMatch(
+    archiveText,
+    /archived-duty-lease|archived-attempt-token|archived-workspace-token|archived-job-auth-token|legacy-preserved-job-auth-token/,
+  );
+  assert.equal(
+    await fs.readFile(path.join(workspaceDir, "index.html"), "utf8"),
+    "<!doctype html><title>Recoverable work</title>",
+  );
+  await assert.rejects(fs.stat(jobAuthFile), { code: "ENOENT" });
+  assert.equal(
+    await fs.readFile(path.join(legacyWorkspaceDir, "index.html"), "utf8"),
+    "<!doctype html><title>Previously preserved work</title>",
+  );
+  await assert.rejects(fs.stat(legacyJobAuthFile), { code: "ENOENT" });
+  await assert.rejects(fs.stat(statePath), { code: "ENOENT" });
 });
 
 function canonicalDuty() {
