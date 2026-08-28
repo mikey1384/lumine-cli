@@ -243,13 +243,16 @@ lumine sponsor status
 ```
 
 After Mikey approves an application, configure conservative limits based on
-the subscription you are contributing, then start one shared foreground duty:
+the subscription you are contributing. From the Codex or Claude Code session
+that will personally monitor and perform the work, start one shared duty and
+keep renewing its short watch:
 
 ```bash
 lumine sponsor capacity --concurrency 1 --helpers 0 \
   --daily-limit 3 --weekly-limit 10
 lumine sponsor duty start --provider codex \
   --model gpt-5.6-sol --effort max --service-tier priority
+lumine sponsor duty watch --json
 ```
 
 Sponsor commands use the same browser-approval login as the rest of Lumine.
@@ -258,21 +261,54 @@ using that browser to approve their own account, and then resumes. Any Twinkle
 account may authenticate this way, but login never grants sponsor duty:
 `sponsor duty start` still requires that exact account to have a canonical,
 server-approved sponsor profile.
+When the sponsor agreement changes, an already-approved sponsor must read the
+new version and explicitly renew it before opening duty:
 
-While that foreground process has a fresh server lease, both Zero and Ciel can
-delegate user-approved Build work to the shared worker pool. The user chooses
-the assistant for each request, and may see the named sponsor and canonical
-shared queue.
-With no live duty, the website stays in its ordinary chat state and shows none
-of the Workshop UI. Press Ctrl-C to stop accepting work and drain already
-claimed jobs before duty ends; `pause`, `resume`, and `stop` are also available
-without a Zero/Ciel argument.
+```bash
+lumine sponsor agreement
+lumine sponsor agreement accept --accept-agreement
+```
 
-Zero or Ciel remains the user-facing teammate. The local coding agent receives
-only the initial relay and active-job Build follow-ups covered by the user’s
-explicit Workshop consent, the assigned contribution branch, and its scoped
-Build Forum—not the raw assistant chat. It
-cannot merge into Main, publish, or use website-management APIs. Lumine records
+Each `duty watch` is deliberately bounded. The same agent session runs it again
+to remain present. If that session stops checking in, its short server lease
+expires and the Workshop no longer advertises it as available. A detached
+heartbeat, supervisor, or provider-spawning daemon is not sponsor duty. The CLI
+rejects a provider name that differs from the agent session actually running
+the command.
+
+When a user approves a plan, `duty watch` returns the scoped assignment file and
+contribution workspace to that same session. It does not launch a fresh Codex
+or Claude process. The on-duty agent uses this explicit lifecycle while it
+works:
+
+```bash
+lumine sponsor job begin 42
+lumine sponsor job pulse 42
+lumine sponsor job relay-applied 42 101
+lumine sponsor job complete 42 --summary "Implemented and tested the approved change"
+```
+
+`pulse` renews the duty/job leases and returns any newly approved follow-up.
+Run it between substantial work steps. `relay-applied` is an explicit receipt;
+completion is rejected until every delivered relay has actually been applied
+and acknowledged. Use `helper-start` and `helper-complete` to record native
+same-session subagents within the configured helper limit—the CLI records them
+but never spawns a replacement provider. Use `job fail --reason` for a real
+terminal failure, and `duty pause|resume|stop` to control admission.
+If the provider reroutes the session after duty starts, report the actual
+runtime on `helper-complete` or `job complete` with `--resolved-model`,
+`--resolved-effort`, and (when applicable) `--resolved-service-tier`.
+
+Both Zero and Ciel delegate to this shared capacity. The user chooses the
+visible assistant for each request and may see the named sponsor and canonical
+queue. With no live duty, the website stays in its ordinary chat state and
+shows none of the Workshop UI.
+
+Zero or Ciel remains the user-facing teammate. The on-duty agent session
+receives only the initial relay and active-job Build follow-ups covered by the
+user’s explicit Workshop consent, the assigned contribution branch, and its
+scoped Build Forum—not the raw assistant chat. It cannot merge into Main,
+publish, or use website-management APIs. Lumine records
 the requested and provider-reported model, effort, service tier, runtime/usage
 evidence, coordinator/helper tree, saved artifact, and branch notice. Every
 completed handoff enters the daily integrity flow; probationary, hard-flagged,
