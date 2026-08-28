@@ -229,7 +229,7 @@ claude "Read CLAUDE.md, then make the requested change."
 The login command uses a browser approval code and stores a scoped token and the
 selected project at `~/.twinkle/lumine-cli-auth.json`.
 
-## Sponsoring Zero or Ciel Build Workshop duty
+## Sponsoring shared Zero and Ciel Build Workshop help
 
 Sponsorship is an approved contribution role, not an open switch and not a
 website-management role. Applications are submitted only through Lumine CLI;
@@ -243,12 +243,12 @@ lumine sponsor status
 ```
 
 After Mikey approves an application, configure conservative limits based on
-the subscription you are contributing, then start one foreground duty:
+the subscription you are contributing, then start one shared foreground duty:
 
 ```bash
 lumine sponsor capacity --concurrency 1 --helpers 0 \
   --daily-limit 3 --weekly-limit 10
-lumine sponsor duty start zero --provider codex \
+lumine sponsor duty start --provider codex \
   --model gpt-5.6-sol --effort max --service-tier priority
 ```
 
@@ -259,11 +259,14 @@ account may authenticate this way, but login never grants sponsor duty:
 `sponsor duty start` still requires that exact account to have a canonical,
 server-approved sponsor profile.
 
-While that foreground process has a fresh server lease, Zero or Ciel exposes a
-Build Workshop in chat and users may see the named sponsor and canonical queue.
+While that foreground process has a fresh server lease, both Zero and Ciel can
+delegate user-approved Build work to the shared worker pool. The user chooses
+the assistant for each request, and may see the named sponsor and canonical
+shared queue.
 With no live duty, the website stays in its ordinary chat state and shows none
 of the Workshop UI. Press Ctrl-C to stop accepting work and drain already
-claimed jobs before duty ends; `pause`, `resume`, and `stop` are also available.
+claimed jobs before duty ends; `pause`, `resume`, and `stop` are also available
+without a Zero/Ciel argument.
 
 Zero or Ciel remains the user-facing teammate. The local coding agent receives
 only the initial relay and active-job Build follow-ups covered by the user’s
@@ -273,8 +276,9 @@ cannot merge into Main, publish, or use website-management APIs. Lumine records
 the requested and provider-reported model, effort, service tier, runtime/usage
 evidence, coordinator/helper tree, saved artifact, and branch notice. Every
 completed handoff enters the daily integrity flow; probationary, hard-flagged,
-and sampled work requires review. Each unique cleared handoff earns a flat 50
-Karma Points, while retries and helper agents do not multiply the award.
+and sampled work requires review. Each unique cleared contribution to another
+user earns a flat 50 Karma Points, while self-sponsored testing, retries, and
+helper agents do not earn or multiply the award.
 
 ## Privileged website administration
 

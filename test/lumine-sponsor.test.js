@@ -36,7 +36,6 @@ test("sponsor application and duty flags remain distinct from admin controls", (
     "sponsor",
     "duty",
     "start",
-    "ciel",
     "--provider",
     "codex",
     "--model",
@@ -46,7 +45,7 @@ test("sponsor application and duty flags remain distinct from admin controls", (
     "--service-tier",
     "priority",
   ]);
-  assert.deepEqual(duty.sponsorArgs, ["duty", "start", "ciel"]);
+  assert.deepEqual(duty.sponsorArgs, ["duty", "start"]);
   assert.equal(duty.provider, "codex");
   assert.equal(duty.model, "gpt-5.6-sol");
   assert.equal(duty.sponsorEffort, "max");
@@ -179,7 +178,6 @@ test("duty start can authenticate any account without granting it sponsor author
     "sponsor",
     "duty",
     "start",
-    "ciel",
     "--json",
     "--api-url",
     apiUrl,
@@ -194,11 +192,30 @@ test("duty start can authenticate any account without granting it sponsor author
   );
   assert.equal(requests.length, 0);
 
-  const result = await runCli([
+  const legacyPersonaResult = await runCli([
     "sponsor",
     "duty",
     "start",
     "ciel",
+    "--provider",
+    "claude-code",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-open",
+  ]);
+  assert.equal(legacyPersonaResult.code, 1);
+  assert.match(
+    legacyPersonaResult.stderr,
+    /Sponsor duty is shared by Zero and Ciel/,
+  );
+  assert.equal(requests.length, 0);
+
+  const result = await runCli([
+    "sponsor",
+    "duty",
+    "start",
     "--provider",
     "claude-code",
     "--api-url",
@@ -259,6 +276,10 @@ test("graceful duty shutdown keeps leases alive and applies only relays in each 
     source,
     /const confirmedDuty = \(status\?\.duties \|\| \[\]\)\.find[\s\S]*?confirmedDuty\?\.state === "stopped"/,
   );
+  assert.match(source, /scope: "shared"/);
+  assert.match(source, /path: "\/duty\/state"/);
+  assert.match(source, /const persona = normalizeJobPersona\(job\?\.persona\)/);
+  assert.doesNotMatch(source, /path: `\/duty\/\$\{persona\}\/state`/);
   assert.match(
     source,
     /const initialRelays = Array\.from\(relayById\.values\(\)\);[\s\S]*?acknowledgeRelaysApplied\(\{[\s\S]*?relays: initialRelays,[\s\S]*?appliedRelayIds,/,

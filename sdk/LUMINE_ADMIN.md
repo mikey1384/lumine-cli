@@ -663,7 +663,9 @@ artifact snapshot, branch-notice evidence, and requested/resolved provider,
 model, effort, service-tier, runtime, usage, and agent-tree records. It never
 includes raw Zero/Ciel chat.
 
-`clear` qualifies that unique handoff for its flat 50 KP award;
+`clear` qualifies a contribution to another user for its flat 50 KP award;
+self-sponsored testing remains ineligible even when its integrity evidence is
+cleared.
 `disqualify` makes it ineligible. `hold` and `flag` require an evidence note and
 remain open. The scan itself never changes sponsor status or applies a sanction.
 Use the separate, audited `sponsor status set` command for an explicit human
