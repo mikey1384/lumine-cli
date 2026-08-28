@@ -276,6 +276,14 @@ test("graceful duty shutdown keeps leases alive and applies only relays in each 
     source,
     /const confirmedDuty = \(status\?\.duties \|\| \[\]\)\.find[\s\S]*?confirmedDuty\?\.state === "stopped"/,
   );
+  assert.match(
+    source,
+    /function isRetryableSponsorDutyRequestError[\s\S]*?status === 408[\s\S]*?status === 425[\s\S]*?status === 429[\s\S]*?status >= 500/,
+  );
+  assert.match(
+    source,
+    /path: "\/jobs\/claim"[\s\S]*?catch \(error\) \{\s*if \(!isRetryableSponsorDutyRequestError\(error\)\) \{\s*dutyLeaseError = error;\s*stopRequested = true;/,
+  );
   assert.match(source, /scope: "shared"/);
   assert.match(source, /path: "\/duty\/state"/);
   assert.match(source, /const persona = normalizeJobPersona\(job\?\.persona\)/);
@@ -336,12 +344,135 @@ test("graceful duty shutdown keeps leases alive and applies only relays in each 
   );
 });
 
+test("sponsor duty survives transient claim and heartbeat transport failures", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-recovery-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  let claimCount = 0;
+  let heartbeatFailed = false;
+  let statusFailed = false;
+  let confirmRecovery;
+  const recovered = new Promise((resolve) => {
+    confirmRecovery = resolve;
+  });
+  const duty = {
+    id: 4,
+    sponsorUserId: 5,
+    scope: "shared",
+    state: "active",
+    provider: "codex",
+    requestedModel: null,
+    requestedEffort: null,
+    requestedServiceTier: null,
+    capacity: {
+      maxConcurrentTasks: 1,
+      maxSubagentsPerTask: 0,
+      dailyTaskLimit: 3,
+      weeklyTaskLimit: 10,
+    },
+  };
+  const server = http.createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
+      res.end(
+        JSON.stringify({
+          duty,
+          leaseToken: "duty-lease",
+          heartbeatEverySeconds: 10,
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/claim") {
+      claimCount += 1;
+      if (claimCount === 1) {
+        req.socket.destroy();
+        return;
+      }
+      if (heartbeatFailed && statusFailed) confirmRecovery();
+      res.end(JSON.stringify({ job: null }));
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/duty/4/heartbeat"
+    ) {
+      heartbeatFailed = true;
+      req.socket.destroy();
+      return;
+    }
+    if (req.method === "GET" && req.url === "/cli/sponsor/status") {
+      statusFailed = true;
+      req.socket.destroy();
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/state") {
+      res.end(JSON.stringify({ duty: { ...duty, state: "paused" } }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  let cliProcess = null;
+  t.after(async () => {
+    if (cliProcess?.child.exitCode === null) cliProcess.child.kill("SIGTERM");
+    await cliProcess?.completed.catch(() => undefined);
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await fs.writeFile(
+    authFile,
+    JSON.stringify({ token: "sponsor-token", userId: 5, apiUrl }),
+  );
+
+  cliProcess = spawnCli([
+    "sponsor",
+    "duty",
+    "start",
+    "--provider",
+    "codex",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--poll-ms",
+    "1000",
+    "--timeout-ms",
+    "1000",
+    "--no-update-check",
+    "--no-open",
+  ]);
+
+  await within(recovered, 16_000, "the duty did not resume polling");
+  assert.equal(cliProcess.child.exitCode, null);
+  assert(claimCount >= 2);
+  cliProcess.child.kill("SIGINT");
+  const result = await within(
+    cliProcess.completed,
+    5_000,
+    "the recovered duty did not stop cleanly",
+  );
+  assert.equal(result.code, 0);
+  assert.match(
+    result.stderr,
+    /Workshop claim failed; retrying next poll: fetch failed/,
+  );
+});
+
 function runCli(args) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [cliPath, ...args], {
-      cwd: path.dirname(cliPath),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+  return spawnCli(args).completed;
+}
+
+function spawnCli(args) {
+  const child = spawn(process.execPath, [cliPath, ...args], {
+    cwd: path.dirname(cliPath),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const completed = new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -356,4 +487,19 @@ function runCli(args) {
       resolve({ code, stdout, stderr });
     });
   });
+  return { child, completed };
+}
+
+async function within(promise, timeoutMs, message) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
