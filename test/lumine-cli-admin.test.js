@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
@@ -31,14 +32,50 @@ import {
   writeAdminJsonFile,
 } from "../lib/admin-news.js";
 import {
+  getPaginatedResultStorage,
   readBatchSkipTargets,
   runAutomaticPagination,
+  writePaginatedResultJson,
 } from "../lib/admin-workflows.js";
 import { parseBuildReviewReceipt } from "../lib/build-review.js";
 import { parseArgs } from "../lib/commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
+
+async function materializePaginatedResult(result) {
+  let json = "";
+  await writePaginatedResultJson({
+    result,
+    write: async (chunk) => {
+      json += chunk;
+    },
+  });
+  return JSON.parse(json);
+}
+
+function legacyPaginationFingerprint({ runId, operation, apiUrl = "" }) {
+  const requestUrl = new URL(operation.path, "https://lumine.invalid");
+  requestUrl.searchParams.delete("cursor");
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        workflowSchemaVersion: 2,
+        runId,
+        apiUrl: String(apiUrl).replace(/\/$/, ""),
+        name: operation.name,
+        path: `${requestUrl.pathname}${requestUrl.search}`,
+        pagination: {
+          collectionKey: operation.pagination.collectionKey,
+          coverageQueue: operation.pagination.coverageQueue || null,
+          coverageMode: operation.pagination.coverageMode || null,
+          after: operation.pagination.after ?? null,
+          filters: operation.pagination.filters || {},
+        },
+      }),
+    )
+    .digest("hex");
+}
 
 test("admin parsing preserves opaque cursors and explicit noninteractive flags", () => {
   const options = parseArgs([
@@ -2759,7 +2796,10 @@ test("automatic pagination checkpoints each canonical page and records coverage"
         coverageQueue: "recommendations",
         coverageMode: "since-run",
         after: null,
-        filters: {},
+        filters: {
+          contentTypes: "comment",
+          operatorView: "unviewed",
+        },
       },
     },
     runId: 26,
@@ -2771,6 +2811,15 @@ test("automatic pagination checkpoints each canonical page and records coverage"
             status: "success",
             data: {
               items: [{ contentType: "comment", contentId: 1 }],
+              clientFilter: {
+                contentTypes: ["comment"],
+                excludedItems: 3,
+              },
+              operatorViewFilter: {
+                mode: "unviewed",
+                excludedItems: 2,
+                unknownStateItems: 1,
+              },
               pagination: {
                 nextCursor: "second",
                 exhausted: false,
@@ -2786,6 +2835,15 @@ test("automatic pagination checkpoints each canonical page and records coverage"
             status: "success",
             data: {
               items: [{ contentType: "comment", contentId: 2 }],
+              clientFilter: {
+                contentTypes: ["comment"],
+                excludedItems: 4,
+              },
+              operatorViewFilter: {
+                mode: "unviewed",
+                excludedItems: 3,
+                unknownStateItems: 4,
+              },
               pagination: {
                 nextCursor: null,
                 exhausted: true,
@@ -2802,15 +2860,31 @@ test("automatic pagination checkpoints each canonical page and records coverage"
       recordedCoverage = coverage;
     },
   });
+  const materialized = await materializePaginatedResult(result);
   assert.deepEqual(
-    result.data.items.map((item) => item.contentId),
+    materialized.data.items.map((item) => item.contentId),
     [1, 2],
   );
   assert.equal(result.data.scan.pages, 2);
   assert.equal(result.data.scan.scannedCount, 525);
   assert.equal(result.data.scan.outputPath, output);
+  assert.equal(result.data.scan.filterSummariesComplete, true);
+  assert.deepEqual(materialized.data.clientFilter, {
+    contentTypes: ["comment"],
+    excludedItems: 7,
+  });
+  assert.deepEqual(materialized.data.operatorViewFilter, {
+    mode: "unviewed",
+    excludedItems: 5,
+    unknownStateItems: 5,
+  });
   assert.equal(fs.statSync(output).mode & 0o777, 0o600);
-  assert.equal(JSON.parse(fs.readFileSync(checkpoint, "utf8")).exhausted, true);
+  const savedCheckpoint = JSON.parse(fs.readFileSync(checkpoint, "utf8"));
+  assert.equal(savedCheckpoint.exhausted, true);
+  assert.equal(savedCheckpoint.candidateCount, 2);
+  assert.equal(Object.hasOwn(savedCheckpoint, "items"), false);
+  assert.ok(fs.statSync(savedCheckpoint.spoolPath).isFile());
+  assert.equal(JSON.parse(fs.readFileSync(output, "utf8")).data.items.length, 2);
   assert.deepEqual(recordedCoverage, {
     queue: "recommendations",
     mode: "since-run",
@@ -2821,8 +2895,102 @@ test("automatic pagination checkpoints each canonical page and records coverage"
     snapshotMaxId: 900,
     snapshotTimeStamp: 150,
     exhausted: true,
-    filters: {},
+    filters: {
+      contentTypes: "comment",
+      operatorView: "unviewed",
+    },
   });
+});
+
+test("automatic pagination keeps checkpoint and result paths distinct", async () => {
+  const output = path.join(
+    os.tmpdir(),
+    `lumine-pagination-collision-${process.pid}-${Date.now()}.json`,
+  );
+  await assert.rejects(
+    () =>
+      runAutomaticPagination({
+        options: {
+          adminCheckpoint: output,
+          adminResume: false,
+          adminOutput: output,
+        },
+        operation: {
+          name: "subjects.candidates",
+          path: "/cli/admin/subjects",
+          pagination: {
+            collectionKey: "subjects",
+            coverageQueue: "subjects",
+            coverageMode: "all",
+            after: null,
+            filters: {},
+          },
+        },
+        runId: 27,
+        fetchPage: async () => {
+          throw new Error("path collisions must fail before fetching");
+        },
+        transformPage: (page) => page,
+      }),
+    /checkpoint and result output must use different files/,
+  );
+  assert.equal(fs.existsSync(output), false);
+});
+
+test("a fresh scan replaces only its checkpoint-owned candidate spool", async () => {
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-replace-"),
+  );
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const operation = {
+    name: "subjects.candidates",
+    path: "/cli/admin/subjects",
+    pagination: {
+      collectionKey: "subjects",
+      coverageQueue: "subjects",
+      coverageMode: "all",
+      after: null,
+      filters: {},
+    },
+  };
+  const scan = (id) =>
+    runAutomaticPagination({
+      options: {
+        adminCheckpoint: checkpoint,
+        adminResume: false,
+        adminOutput: "",
+      },
+      operation,
+      runId: 28,
+      fetchPage: async () => ({
+        ok: true,
+        status: "success",
+        data: {
+          subjects: [{ id }],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 1,
+            snapshotMaxId: id,
+            snapshotTimeStamp: 150,
+            after: null,
+          },
+        },
+      }),
+      transformPage: (page) => page,
+    });
+
+  await scan(1);
+  const firstSpool = JSON.parse(
+    fs.readFileSync(checkpoint, "utf8"),
+  ).spoolPath;
+  assert.ok(fs.existsSync(firstSpool));
+  const second = await scan(2);
+  const secondSpool = getPaginatedResultStorage(second).spoolPath;
+  assert.notEqual(secondSpool, firstSpool);
+  assert.equal(fs.existsSync(firstSpool), false);
+  assert.equal(fs.existsSync(secondSpool), true);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("JSON automatic scans report bounded progress without touching result output", async () => {
@@ -2873,7 +3041,8 @@ test("JSON automatic scans report bounded progress without touching result outpu
     transformPage: (page) => page,
     reportProgress: (message) => progress.push(message),
   });
-  assert.equal(result.data.subjects.length, 12);
+  const materialized = await materializePaginatedResult(result);
+  assert.equal(materialized.data.subjects.length, 12);
   assert.equal(progress.length, 4);
   assert.match(progress[0], /starting canonical scan/);
   assert.match(progress[1], /1 page\(s\).*continuing/);
@@ -2962,6 +3131,15 @@ test("automatic pagination resumes only after the last confirmed page", async ()
     /does not belong to this run and exact listing request/,
   );
 
+  // A process may die after fsyncing a page but before atomically advancing
+  // the checkpoint. Resume must discard that unconfirmed tail before fetching
+  // from the last confirmed cursor.
+  const confirmedCheckpoint = JSON.parse(fs.readFileSync(checkpoint, "utf8"));
+  fs.appendFileSync(
+    confirmedCheckpoint.spoolPath,
+    `${JSON.stringify({ contentType: "comment", contentId: 999 })}\n`,
+  );
+
   const resumedPaths = [];
   const resumed = await runAutomaticPagination({
     options: {
@@ -2992,11 +3170,99 @@ test("automatic pagination resumes only after the last confirmed page", async ()
     transformPage: (page) => page,
   });
   assert.match(resumedPaths[0], /cursor=confirmed-second-page/);
+  const materialized = await materializePaginatedResult(resumed);
   assert.deepEqual(
-    resumed.data.items.map((item) => item.contentId),
+    materialized.data.items.map((item) => item.contentId),
     [1, 2],
   );
   assert.equal(resumed.data.scan.resumed, true);
+});
+
+test("automatic pagination migrates confirmed v2 item checkpoints without rescanning", async () => {
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-v2-resume-"),
+  );
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const operation = {
+    name: "recommendations.list",
+    path: "/cli/admin/recommendations?sinceRun=true",
+    pagination: {
+      collectionKey: "items",
+      coverageQueue: "recommendations",
+      coverageMode: "since-run",
+      after: null,
+      filters: {},
+    },
+  };
+  fs.writeFileSync(
+    checkpoint,
+    JSON.stringify({
+      schemaVersion: 2,
+      kind: "admin-pagination",
+      operationFingerprint: legacyPaginationFingerprint({
+        runId: 32,
+        operation,
+      }),
+      runId: 32,
+      operationName: operation.name,
+      nextCursor: "legacy-confirmed-page-2",
+      exhausted: false,
+      pages: 1,
+      scannedCount: 500,
+      snapshotMaxId: 700,
+      snapshotTimeStamp: 250,
+      after: 200,
+      boundariesConfirmed: true,
+      items: [{ contentType: "comment", contentId: 1 }],
+    }),
+    { mode: 0o600 },
+  );
+
+  const fetchedPaths = [];
+  const resumed = await runAutomaticPagination({
+    options: {
+      adminCheckpoint: checkpoint,
+      adminResume: true,
+      adminOutput: "",
+    },
+    operation,
+    runId: 32,
+    fetchPage: async (requestPath) => {
+      fetchedPaths.push(requestPath);
+      return {
+        ok: true,
+        status: "success",
+        data: {
+          items: [{ contentType: "comment", contentId: 2 }],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 20,
+            snapshotMaxId: 700,
+            snapshotTimeStamp: 250,
+            after: 200,
+          },
+        },
+      };
+    },
+    transformPage: (page) => page,
+  });
+
+  assert.match(fetchedPaths[0], /cursor=legacy-confirmed-page-2/);
+  const materialized = await materializePaginatedResult(resumed);
+  assert.deepEqual(
+    materialized.data.items.map((item) => item.contentId),
+    [1, 2],
+  );
+  assert.equal(resumed.data.scan.filterSummariesComplete, false);
+  assert.equal(Object.hasOwn(materialized.data, "clientFilter"), false);
+  assert.equal(Object.hasOwn(materialized.data, "operatorViewFilter"), false);
+  const migrated = JSON.parse(fs.readFileSync(checkpoint, "utf8"));
+  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.candidateCount, 2);
+  assert.equal(Object.hasOwn(migrated, "items"), false);
+  assert.ok(fs.statSync(migrated.spoolPath).isFile());
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("automatic pagination requires explicit exhaustion and stable snapshot boundaries", async () => {
@@ -3068,7 +3334,80 @@ test("automatic pagination requires explicit exhaustion and stable snapshot boun
   );
 });
 
-test("pagination checkpoints may exceed claim-file limits within a bounded cap", () => {
+test("automatic pagination keeps its checkpoint bounded beyond the former 64 MB ceiling", async () => {
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-bounded-"),
+  );
+  try {
+    const checkpoint = path.join(dir, "checkpoint.json");
+    const totalCandidates = 22_851;
+    const pageSize = 500;
+    const largeField = "x".repeat(3_000);
+    let emitted = 0;
+    let pageNumber = 0;
+    const result = await runAutomaticPagination({
+      options: {
+        adminCheckpoint: checkpoint,
+        adminResume: false,
+        adminOutput: "",
+      },
+      operation: {
+        name: "subjects.candidates",
+        path: "/cli/admin/subjects?effort=unassigned",
+        pagination: {
+          collectionKey: "subjects",
+          coverageQueue: "subjects",
+          coverageMode: "all",
+          after: null,
+          filters: { effort: "unassigned" },
+        },
+      },
+      runId: 43,
+      fetchPage: async () => {
+        pageNumber += 1;
+        const count = Math.min(pageSize, totalCandidates - emitted);
+        const subjects = Array.from({ length: count }, (_value, index) => ({
+          id: emitted + index + 1,
+          title: largeField,
+        }));
+        emitted += count;
+        const exhausted = emitted === totalCandidates;
+        return {
+          ok: true,
+          status: "success",
+          data: {
+            subjects,
+            pagination: {
+              nextCursor: exhausted ? null : `page-${pageNumber + 1}`,
+              exhausted,
+              scannedCount: count,
+              snapshotMaxId: totalCandidates,
+              snapshotTimeStamp: 500,
+              after: null,
+            },
+          },
+        };
+      },
+      transformPage: (page) => page,
+    });
+
+    const storage = getPaginatedResultStorage(result);
+    assert.ok(storage);
+    assert.equal(storage.candidateCount, totalCandidates);
+    assert.ok(storage.spoolBytes > 64 * 1024 * 1024);
+    assert.equal(result.data.scan.candidateCount, totalCandidates);
+    assert.equal(Object.hasOwn(result.data, "subjects"), false);
+    const saved = JSON.parse(fs.readFileSync(checkpoint, "utf8"));
+    assert.equal(saved.candidateCount, totalCandidates);
+    assert.equal(Object.hasOwn(saved, "items"), false);
+    assert.ok(fs.statSync(checkpoint).size < 16 * 1024);
+    assert.equal(fs.statSync(saved.spoolPath).size, saved.spoolBytes);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("admin JSON readers support purpose-specific bounded file caps", () => {
   const dir = fs.mkdtempSync(
     path.join(os.tmpdir(), "lumine-large-checkpoint-"),
   );

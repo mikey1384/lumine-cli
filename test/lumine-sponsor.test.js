@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs/promises";
+import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -7,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "../lib/commands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const cliPath = path.resolve(__dirname, "../bin/lumine.js");
 
 test("sponsor application and duty flags remain distinct from admin controls", () => {
   const application = parseArgs([
@@ -46,6 +51,171 @@ test("sponsor application and duty flags remain distinct from admin controls", (
   assert.equal(duty.model, "gpt-5.6-sol");
   assert.equal(duty.sponsorEffort, "max");
   assert.equal(duty.sponsorServiceTier, "priority");
+});
+
+test("every user-facing sponsor command can bootstrap browser login", async () => {
+  const source = await fs.readFile(
+    path.resolve(__dirname, "../lib/sponsor.js"),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /import \{ ensureAuth, resolveAuth, writeAuthFile \} from "\.\/auth\.js";/,
+  );
+  assert.match(
+    source,
+    /if \(area === "agreement"\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /if \(area === "jobs"\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /async function applyToSponsor\(options\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /async function withdrawSponsorApplication\(options\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /async function updateSponsorCapacity\(options\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /const persona = normalizePersona\(args\[1\] \|\| options\.sponsorPersona\);\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /async function printSponsorStatus\(options\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /const jobAuth = await resolveAuth\(jobOptions\);/,
+    "an already-leased worker workspace must keep using its exact scoped token",
+  );
+});
+
+test("duty start can authenticate any account without granting it sponsor authority", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-login-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({
+      method: req.method,
+      url: req.url,
+      auth: req.headers.authorization,
+    });
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "POST" && req.url === "/cli/device/start") {
+      res.end(
+        JSON.stringify({
+          deviceCode: "device-code",
+          userCode: "USER-CODE",
+          verificationUri: "https://example.test/cli/approve",
+          verificationUriComplete: "https://example.test/cli/approve?code=USER-CODE",
+          interval: 1,
+          expiresIn: 10,
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/device/token") {
+      res.end(
+        JSON.stringify({
+          accessToken: "ordinary-account-token",
+          expiresIn: 3600,
+          user: { id: 99, username: "ordinary-user" },
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
+      res.statusCode = 403;
+      res.end(
+        JSON.stringify({
+          error: "An approved sponsor account is required before starting duty.",
+          code: "build_sponsor_approval_required",
+        }),
+      );
+      return;
+    }
+    if (req.method === "GET" && req.url === "/cli/sponsor/status") {
+      res.end(
+        JSON.stringify({
+          agreementVersion: "2026-08-28",
+          application: null,
+          sponsor: null,
+          usage: {
+            dailyStarted: 0,
+            weeklyStarted: 0,
+            activeTasks: 0,
+          },
+          duties: [],
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const result = await runCli([
+    "sponsor",
+    "duty",
+    "start",
+    "ciel",
+    "--provider",
+    "claude-code",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-open",
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /Approval link: https:\/\/example\.test\/cli\/approve/);
+  assert.match(result.stdout, /Logged in as ordinary-user\./);
+  assert.match(
+    result.stderr,
+    /An approved sponsor account is required before starting duty\./,
+  );
+  const dutyRequest = requests.find(
+    (request) => request.url === "/cli/sponsor/duty/start",
+  );
+  assert.equal(dutyRequest?.auth, "Bearer ordinary-account-token");
+  const savedAuth = JSON.parse(await fs.readFile(authFile, "utf8"));
+  assert.equal(savedAuth.username, "ordinary-user");
+  assert.equal(savedAuth.userId, 99);
+
+  await fs.unlink(authFile);
+  const jsonResult = await runCli([
+    "sponsor",
+    "status",
+    "--json",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-open",
+  ]);
+  assert.equal(jsonResult.code, 0);
+  assert.equal(JSON.parse(jsonResult.stdout).sponsor, null);
+  assert.doesNotMatch(jsonResult.stdout, /Connect Lumine CLI/);
+  assert.match(jsonResult.stderr, /Connect Lumine CLI to Twinkle\./);
+  assert.match(jsonResult.stderr, /Logged in as ordinary-user\./);
 });
 
 test("graceful duty shutdown keeps leases alive and applies only relays in each pass", async () => {
@@ -121,3 +291,25 @@ test("graceful duty shutdown keeps leases alive and applies only relays in each 
     /function summarizeWorkshopOutcome[\s\S]*?\.slice\(0, 1000\)/,
   );
 });
+
+function runCli(args) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [cliPath, ...args], {
+      cwd: path.dirname(cliPath),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("close", (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
+}

@@ -881,12 +881,15 @@ feed-ID high-water mark and the server timestamp, then traverse the indexed
 row moved forward when it was reshared. Explicit legacy scans retain the
 descending primary-key walk. A page
 can be empty while `hasMore` remains true; continue until `exhausted`. `--all`
-does that automatically and writes a private checkpoint after every
-server-confirmed page; `--resume` continues only when the checkpoint belongs to
-the same API, run, and exact request. The final result can be copied to
-`--output`, while `--checkpoint` is resumable operational state. Subject
-`--after` is inclusive, and every opaque cursor is bound to its original
-filters.
+does that automatically, fsyncs each confirmed page to a private NDJSON
+candidate spool, and writes only bounded cursor, boundary, count, byte-length,
+and digest metadata to the private checkpoint. `--resume` continues only when
+the checkpoint belongs to the same API, run, and exact request and its confirmed
+spool prefix still matches those metadata; an unconfirmed fsynced tail is
+discarded before the next request. The final JSON collection is streamed from
+the spool and can be copied to a separate `--output` file, while `--checkpoint`
+remains resumable operational state. Subject `--after` is inclusive, and every
+opaque cursor is bound to its original filters.
 
 For `--all --json`, stdout remains exactly one JSON value. Scan-start, first-
 page, every-tenth-page, and exhaustion progress is written to **stderr** with

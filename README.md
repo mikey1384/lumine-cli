@@ -252,6 +252,13 @@ lumine sponsor duty start zero --provider codex \
   --model gpt-5.6-sol --effort max --service-tier priority
 ```
 
+Sponsor commands use the same browser-approval login as the rest of Lumine.
+When no saved CLI login exists, the command opens Twinkle, waits for the person
+using that browser to approve their own account, and then resumes. Any Twinkle
+account may authenticate this way, but login never grants sponsor duty:
+`sponsor duty start` still requires that exact account to have a canonical,
+server-approved sponsor profile.
+
 While that foreground process has a fresh server lease, Zero or Ciel exposes a
 Build Workshop in chat and users may see the named sponsor and canonical queue.
 With no live duty, the website stays in its ordinary chat state and shows none
@@ -383,10 +390,13 @@ includes `error.details.retryIdempotencyKey` so a partial attempt can be
 resumed with the exact generated key.
 
 Subject and queue listings use opaque, stable snapshot cursors. `--all`
-follows them automatically, saves a checkpoint after every canonical page,
-and records completed queue coverage in the run audit; `--resume` continues
-the exact same request. With `--all --json`, bounded progress goes to stderr so
-stdout remains one pipe-safe JSON value. Recommendation scans default to the previous completed
+follows them automatically, fsyncs each confirmed page to a private NDJSON
+candidate spool, saves only bounded cursor/boundary/count metadata in the
+checkpoint, and records completed queue coverage in the run audit; `--resume`
+verifies the confirmed spool prefix and continues the exact same request. The
+final JSON contract still contains the complete collection, streamed from the
+spool instead of accumulated in memory. With `--all --json`, bounded progress
+goes to stderr so stdout remains one pipe-safe JSON value. Recommendation scans default to the previous completed
 run's start boundary for at-least-once coverage. Use `--after` for an explicit
 timestamp or `--include-legacy`
 for an intentional all-history scan. Subject `--after` is inclusive and
