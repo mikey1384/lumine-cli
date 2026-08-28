@@ -2937,6 +2937,74 @@ test("automatic pagination keeps checkpoint and result paths distinct", async ()
   assert.equal(fs.existsSync(output), false);
 });
 
+test("automatic pagination never overwrites its resumed candidate spool", async () => {
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-spool-collision-"),
+  );
+  try {
+    const checkpoint = path.join(dir, "checkpoint.json");
+    const operation = {
+      name: "subjects.candidates",
+      path: "/cli/admin/subjects",
+      pagination: {
+        collectionKey: "subjects",
+        coverageQueue: "subjects",
+        coverageMode: "all",
+        after: null,
+        filters: {},
+      },
+    };
+    await runAutomaticPagination({
+      options: {
+        adminCheckpoint: checkpoint,
+        adminResume: false,
+        adminOutput: "",
+      },
+      operation,
+      runId: 27,
+      fetchPage: async () => ({
+        ok: true,
+        status: "success",
+        data: {
+          subjects: [{ id: 1 }],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 1,
+            snapshotMaxId: 1,
+            snapshotTimeStamp: 150,
+            after: null,
+          },
+        },
+      }),
+      transformPage: (page) => page,
+    });
+    const saved = JSON.parse(fs.readFileSync(checkpoint, "utf8"));
+    const confirmedSpool = fs.readFileSync(saved.spoolPath, "utf8");
+
+    await assert.rejects(
+      () =>
+        runAutomaticPagination({
+          options: {
+            adminCheckpoint: checkpoint,
+            adminResume: true,
+            adminOutput: saved.spoolPath,
+          },
+          operation,
+          runId: 27,
+          fetchPage: async () => {
+            throw new Error("an exhausted resume must not fetch another page");
+          },
+          transformPage: (page) => page,
+        }),
+      /candidate spool and result output must use different files/,
+    );
+    assert.equal(fs.readFileSync(saved.spoolPath, "utf8"), confirmedSpool);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a fresh scan replaces only its checkpoint-owned candidate spool", async () => {
   const dir = fs.mkdtempSync(
     path.join(os.tmpdir(), "lumine-pagination-replace-"),

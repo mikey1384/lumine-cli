@@ -85,7 +85,11 @@ test("every user-facing sponsor command can bootstrap browser login", async () =
   );
   assert.match(
     source,
-    /const persona = normalizePersona\(args\[1\] \|\| options\.sponsorPersona\);\s*const auth = await ensureAuth\(options\);/,
+    /if \(\["pause", "resume", "stop"\]\.includes\(action\)\) \{\s*const auth = await ensureAuth\(options\);/,
+  );
+  assert.match(
+    source,
+    /if \(action !== "start"\) throw new Error\(sponsorUsage\(\)\);[\s\S]*?if \(options\.json\)[\s\S]*?const provider = normalizeProvider\(options\.provider\);[\s\S]*?const auth = await ensureAuth\(options\);/,
   );
   assert.match(
     source,
@@ -170,6 +174,25 @@ test("duty start can authenticate any account without granting it sponsor author
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const apiUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const invalidResult = await runCli([
+    "sponsor",
+    "duty",
+    "start",
+    "ciel",
+    "--json",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-open",
+  ]);
+  assert.equal(invalidResult.code, 1);
+  assert.match(
+    invalidResult.stderr,
+    /A foreground sponsor duty cannot run with --json\./,
+  );
+  assert.equal(requests.length, 0);
 
   const result = await runCli([
     "sponsor",
