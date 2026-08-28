@@ -56,6 +56,20 @@ test("sponsor duty and same-session job flags remain distinct", () => {
     "Reviewed the interaction and fixed the concrete gap",
   );
   assert.equal(job.sponsorResolvedModel, "gpt-5.6-sol");
+
+  const update = parseArgs([
+    "sponsor",
+    "job",
+    "update",
+    "41",
+    "--file",
+    "/tmp/lumine-update.txt",
+    "--phase",
+    "checking",
+  ]);
+  assert.deepEqual(update.sponsorArgs, ["job", "update", "41"]);
+  assert.equal(update.sponsorUpdateFile, "/tmp/lumine-update.txt");
+  assert.equal(update.sponsorUpdatePhase, "checking");
 });
 
 test("agent-session detection is stable and provider-specific", () => {
@@ -417,6 +431,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   let jobStatus = "leased";
   let saveBody = null;
   let agentCompletionBody = null;
+  const dialogueBodies = [];
   const requests = [];
   const duty = canonicalDuty();
   const relay = {
@@ -427,6 +442,8 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     requestedOutcome: "A playable first round",
     constraints: ["Keep the existing character art"],
     acceptanceCriteria: ["The start button begins a round"],
+    dialogueText:
+      "Add a visible start button and a score counter.\n\nProject: Adopt Me\n\nWhat to build: A playable first round\n\nKeeping in mind:\n• Keep the existing character art\n\nDone means:\n• The start button begins a round",
     createdAt: 100,
   };
   const server = http.createServer(async (req, res) => {
@@ -561,6 +578,48 @@ test("an approved claim becomes a scoped assignment for the owning session witho
           ordinal: 0,
           startedAt: 101,
           changed: true,
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/jobs/9/dialogue"
+    ) {
+      dialogueBodies.push(body);
+      if (dialogueBodies.length === 1) {
+        res.statusCode = 500;
+        res.end(
+          JSON.stringify({
+            error: "The canonical update committed but its response was lost",
+          }),
+        );
+        return;
+      }
+      res.end(
+        JSON.stringify({
+          changed: false,
+          update: {
+            id: 202,
+            direction: "lumine_to_persona",
+            speaker: "Lumine",
+            message:
+              "I found the round setup. I’m wiring the start control now.",
+            kind: "progress",
+            phase: "building",
+            createdAt: 102,
+          },
+          dialogue: {
+            requesterUserId: 5,
+            jobId: 9,
+            channelId: 88,
+            topicId: null,
+            persona: "zero",
+            personaName: "Zero",
+            jobStatus: "working",
+            canProgress: true,
+            dialogue: [],
+          },
         }),
       );
       return;
@@ -712,6 +771,8 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   const assignmentText = await fs.readFile(assignment.assignmentPath, "utf8");
   assert.match(assignmentText, /same live Codex agent session/);
   assert.match(assignmentText, /Add a visible start button and a score counter/);
+  assert.match(assignmentText, /you are Lumine/);
+  assert.match(assignmentText, /Never publish hidden chain-of-thought/);
   assert.match(assignmentText, /Never inspect or infer from their private Zero\/Ciel chat/);
   assert.doesNotMatch(assignmentText, /raw private conversation/);
 
@@ -728,6 +789,42 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   );
   assert.equal(begin.code, 0, begin.stderr);
   assert.equal(JSON.parse(begin.stdout).coordinator.agentId, 77);
+  const dialogueFile = path.join(tmpDir, "lumine-update.txt");
+  await fs.writeFile(
+    dialogueFile,
+    "I found the round setup. I’m wiring the start control now.\n",
+    "utf8",
+  );
+  const update = await runCli(
+    [
+      "sponsor",
+      "job",
+      "update",
+      "9",
+      "--file",
+      dialogueFile,
+      "--phase",
+      "building",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(update.code, 0, update.stderr);
+  assert.equal(
+    update.stdout.trim(),
+    "Lumine → Zero:\nI found the round setup. I’m wiring the start control now.",
+  );
+  assert.equal(
+    dialogueBodies[1].message,
+    "I found the round setup. I’m wiring the start control now.",
+  );
+  assert.equal(dialogueBodies[1].phase, "building");
+  assert.equal(dialogueBodies.length, 2);
+  assert.equal(
+    dialogueBodies[0].clientUpdateKey,
+    dialogueBodies[1].clientUpdateKey,
+  );
+  assert.match(dialogueBodies[1].clientUpdateKey, /^[A-Za-z0-9_-]{24}$/);
   const applied = await runCli(
     [
       "sponsor",

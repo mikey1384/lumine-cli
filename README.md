@@ -283,13 +283,18 @@ works:
 
 ```bash
 lumine sponsor job begin 42
+lumine sponsor job update 42 --file /path/to/lumine-update.txt --phase building
 lumine sponsor job pulse 42
 lumine sponsor job relay-applied 42 101
 lumine sponsor job complete 42 --summary "Implemented and tested the approved change"
 ```
 
 `pulse` renews the duty/job leases and returns any newly approved follow-up.
-Run it between substantial work steps. `relay-applied` is an explicit receipt;
+`update` sends the exact file text back to Zero or Ciel as a user-visible
+message from Lumine, their added brain. Use it for concise, deliberate
+milestones only; never send hidden reasoning, raw terminal output, credentials,
+tokens, private paths, or unrelated data. Run `pulse` between substantial work
+steps. `relay-applied` is an explicit receipt;
 completion is rejected until every delivered relay has actually been applied
 and acknowledged. Use `helper-start` and `helper-complete` to record native
 same-session subagents within the configured helper limit—the CLI records them
