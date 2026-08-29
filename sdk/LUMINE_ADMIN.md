@@ -93,6 +93,41 @@ Mikey; routine administrator runs still escalate suspected alternate accounts
 and never auto-enforce. `accounts add` and `note set` still accept only an
 existing **unbanned** bucket.
 
+### Shared verified-email policies
+
+A verified address proves that an account can use that mailbox; it does not
+always prove that every account using the mailbox is one person. When a teacher,
+school, or other provisioning owner intentionally verifies separate people's
+accounts with one address, record that confirmed operational fact explicitly:
+
+```bash
+lumine admin ai-email-policy get --email teacher@example.com --json
+lumine admin ai-email-policy set --email teacher@example.com \
+  --mode separate_accounts \
+  --note "Teacher-confirmed classroom provisioning address" --json
+```
+
+`separate_accounts` preserves ordinary email verification and recovery while
+giving every current and future account whose stable verified address matches
+its own AI Energy and AI Card quota identity. The mutation re-attributes the
+current day's per-account usage, updates all affected live quota projections
+from canonical server state, and records the real operator in the private
+Lumine audit log. It is a provisioning policy, not an alternate-account finding
+or moderation flag, and must never be inferred from account count, usernames,
+devices, IPs, or email-provider heuristics.
+
+The CLI accepts a successful `set` only when the writer response confirms the
+requested policy and reports every matching account on its exact expected
+durable projection. A missing or mismatched projection fails closed instead of
+letting an operator mistake a stored policy row for completed account repair.
+
+Use `--mode automatic` with a new explanatory `--note` to restore Twinkle's
+default verified-email grouping. Both modes are durable and apply to later
+signups and later verifications without another code change. An active
+email-wide manual identity rule conflicts with `separate_accounts`, so the API
+rejects either operation until the operator explicitly resolves the conflict.
+Exact per-user manual bucket rules remain authoritative in both modes.
+
 ### Audited identity inspection
 
 Account-family evidence is private operator work, never a Zero/Ciel public

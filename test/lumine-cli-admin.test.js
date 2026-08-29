@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   adminCommand,
+  assertAiEmailPolicySetResult,
   assertComposedCommentDraftResult,
   assertAdminTodoHandoffResult,
   assertRecommendationWindowResult,
@@ -792,6 +793,163 @@ test("AI bucket account batches are explicit, bounded, and run-independent", asy
       ),
     /--note/,
   );
+});
+
+test("shared verified-email policies are explicit, reversible, and run-independent", async (t) => {
+  const getOperation = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "ai-email-policy",
+      "get",
+      "--email",
+      "Teacher+Class@Example.com",
+    ]),
+  );
+  assert.deepEqual(getOperation, {
+    name: "ai-email-policy.get",
+    method: "POST",
+    path: "/cli/admin/ai-email-policies/lookup",
+    body: { email: "teacher+class@example.com" },
+    mutates: false,
+  });
+
+  const setOperation = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "ai-email-policy",
+      "set",
+      "--email",
+      "Teacher+Class@Example.com",
+      "--mode",
+      "separate_accounts",
+      "--note",
+      "Teacher-confirmed classroom provisioning address",
+    ]),
+  );
+  assert.deepEqual(setOperation, {
+    name: "ai-email-policy.set",
+    method: "PUT",
+    path: "/cli/admin/ai-email-policies",
+    body: {
+      email: "teacher+class@example.com",
+      mode: "separate_accounts",
+      note: "Teacher-confirmed classroom provisioning address",
+    },
+    mutates: true,
+  });
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "ai-email-policy",
+          "set",
+          "--email",
+          "teacher@example.com",
+          "--mode",
+          "shared",
+          "--note",
+          "invalid mode",
+        ]),
+      ),
+    /automatic or separate_accounts/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "ai-email-policy",
+          "set",
+          "--email",
+          "teacher@example.com",
+          "--mode",
+          "automatic",
+        ]),
+      ),
+    /--note/,
+  );
+
+  const canonicalPolicyResult = {
+    ok: true,
+    status: "success",
+    changed: true,
+    data: {
+      policy: {
+        normalizedEmail: "teacher+class@example.com",
+        mode: "separate_accounts",
+        exists: true,
+      },
+      accountUserIds: [17640, 17727],
+      accountCount: 2,
+      projection: {
+        expectedIdentityType: "separate_verified_email",
+        accountCount: 2,
+        matchingAccountCount: 2,
+        mismatchedAccountUserIds: [],
+        converged: true,
+      },
+    },
+  };
+  assert.doesNotThrow(() =>
+    assertAiEmailPolicySetResult({
+      operation: setOperation,
+      result: canonicalPolicyResult,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertAiEmailPolicySetResult({
+        operation: setOperation,
+        result: {
+          ...canonicalPolicyResult,
+          data: {
+            ...canonicalPolicyResult.data,
+            projection: {
+              ...canonicalPolicyResult.data.projection,
+              matchingAccountCount: 1,
+              mismatchedAccountUserIds: [17727],
+              converged: false,
+            },
+          },
+        },
+      }),
+    /did not confirm/,
+  );
+
+  const fixture = await createFixtureServer(t);
+  const result = await runCli([
+    "admin",
+    "ai-email-policy",
+    "set",
+    "--email",
+    "Teacher+Class@Example.com",
+    "--mode",
+    "separate_accounts",
+    "--note",
+    "Teacher-confirmed classroom provisioning address",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/daily-runs/status",
+    ),
+    false,
+  );
+  const request = fixture.requests.find(
+    (entry) => entry.url === "/cli/admin/ai-email-policies",
+  );
+  assert.equal(request?.method, "PUT");
+  assert.equal(request?.url, "/cli/admin/ai-email-policies");
+  assert.deepEqual(request?.body, {
+    email: "teacher+class@example.com",
+    mode: "separate_accounts",
+    note: "Teacher-confirmed classroom provisioning address",
+  });
+  assert.equal(request?.runId, null);
+  assert.match(request?.requestId, /^cli:[0-9a-f-]{36}$/);
 });
 
 test("identity, escalation, notable, and todo bookkeeping do not open a daily run", async (t) => {
@@ -2352,6 +2510,39 @@ async function createFixtureServer(
       req.url === "/cli/admin/subjects/123?includeComments=true"
     ) {
       res.end(JSON.stringify(subjectResponse));
+      return;
+    }
+    if (
+      req.method === "PUT" &&
+      req.url === "/cli/admin/ai-email-policies"
+    ) {
+      const accountUserIds = [17640, 17727];
+      res.end(
+        JSON.stringify({
+          ok: true,
+          status: "success",
+          changed: true,
+          data: {
+            policy: {
+              normalizedEmail: body.email,
+              mode: body.mode,
+              exists: true,
+            },
+            accountUserIds,
+            accountCount: accountUserIds.length,
+            projection: {
+              expectedIdentityType:
+                body.mode === "separate_accounts"
+                  ? "separate_verified_email"
+                  : "verified_email",
+              accountCount: accountUserIds.length,
+              matchingAccountCount: accountUserIds.length,
+              mismatchedAccountUserIds: [],
+              converged: true,
+            },
+          },
+        }),
+      );
       return;
     }
     if (
