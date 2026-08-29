@@ -276,6 +276,13 @@ heartbeat, supervisor, or provider-spawning daemon is not sponsor duty. The CLI
 rejects a provider name that differs from the agent session actually running
 the command.
 
+`duty watch` may return a `teamAccessRequest` instead of a job. Tell the
+sponsor which requester, owner, and project issued the invitation, then return
+to duty without waiting or accepting on the sponsor's behalf. The ordinary
+Twinkle team invitation is already waiting for the sponsor; no Workshop work
+starts unless they accept it there. This notice is invitation metadata only;
+it does not expose the unapproved Workshop plan or private chat.
+
 When a user approves a plan, `duty watch` returns the scoped assignment file and
 contribution workspace to that same session. It does not launch a fresh Codex
 or Claude process. The on-duty agent uses this explicit lifecycle while it

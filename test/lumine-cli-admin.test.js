@@ -3075,7 +3075,10 @@ test("automatic pagination checkpoints each canonical page and records coverage"
   assert.equal(savedCheckpoint.candidateCount, 2);
   assert.equal(Object.hasOwn(savedCheckpoint, "items"), false);
   assert.ok(fs.statSync(savedCheckpoint.spoolPath).isFile());
-  assert.equal(JSON.parse(fs.readFileSync(output, "utf8")).data.items.length, 2);
+  assert.equal(
+    JSON.parse(fs.readFileSync(output, "utf8")).data.items.length,
+    2,
+  );
   assert.deepEqual(recordedCoverage, {
     queue: "recommendations",
     mode: "since-run",
@@ -3240,9 +3243,7 @@ test("a fresh scan replaces only its checkpoint-owned candidate spool", async ()
     });
 
   await scan(1);
-  const firstSpool = JSON.parse(
-    fs.readFileSync(checkpoint, "utf8"),
-  ).spoolPath;
+  const firstSpool = JSON.parse(fs.readFileSync(checkpoint, "utf8")).spoolPath;
   assert.ok(fs.existsSync(firstSpool));
   const second = await scan(2);
   const secondSpool = getPaginatedResultStorage(second).spoolPath;

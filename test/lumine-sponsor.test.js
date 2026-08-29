@@ -422,6 +422,110 @@ test("duty start exits, bounded watches recover transport, and another session c
   assert.match(sponsorSource, /same live .* agent session/);
 });
 
+test("duty watch surfaces a team invitation without claiming Workshop work", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-team-invite-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const duty = canonicalDuty();
+  const teamAccessRequest = {
+    id: 17,
+    buildId: 91,
+    buildTitle: "Adopt Me\u001b[31m\nFAKE",
+    requesterUserId: 263,
+    requesterUsername: "programmer",
+    ownerUserId: 554,
+    ownerUsername: "turtle",
+    sponsorUserId: 5,
+    sponsorUsername: "mikey",
+    personaUserId: 2,
+    status: "pending_sponsor",
+  };
+  const server = http.createServer(async (req, res) => {
+    await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
+      res.end(
+        JSON.stringify({
+          duty,
+          leaseToken: "duty-lease",
+          heartbeatEverySeconds: 20,
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/duty/4/heartbeat"
+    ) {
+      const now = Math.floor(Date.now() / 1000);
+      res.end(JSON.stringify({ ...duty, heartbeatAt: now, expiresAt: now + 90 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/claim") {
+      res.end(JSON.stringify({ job: null, teamAccessRequest }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const sharedArgs = [
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+    "--no-open",
+  ];
+  const environment = codexEnvironment("team-invite-session");
+
+  const start = await runCli(
+    [
+      "sponsor",
+      "duty",
+      "start",
+      "--provider",
+      "codex",
+      "--model",
+      "gpt-5.6-sol",
+      "--effort",
+      "max",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(start.code, 0, start.stderr);
+
+  const watch = await runCli(
+    ["sponsor", "duty", "watch", "--json", "--wait-ms", "1000", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(watch.code, 0, watch.stderr);
+  const output = JSON.parse(watch.stdout);
+  assert.equal(output.assignment, null);
+  assert.deepEqual(output.teamAccessRequest, teamAccessRequest);
+  assert.equal(output.nextCommand, "lumine sponsor duty watch --json");
+  const terminalWatch = await runCli(
+    ["sponsor", "duty", "watch", "--wait-ms", "1000", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(terminalWatch.code, 0, terminalWatch.stderr);
+  assert.doesNotMatch(terminalWatch.stdout, /\u001b|\nFAKE/);
+  assert.match(terminalWatch.stdout, /Adopt Me/);
+  const state = JSON.parse(
+    await fs.readFile(sponsorDutyStatePath({ apiUrl, authFile }), "utf8"),
+  );
+  assert.deepEqual(state.jobs, {});
+});
+
 test("an approved claim becomes a scoped assignment for the owning session without launching a provider", async (t) => {
   const tmpDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "lumine-sponsor-assignment-test-"),
