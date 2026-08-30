@@ -262,17 +262,27 @@ posts that most need Zero or Ciel are the ones nobody else answered.
   question should normally receive Level 3. Level 3 is the highest delegated
   setting, and the level tells respondents that substantial, carefully
   reasoned answers are wanted.
+- **Sincere requests for personal help are Featured material.** Posts asking
+  the community for advice about school, friendships, loneliness, or other
+  ordinary real-life problems embody Twinkle's purpose; being personal is never
+  a reason to suppress or remove them. Rotate one out after it has received
+  meaningful support to make room for a newer overlooked request — not because
+  of its subject matter. Only a concrete safety/privacy issue or the author's
+  request changes that visibility judgment.
 - **Featured still selects for quality**, but when two candidates are close,
   prefer the child who has never been featured over the one who has.
-- **The live Featured board is Mikey's word.** Do not remove a currently
-  Featured subject without first showing Mikey the planned removals and
-  replacements and getting his go-ahead. In the other direction, if a subject
-  that was Featured or pinned during an earlier run is no longer on
-  `featured list`, treat that as Mikey having removed it deliberately — never
-  re-feature it to "restore" the board, and never treat any subject as a
-  permanent fixture from memory or old run notes. Derive the board fresh from
-  `featured list` at the start of every run; the only pins that exist are the
-  ones currently on it.
+- **The live Featured board is Mikey's word.** Do not remove or reorder a
+  currently Featured subject without first showing Mikey the planned removals
+  and replacements and getting his go-ahead. Additions have standing approval
+  when a fresh `featured list` is below its canonical maximum: proactively
+  feature genuinely reviewed, editorially strong new subjects without asking
+  case by case. This is judgment, not a quota — never add filler merely because
+  capacity exists. If a subject that was Featured or pinned during an earlier
+  run is no longer on `featured list`, treat that as Mikey having removed it
+  deliberately — never re-feature it to "restore" the board, even when space
+  is available, and never treat any subject as a permanent fixture from memory
+  or old run notes. Derive the board fresh from `featured list` at the start of
+  every run; the only pins that exist are the ones currently on it.
 
 Sensitive disclosures, active disputes, and anything needing crisis or medical
 judgment remain out of scope for a bot comment no matter how neglected the post
@@ -714,6 +724,15 @@ into one result. Generate it before `complete`, because run-scoped reads require
 the current active run. Queue coverage is written automatically only after an
 `--all` traversal reaches canonical exhaustion; an interrupted scan remains in
 its local checkpoint and cannot be misreported as complete.
+
+**Every agent-authored final management report includes a `Featured rotation`
+section.** Base it on a fresh `featured list`. When capacity exists, make and
+report strong additions during the run under the standing approval above; do
+not defer them as proposals. Then name each current Subject proposed for
+removal with its canonical URL and a concrete editorial reason, followed by
+any replacement that would require that removal. Never omit the section; when
+no removal or reorder is honestly warranted, say `None` and explain why.
+Removing or reordering pins remains a proposal until Mikey gives his go-ahead.
 
 Creating an escalation belongs to the active run; acknowledging, annotating,
 resolving, or reopening it does not. Use the run-independent `escalation`
@@ -1953,8 +1972,9 @@ part of the feature contract.
 Starting 2026-08-27, every website-management run must also check AWS Cost
 Explorer and include the current calendar month's expected AWS bill in
 **"Insights for Mikey"**. This is an account-level infrastructure cost check,
-not the `aiSpending` application-cost section above; never substitute one for
-the other or combine their totals.
+not the `aiSpending` application-cost section above. Never substitute one for
+the other. Report each independently, then combine them only under the aligned-
+total rules below.
 
 First verify the Twinkle AWS principal exactly as required by the repository
 agent guide. Use profile `mikey-iam`, pass an explicit region on every command,
@@ -1973,6 +1993,10 @@ period exists instead of sending an empty interval.
 ```bash
 aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
   --time-period Start=<month-start-YYYY-MM-01>,End=<today-UTC> \
+  --granularity MONTHLY --metrics UnblendedCost
+
+aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
+  --time-period Start=<previous-month-start>,End=<month-start-YYYY-MM-01> \
   --granularity MONTHLY --metrics UnblendedCost
 
 aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
@@ -2003,11 +2027,51 @@ rather than a final invoice because reporting lags and later credits, refunds,
 taxes, or adjustments can change the bill. If either the forecast or MTD query
 is unavailable, report the available component and say why a complete
 full-month expectation is unavailable instead of extrapolating it locally. A
-previous closed month may be quoted for context when the difference is
-material, but it is not a replacement for the current-month expectation.
+previous closed calendar-month query is mandatory: report its exact total and
+`Estimated` state, then compare the expected current full-calendar-month mean
+against it with both the dollar delta and percentage change. Never compare an
+incomplete current-month MTD total directly with a closed full month; if either
+the current full-month expectation or previous closed-month total is
+unavailable, say that the month-over-month comparison is unavailable rather
+than manufacturing one. A zero previous-month total has no meaningful
+percentage change. The previous month is context, not a replacement for the
+current-month expectation.
+
 For the media watch, separately identify AWS Elemental MediaConvert and Amazon
 Interactive Video Service rows when present. Also report Amazon S3 as shared
 storage context, without attributing the whole S3 row to Lumine media.
+
+### Combined application AI and AWS cost (standing duty, every run)
+
+Every website-management report must also give Mikey one **Combined AI + AWS
+tracked operating cost** view. This is a mixed-source estimate, not an invoice
+or a claim to cover every company expense. Keep the independent AI and AWS
+figures visible so the total remains auditable.
+
+- Add application-AI completed-day MTD to AWS completed-day MTD only when their
+  currency and inclusive UTC through-date match. Report the aligned boundary.
+  Never include `inProgressDay` or compare this incomplete MTD sum directly
+  with a closed full month.
+- Add the previous closed AI-month estimate to the previous closed AWS
+  unblended-cost total and report the resulting previous closed-month combined
+  total.
+- For the expected current full month, add the AWS full-month expectation to
+  `allCompletedDaysPace` as the headline combined scenario. When
+  `recentSevenCompletedDaysPace` exists, add it as a clearly labeled run-rate
+  sensitivity, not a provider confidence interval. Compare each reported
+  combined scenario with the previous closed-month combined total using both
+  dollar and percentage change.
+- Carry the AWS 80% lower and upper bounds through a combined scenario by
+  adding the same AI projection to both bounds. Do not describe the difference
+  between the two AI run-rate scenarios as a confidence interval.
+- Do not add Media Energy or AWS service rows again: MediaConvert, IVS, S3, and
+  other AWS costs are already inside Cost Explorer's account total. If the
+  application AI ledger ever includes a provider billed inside the AWS total,
+  identify and remove the overlap before combining; otherwise report the
+  combined figure as unavailable rather than double-counting.
+- If currency, calendar boundary, a required component, or overlap attribution
+  cannot be reconciled, report the available components and explicitly mark the
+  affected combined total or comparison unavailable. Never manufacture one.
 
 Ten sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
 farm-signal sections added that day; AI Card summon watch added 2026-08-24):

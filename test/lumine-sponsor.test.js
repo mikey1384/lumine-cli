@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -9,6 +10,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs } from "../lib/commands.js";
+import { requestJson } from "../lib/http.js";
 import {
   detectSponsorAgentSession,
   sponsorDutyStatePath,
@@ -90,7 +92,7 @@ test("agent-session detection is stable and provider-specific", () => {
     ancestry: { codex: null, claude: null },
   });
 
-  assert.equal(first.mode, "agent_session_v1");
+  assert.equal(first.mode, "agent_session_v2");
   assert.equal(first.provider, "codex");
   assert.equal(first.bindingEvidence, "runtime_session_id");
   assert.match(first.runtimeVersion, /codex/i);
@@ -158,7 +160,7 @@ test("a switched login cannot discard another account's local duty lease", async
   await fs.writeFile(
     statePath,
     JSON.stringify({
-      version: 1,
+      version: 2,
       apiUrl,
       sponsorUserId: 5,
       operatorSession: detectSponsorAgentSession({
@@ -285,7 +287,7 @@ test("ordinary accounts can browser-login but cannot acquire sponsor authority",
     (request) => request.url === "/cli/sponsor/duty/start",
   );
   assert.equal(dutyRequest?.auth, "Bearer ordinary-account-token");
-  assert.equal(dutyRequest?.body?.operatorSession?.mode, "agent_session_v1");
+  assert.equal(dutyRequest?.body?.operatorSession?.mode, "agent_session_v2");
   assert.equal(dutyRequest?.body?.operatorSession?.provider, "codex");
   assert.equal(dutyRequest?.body?.operatorSession?.fingerprintHash.length, 64);
   const savedAuth = JSON.parse(await fs.readFile(authFile, "utf8"));
@@ -305,7 +307,7 @@ test("duty start exits, bounded watches recover transport, and another session c
     const body = await readRequestBody(req);
     res.setHeader("Content-Type", "application/json");
     if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
-      assert.equal(body.operatorSession.mode, "agent_session_v1");
+      assert.equal(body.operatorSession.mode, "agent_session_v2");
       assert.equal(body.operatorSession.provider, "codex");
       res.end(
         JSON.stringify({
@@ -376,7 +378,7 @@ test("duty start exits, bounded watches recover transport, and another session c
     { environment: codexEnvironment("owner-session") },
   );
   assert.equal(start.code, 0);
-  assert.equal(JSON.parse(start.stdout).executionMode, "agent_session_v1");
+  assert.equal(JSON.parse(start.stdout).executionMode, "agent_session_v2");
   const statePath = sponsorDutyStatePath({ apiUrl, authFile });
   const stateStat = await fs.stat(statePath);
   assert.equal(stateStat.mode & 0o777, 0o600);
@@ -420,6 +422,158 @@ test("duty start exits, bounded watches recover transport, and another session c
   );
   assert.doesNotMatch(sponsorSource, /agentCommand|runWorkshopAgentPass/);
   assert.match(sponsorSource, /same live .* agent session/);
+});
+
+test("HTTP timeouts cover a response body that stalls after headers", async (t) => {
+  const sockets = new Set();
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.write('{"ok":');
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const startedAt = Date.now();
+  await assert.rejects(
+    requestJson({
+      url: `http://127.0.0.1:${server.address().port}/stalled-json`,
+      timeoutMs: 100,
+    }),
+    (error) => error?.code === "lumine_http_timeout",
+  );
+  assert(Date.now() - startedAt < 1_000);
+});
+
+test("a stalled duty watch hits its hard deadline, releases its lock, and recovers", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-watch-deadline-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const sockets = new Set();
+  const duty = canonicalDuty();
+  let heartbeatCount = 0;
+  const server = http.createServer(async (req, res) => {
+    await readRequestBody(req);
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          duty,
+          leaseToken: "duty-lease",
+          heartbeatEverySeconds: 20,
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/duty/4/heartbeat"
+    ) {
+      heartbeatCount += 1;
+      if (heartbeatCount === 1) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.write('{"id":4');
+        return;
+      }
+      const now = Math.floor(Date.now() / 1_000);
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ ...duty, heartbeatAt: now, expiresAt: now + 90 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/claim") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ job: null }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const sharedArgs = [
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+    "--no-open",
+  ];
+  const environment = codexEnvironment("watch-deadline-session");
+
+  const start = await runCli(
+    [
+      "sponsor",
+      "duty",
+      "start",
+      "--provider",
+      "codex",
+      "--model",
+      "gpt-5.6-sol",
+      "--effort",
+      "max",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(start.code, 0, start.stderr);
+
+  const watchStartedAt = Date.now();
+  const stalledWatch = await runCli(
+    [
+      "sponsor",
+      "duty",
+      "watch",
+      "--wait-ms",
+      "1000",
+      "--timeout-ms",
+      "30000",
+      "--json",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(stalledWatch.code, 1);
+  assert.match(stalledWatch.stderr, /hard deadline.*state lock was released/i);
+  assert(Date.now() - watchStartedAt < 5_000);
+  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  await assert.rejects(fs.stat(`${statePath}.lock`), { code: "ENOENT" });
+
+  const recoveredWatch = await runCli(
+    [
+      "sponsor",
+      "duty",
+      "watch",
+      "--wait-ms",
+      "1000",
+      "--timeout-ms",
+      "1000",
+      "--json",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(recoveredWatch.code, 0, recoveredWatch.stderr);
+  assert.equal(JSON.parse(recoveredWatch.stdout).assignment, null);
+  assert(heartbeatCount >= 2);
 });
 
 test("duty watch surfaces a team invitation without claiming Workshop work", async (t) => {
@@ -534,6 +688,9 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   let claimed = false;
   let jobStatus = "leased";
   let saveBody = null;
+  let saveCount = 0;
+  let canonicalSavedArtifact = null;
+  let sponsorForumAccess = true;
   let agentCompletionBody = null;
   const dialogueBodies = [];
   const requests = [];
@@ -550,6 +707,14 @@ test("an approved claim becomes a scoped assignment for the owning session witho
       "Add a visible start button and a score counter.\n\nProject: Adopt Me\n\nWhat to build: A playable first round\n\nKeeping in mind:\n• Keep the existing character art\n\nDone means:\n• The start button begins a round",
     createdAt: 100,
   };
+  const finalProjectSource =
+    '<!doctype html><button id="start">Start</button><output>0</output>';
+  const finalFilesHash = createHash("sha256")
+    .update("/index.html")
+    .update("\0")
+    .update(finalProjectSource)
+    .update("\0")
+    .digest("hex");
   const server = http.createServer(async (req, res) => {
     const body = await readRequestBody(req);
     requests.push({ method: req.method, url: req.url, body, auth: req.headers.authorization });
@@ -557,7 +722,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     if (req.method === "GET" && req.url === "/cli/sponsor/agreement") {
       res.end(
         JSON.stringify({
-          version: "2026-08-29",
+          version: "2026-08-31",
           disclosure: ["Same live agent session performs the work."],
         }),
       );
@@ -567,12 +732,12 @@ test("an approved claim becomes a scoped assignment for the owning session witho
       req.method === "POST" &&
       req.url === "/cli/sponsor/agreement/accept"
     ) {
-      assert.equal(body.agreementVersion, "2026-08-29");
+      assert.equal(body.agreementVersion, "2026-08-31");
       assert.equal(body.agreementAccepted, true);
       res.end(
         JSON.stringify({
           changed: true,
-          agreementVersion: "2026-08-29",
+          agreementVersion: "2026-08-31",
           acceptedAt: 100,
         }),
       );
@@ -610,7 +775,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
         JSON.stringify({
           build: {
             id: 73,
-            title: "Adopt Me · Zero contribution",
+            title: "mikey's Adopt Me branch",
             contributionRootBuildId: 41,
             contributionBranchNumber: 2,
             canWrite: true,
@@ -631,29 +796,38 @@ test("an approved claim becomes a scoped assignment for the owning session witho
       assert.equal(req.headers.authorization, "Bearer workspace-access");
       res.end(
         JSON.stringify({
-          userId: 2,
-          username: "Zero",
+          userId: 5,
+          username: "mikey",
           scopes: ["build:read", "build:write"],
         }),
       );
       return;
     }
-    if (req.method === "GET" && req.url?.startsWith("/cli/build/73/forum")) {
+    if (req.method === "GET" && req.url?.startsWith("/cli/build/41/forum")) {
+      assert.equal(req.headers.authorization, "Bearer sponsor-token");
       res.end(
         JSON.stringify({
           project: { id: 41, title: "Adopt Me" },
-          requestedBuildId: 73,
+          requestedBuildId: 41,
           scope: {
-            mode: "branch",
+            mode: "all",
             rootBuildId: 41,
-            workspaceBuildId: 73,
-            contributionBuildId: 73,
+            workspaceBuildId: 41,
+            contributionBuildId: null,
           },
-          events: [],
+          events: [
+            {
+              type: "thread",
+              id: 701,
+              threadId: 701,
+              activitySeq: 1,
+              content: "The jump timing still feels too slow.",
+            },
+          ],
           pagination: {
             limit: 100,
-            snapshotActivitySeq: 0,
-            nextActivitySeq: 0,
+            snapshotActivitySeq: 1,
+            nextActivitySeq: 1,
             hasMore: false,
           },
         }),
@@ -666,7 +840,17 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     ) {
       res.end(
         JSON.stringify({
-          job: { ...workshopClaim(relay).job, status: jobStatus },
+          job: {
+            ...workshopClaim(relay).job,
+            forumAccess: sponsorForumAccess,
+            ...(canonicalSavedArtifact
+              ? {
+                  workspaceFilesHash: finalFilesHash,
+                  savedArtifact: canonicalSavedArtifact,
+                }
+              : {}),
+            status: jobStatus,
+          },
           relays: [relay],
           leaseExpiresAt: 220,
         }),
@@ -737,21 +921,13 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     }
     if (req.method === "PUT" && req.url === "/build/73/project-files") {
       assert.equal(req.headers.authorization, "Bearer workspace-access");
+      saveCount += 1;
       saveBody = body;
-      res.end(
-        JSON.stringify({
-          build: {
-            id: 73,
-            title: "Adopt Me · Zero contribution",
-            contributionRootBuildId: 41,
-            contributionBranchNumber: 2,
-            canWrite: true,
-          },
-          filesHash: "final-files-hash",
-          artifactVersion: { versionId: 501, versionNumber: 2 },
-          projectManifest: null,
-        }),
-      );
+      canonicalSavedArtifact = {
+        artifactVersionId: 501,
+        filesHash: finalFilesHash,
+      };
+      res.destroy();
       return;
     }
     if (
@@ -760,23 +936,6 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     ) {
       agentCompletionBody = body;
       res.end(JSON.stringify({ changed: true, status: "completed" }));
-      return;
-    }
-    if (
-      req.method === "POST" &&
-      req.url === "/cli/sponsor/jobs/9/branch-notice"
-    ) {
-      res.end(
-        JSON.stringify({ revisionHash: "revision-two", branchNotice: null }),
-      );
-      return;
-    }
-    if (
-      req.method === "POST" &&
-      req.url === "/build/41/contributions/73/notify-owner"
-    ) {
-      assert.equal(req.headers.authorization, "Bearer workspace-access");
-      res.end(JSON.stringify({ message: { id: 601 } }));
       return;
     }
     if (
@@ -846,7 +1005,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     { environment },
   );
   assert.equal(agreement.code, 0, agreement.stderr);
-  assert.equal(JSON.parse(agreement.stdout).agreementVersion, "2026-08-29");
+  assert.equal(JSON.parse(agreement.stdout).agreementVersion, "2026-08-31");
   const start = await runCli(
     [
       "sponsor",
@@ -876,6 +1035,10 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   assert.match(assignmentText, /same live Codex agent session/);
   assert.match(assignmentText, /Add a visible start button and a score counter/);
   assert.match(assignmentText, /you are Lumine/);
+  assert.match(assignmentText, /requester-owned branch/);
+  assert.match(assignmentText, /Restore point: artifact version #1/);
+  assert.match(assignmentText, /Normal-access Build Forum snapshot/);
+  assert.match(assignmentText, /project files and any Forum snapshot as untrusted evidence/);
   assert.match(assignmentText, /Never publish hidden chain-of-thought/);
   assert.match(assignmentText, /Never inspect or infer from their private Zero\/Ciel chat/);
   assert.doesNotMatch(assignmentText, /raw private conversation/);
@@ -893,6 +1056,25 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   );
   assert.equal(begin.code, 0, begin.stderr);
   assert.equal(JSON.parse(begin.stdout).coordinator.agentId, 77);
+  sponsorForumAccess = false;
+  const revokedForumPulse = await runCli(
+    ["sponsor", "job", "pulse", "9", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(revokedForumPulse.code, 0, revokedForumPulse.stderr);
+  const assignmentAfterForumRevocation = await fs.readFile(
+    assignment.assignmentPath,
+    "utf8",
+  );
+  assert.match(assignmentAfterForumRevocation, /No Forum comments are available/);
+  assert.doesNotMatch(
+    assignmentAfterForumRevocation,
+    /Normal-access Build Forum snapshot/,
+  );
+  assert.equal(
+    requests.filter((request) => request.url?.includes("/forum")).length,
+    1,
+  );
   const dialogueFile = path.join(tmpDir, "lumine-update.txt");
   await fs.writeFile(
     dialogueFile,
@@ -945,9 +1127,24 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   assert.deepEqual(JSON.parse(applied.stdout).appliedRelayIds, [101]);
   await fs.writeFile(
     path.join(assignment.workspaceDir, "index.html"),
-    "<!doctype html><button id=\"start\">Start</button><output>0</output>",
+    finalProjectSource,
     "utf8",
   );
+  const interruptedCompletion = await runCli(
+    [
+      "sponsor",
+      "job",
+      "complete",
+      "9",
+      "--summary",
+      "Added the approved start control and score display",
+      "--json",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(interruptedCompletion.code, 1);
+  assert.match(interruptedCompletion.stderr, /fetch failed|terminated|socket/i);
   const completed = await runCli(
     [
       "sponsor",
@@ -963,8 +1160,10 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   );
   assert.equal(completed.code, 0, completed.stderr);
   assert.equal(JSON.parse(completed.stdout).job.status, "completed");
+  assert.equal(saveCount, 1);
   assert.equal(saveBody.baseFilesHash, "base-files-hash");
   assert.equal(saveBody.createVersion, true);
+  assert.equal(saveBody.force, undefined);
   assert.equal(agentCompletionBody.evidenceTier, "provider_reported");
   assert.equal(agentCompletionBody.resolvedModel, "gpt-5.6-sol");
   assert.equal(agentCompletionBody.resolvedEffort, "max");
@@ -982,7 +1181,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
         : request.body.dutyLeaseToken,
       "duty-lease",
     );
-    assert.equal(request.body.operatorSession.mode, "agent_session_v1");
+    assert.equal(request.body.operatorSession.mode, "agent_session_v2");
     assert.equal(request.body.operatorSession.provider, "codex");
   }
   const finalState = JSON.parse(await fs.readFile(statePath, "utf8"));
@@ -993,6 +1192,298 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     requests.some((request) => request.url?.includes("/agent/runtime")),
     false,
   );
+  const forumRequests = requests.filter((request) =>
+    request.url?.includes("/forum"),
+  );
+  assert.equal(forumRequests.length, 1);
+  assert.equal(forumRequests[0].auth, "Bearer sponsor-token");
+});
+
+test("a consultation is inspected read-only and completes without an artifact or project change", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-consultation-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const environment = codexEnvironment("consultation-owner-session");
+  const operatorSession = detectSponsorAgentSession({
+    environment,
+    ancestry: { codex: null, claude: null },
+  });
+  const duty = canonicalDuty();
+  const relay = {
+    id: 101,
+    kind: "initial_request",
+    jobKind: "consultation",
+    summary: "Tell me about MID's Adopt Me project.",
+    projectTitleHint: "Adopt Me",
+    requestedOutcome:
+      "Explain what it is, its current state, what is good, and what needs work.",
+    constraints: ["Use simple language"],
+    acceptanceCriteria: ["The answer is grounded in the actual project"],
+    dialogueText:
+      "Tell me about MID's Adopt Me project.\n\nProject: Adopt Me\n\nQuestion to answer: Explain what it is, its current state, what is good, and what needs work.",
+    createdAt: 100,
+  };
+  const consultationProjectSource =
+    "<!doctype html><title>Adopt Me</title><p>Choose a pet.</p>";
+  const consultationFilesHash = createHash("sha256")
+    .update("/index.html")
+    .update("\0")
+    .update(consultationProjectSource)
+    .update("\0")
+    .digest("hex");
+  const claim = workshopClaim(relay, {
+    jobKind: "consultation",
+    targetBuild: {
+      id: 41,
+      title: "Main",
+      kind: "main",
+      rootBuildId: 41,
+    },
+    restorePoint: null,
+    forumAccess: false,
+    workspaceFilesHash: consultationFilesHash,
+  });
+  let claimed = false;
+  let jobStatus = "leased";
+  let agentCompletionBody = null;
+  let completionBody = null;
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    requests.push({ method: req.method, url: req.url, body });
+    res.setHeader("Content-Type", "application/json");
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/duty/4/heartbeat"
+    ) {
+      res.end(JSON.stringify({ ...duty, heartbeatAt: 100, expiresAt: 145 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/claim") {
+      if (claimed) {
+        res.end(JSON.stringify({ job: null }));
+        return;
+      }
+      claimed = true;
+      res.end(JSON.stringify(claim));
+      return;
+    }
+    if (req.method === "GET" && req.url?.startsWith("/cli/build/41/files")) {
+      assert.equal(req.headers.authorization, "Bearer workspace-access");
+      res.end(
+        JSON.stringify({
+          build: {
+            id: 41,
+            title: "Adopt Me",
+            contributionRootBuildId: null,
+            contributionBranchNumber: null,
+            canWrite: false,
+          },
+          projectFiles: [
+            {
+              path: "index.html",
+              content: consultationProjectSource,
+            },
+          ],
+          filesHash: "persisted-token-is-not-consultation-content",
+          projectManifest: null,
+        }),
+      );
+      return;
+    }
+    if (req.method === "GET" && req.url === "/cli/session") {
+      assert.equal(req.headers.authorization, "Bearer workspace-access");
+      res.end(
+        JSON.stringify({
+          userId: 5,
+          username: "mikey",
+          scopes: ["build:read"],
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/jobs/9/heartbeat"
+    ) {
+      res.end(
+        JSON.stringify({
+          job: { ...claim.job, status: jobStatus },
+          relays: [relay],
+          leaseExpiresAt: 220,
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/agents") {
+      jobStatus = "working";
+      res.end(
+        JSON.stringify({
+          agentId: 77,
+          role: "coordinator",
+          ordinal: 0,
+          startedAt: 101,
+          changed: true,
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/jobs/9/relays/applied"
+    ) {
+      res.end(JSON.stringify({ changed: true, appliedRelayIds: [101] }));
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/jobs/9/relays/close"
+    ) {
+      res.end(JSON.stringify({ closed: true, closedAt: 103, relays: [] }));
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/jobs/9/agents/77/complete"
+    ) {
+      agentCompletionBody = body;
+      res.end(JSON.stringify({ changed: true, status: "completed" }));
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/sponsor/jobs/9/complete"
+    ) {
+      completionBody = body;
+      jobStatus = "completed";
+      res.end(
+        JSON.stringify({
+          job: { ...claim.job, status: "completed" },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  let workshopTempDir = null;
+  t.after(async () => {
+    if (workshopTempDir) {
+      await fs.rm(workshopTempDir, { recursive: true, force: true });
+    }
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  await fs.writeFile(
+    statePath,
+    JSON.stringify({
+      version: 2,
+      apiUrl,
+      sponsorUserId: 5,
+      operatorSession,
+      duty: { ...duty, leaseToken: "duty-lease", heartbeatEverySeconds: 20 },
+      jobs: {},
+      preservedWorkspaces: [],
+    }),
+    { mode: 0o600 },
+  );
+  const sharedArgs = [
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+    "--no-open",
+  ];
+  const watch = await runCli(
+    ["sponsor", "duty", "watch", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(watch.code, 0, watch.stderr);
+  const assignment = JSON.parse(watch.stdout).assignment;
+  workshopTempDir = path.dirname(assignment.workspaceDir);
+  const assignmentText = await fs.readFile(assignment.assignmentPath, "utf8");
+  assert.match(assignmentText, /read-only consultation/);
+  assert.match(assignmentText, /what the project is, its current state/);
+  assert.match(assignmentText, /no artifact or project change is created/);
+
+  const begin = await runCli(
+    ["sponsor", "job", "begin", "9", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(begin.code, 0, begin.stderr);
+  const applied = await runCli(
+    [
+      "sponsor",
+      "job",
+      "relay-applied",
+      "9",
+      "101",
+      "--json",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(applied.code, 0, applied.stderr);
+
+  const projectPath = path.join(assignment.workspaceDir, "index.html");
+  const originalProject = await fs.readFile(projectPath, "utf8");
+  await fs.writeFile(projectPath, `${originalProject}\n<!-- accidental edit -->\n`);
+  const rejected = await runCli(
+    [
+      "sponsor",
+      "job",
+      "complete",
+      "9",
+      "--summary",
+      "It is a pet-choice game with a clear start, but it still needs more gameplay feedback.",
+      "--json",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(rejected.code, 1);
+  assert.match(rejected.stderr, /read-only consultation/);
+  assert.equal(agentCompletionBody, null);
+  await fs.writeFile(projectPath, originalProject);
+
+  const completed = await runCli(
+    [
+      "sponsor",
+      "job",
+      "complete",
+      "9",
+      "--summary",
+      "It is a pet-choice game with a clear start, but it still needs more gameplay feedback.",
+      "--json",
+      ...sharedArgs,
+    ],
+    { environment },
+  );
+  assert.equal(completed.code, 0, completed.stderr);
+  assert.equal(JSON.parse(completed.stdout).job.status, "completed");
+  assert.equal(agentCompletionBody.outcome.readOnlyConsultation, true);
+  assert.deepEqual(agentCompletionBody.outcome.changedPaths, []);
+  assert.equal(completionBody.artifactVersionId, undefined);
+  assert.equal(completionBody.branchNoticeMessageId, undefined);
+  assert.match(completionBody.reportedFilesHash, /^[a-f0-9]{64}$/);
+  assert.equal(
+    requests.some(
+      (request) =>
+        request.method === "PUT" ||
+        request.url?.includes("/forum") ||
+        request.url?.includes("branch-notice") ||
+        request.url?.includes("notify-owner"),
+    ),
+    false,
+  );
+  workshopTempDir = null;
 });
 
 test("ending a failed job preserves work but removes its credential", async (t) => {
@@ -1056,7 +1547,7 @@ test("ending a failed job preserves work but removes its credential", async (t) 
   await fs.writeFile(
     statePath,
     JSON.stringify({
-      version: 1,
+      version: 2,
       apiUrl,
       sponsorUserId: 5,
       operatorSession,
@@ -1178,7 +1669,7 @@ test("stopping duty archives recoverable work without credentials", async (t) =>
   await fs.writeFile(
     statePath,
     JSON.stringify({
-      version: 1,
+      version: 2,
       apiUrl,
       sponsorUserId: 5,
       operatorSession: detectSponsorAgentSession({
@@ -1276,29 +1767,38 @@ function canonicalDuty() {
   };
 }
 
-function workshopClaim(relay) {
+function workshopClaim(relay, jobOverrides = {}) {
   return {
     job: {
       id: 9,
+      jobKind: "build",
       requester: { userId: 5, username: "mikey" },
       persona: "zero",
       personaUserId: 2,
-      rootBuild: { id: 41, title: "Adopt Me" },
-      contributionBuild: {
+      rootBuild: { id: 41, title: "Adopt Me", isPublic: false },
+      targetBuild: {
         id: 73,
-        title: "Adopt Me · Zero contribution",
-        branchNumber: 2,
+        title: "mikey's Adopt Me branch",
+        kind: "branch",
+        rootBuildId: 41,
       },
+      workspaceFilesHash: "base-files-hash",
+      restorePoint: {
+        artifactVersionId: 500,
+        versionNumber: 1,
+      },
+      forumAccess: true,
       status: "leased",
       requestedSubagents: 1,
       leaseExpiresAt: 220,
+      ...jobOverrides,
     },
     relays: [relay],
     attempt: { id: 11, number: 1, token: "attempt-token" },
     workspaceToken: {
       accessToken: "workspace-access",
       expiresAt: 7200,
-      user: { id: 2, username: "Zero" },
+      user: { id: 5, username: "mikey" },
     },
     runtime: {
       provider: "codex",

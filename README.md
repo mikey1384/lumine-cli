@@ -284,7 +284,7 @@ starts unless they accept it there. This notice is invitation metadata only;
 it does not expose the unapproved Workshop plan or private chat.
 
 When a user approves a plan, `duty watch` returns the scoped assignment file and
-contribution workspace to that same session. It does not launch a fresh Codex
+exact approved Build workspace to that same session. It does not launch a fresh Codex
 or Claude process. The on-duty agent uses this explicit lifecycle while it
 works:
 
@@ -298,7 +298,7 @@ lumine sponsor job complete 42 --summary "Implemented and tested the approved ch
 
 `pulse` renews the duty/job leases and returns any newly approved follow-up.
 `update` sends the exact file text back to Zero or Ciel as a user-visible
-message from Lumine, their added brain. Use it for concise, deliberate
+message from Lumine, the on-duty project collaborator they talk with. Use it for concise, deliberate
 milestones only; never send hidden reasoning, raw terminal output, credentials,
 tokens, private paths, or unrelated data. Run `pulse` between substantial work
 steps. `relay-applied` is an explicit receipt;
@@ -318,11 +318,14 @@ shows none of the Workshop UI.
 
 Zero or Ciel remains the user-facing teammate. The on-duty agent session
 receives only the initial relay and active-job Build follow-ups covered by the
-user’s explicit Workshop consent, the assigned contribution branch, and its
-scoped Build Forum—not the raw assistant chat. It cannot merge into Main,
-publish, or use website-management APIs. Lumine records
+user’s explicit Workshop consent and the exact approved Main or requester-owned
+branch—not the raw assistant chat. Temporary job access never includes Forum
+comments. A Forum snapshot is available only when the sponsor's normal account
+already owns the project or is an accepted teammate. Editing jobs save directly
+to the approved workspace after Twinkle creates a restore point; they cannot
+publish or use website-management APIs. Lumine records
 the requested and provider-reported model, effort, service tier, runtime/usage
-evidence, coordinator/helper tree, saved artifact, and branch notice. Every
+evidence, coordinator/helper tree, restore point, and saved artifact. Every
 completed handoff enters the daily integrity flow; probationary, hard-flagged,
 and sampled work requires review. Each unique cleared contribution to another
 user earns a flat 50 Karma Points, while self-sponsored testing, retries, and
