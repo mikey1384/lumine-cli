@@ -195,6 +195,141 @@ test("a switched login cannot discard another account's local duty lease", async
   assert.equal(JSON.parse(await fs.readFile(statePath, "utf8")).sponsorUserId, 5);
 });
 
+test("duty stop archives outdated local state after stopping the canonical duty", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-outdated-stop-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const duty = canonicalDuty();
+  let stopBody = null;
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/sponsor/status") {
+      res.end(JSON.stringify({ duties: [duty] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/state") {
+      stopBody = body;
+      res.end(
+        JSON.stringify({
+          changed: true,
+          duty: { ...duty, state: "stopped" },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  await fs.writeFile(
+    statePath,
+    JSON.stringify({
+      version: 1,
+      apiUrl,
+      sponsorUserId: 5,
+      duty: { ...duty, leaseToken: "outdated-duty-lease" },
+      jobs: {},
+    }),
+    { mode: 0o600 },
+  );
+
+  const stopped = await runCli([
+    "sponsor",
+    "duty",
+    "stop",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--json",
+    "--no-update-check",
+  ]);
+
+  assert.equal(stopped.code, 0, stopped.stderr);
+  assert.deepEqual(stopBody, { dutySessionId: duty.id, state: "stopped" });
+  const output = JSON.parse(stopped.stdout);
+  assert.equal(output.changed, true);
+  assert.match(output.localArchive, /\.invalid-\d+$/);
+  await assert.rejects(fs.stat(statePath), { code: "ENOENT" });
+  const archived = JSON.parse(await fs.readFile(output.localArchive, "utf8"));
+  assert.equal(archived.version, 1);
+  assert.equal((await fs.stat(output.localArchive)).mode & 0o777, 0o600);
+});
+
+test("duty stop preserves another account's outdated local record", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-foreign-outdated-stop-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const duty = canonicalDuty();
+  let stopBody = null;
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/sponsor/status") {
+      res.end(JSON.stringify({ duties: [duty] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/state") {
+      stopBody = body;
+      res.end(
+        JSON.stringify({
+          changed: true,
+          duty: { ...duty, state: "stopped" },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const foreignState = {
+    version: 1,
+    apiUrl,
+    sponsorUserId: 99,
+    duty: { ...duty, leaseToken: "foreign-outdated-duty-lease" },
+    jobs: {},
+  };
+  await fs.writeFile(statePath, JSON.stringify(foreignState), { mode: 0o600 });
+
+  const stopped = await runCli([
+    "sponsor",
+    "duty",
+    "stop",
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--json",
+    "--no-update-check",
+  ]);
+
+  assert.equal(stopped.code, 0, stopped.stderr);
+  assert.deepEqual(stopBody, { dutySessionId: duty.id, state: "stopped" });
+  const output = JSON.parse(stopped.stdout);
+  assert.match(output.localCleanupWarning, /another sponsor account/);
+  assert.deepEqual(JSON.parse(await fs.readFile(statePath, "utf8")), foreignState);
+});
+
 test("ordinary accounts can browser-login but cannot acquire sponsor authority", async (t) => {
   const tmpDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "lumine-sponsor-login-test-"),

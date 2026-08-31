@@ -242,6 +242,25 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   assert.equal(parseAdminOperation(nextRun).body.commentMode, "off");
   assert.equal(parseAdminOperation(nextRun).body.identity, undefined);
 
+  const correctionStart = parseArgs([
+    "admin",
+    "correction",
+    "start",
+    "342752",
+  ]);
+  assert.deepEqual(parseAdminOperation(correctionStart), {
+    name: "correction.start",
+    method: "POST",
+    path: "/cli/admin/corrections",
+    body: { commentId: 342752 },
+    mutates: true,
+  });
+  const correctionRead = parseAdminOperation(
+    parseArgs(["admin", "comments", "get", "342752"]),
+  );
+  assert.equal(correctionRead.correctionEligible, true);
+  assert.equal(correctionRead.correctionCommentId, 342752);
+
   assert.equal(
     parseAdminOperation(parseArgs(["admin", "daily-run", "report"])).path,
     "/cli/admin/daily-runs/report",
@@ -295,6 +314,42 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
       summary: "Concrete safety issue in a bot-authored chat message.",
       severity: "attention",
     },
+  );
+});
+
+test("a correction session rejects a contradictory requested identity", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    correctionStatusResponse: {
+      ok: true,
+      status: "success",
+      changed: false,
+      data: {
+        correction: {
+          id: 812,
+          status: "active",
+          correctionCommentId: 342752,
+          identity: { key: "ciel", userId: 11 },
+        },
+      },
+    },
+  });
+  const result = await runCli([
+    "admin",
+    "comments",
+    "get",
+    "342752",
+    "--identity",
+    "zero",
+    ...fixture.cliArgs,
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /does not match correction session #812 \(ciel\)/);
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/comments/342752",
+    ),
+    false,
   );
 });
 
@@ -2428,6 +2483,21 @@ test("management cost guidance prevents mid-month forecast double counting", () 
   assert.match(guide, /failureCodeCounts[\s\S]*?never usernames/);
 });
 
+test("management reply guidance keeps root and comment authors distinct", () => {
+  const guide = fs.readFileSync(
+    fileURLToPath(new URL("../sdk/LUMINE_ADMIN.md", import.meta.url)),
+    "utf8",
+  );
+  assert.match(
+    guide,
+    /`subject\.author`[\s\S]*?selected comment's `author` owns only that comment/,
+  );
+  assert.match(
+    guide,
+    /never call the root topic,[\s\S]*?project “yours” unless that participant is also its canonical\s+author/,
+  );
+});
+
 async function createFixtureServer(
   t,
   {
@@ -2435,6 +2505,7 @@ async function createFixtureServer(
     runStatusResponse = null,
     monthlyAiCostsResponse = null,
     monthlyMediaCostsResponse = null,
+    correctionStatusResponse = null,
   } = {},
 ) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-"));
@@ -2503,6 +2574,14 @@ async function createFixtureServer(
           },
         }),
       );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/admin/corrections/status" &&
+      correctionStatusResponse
+    ) {
+      res.end(JSON.stringify(correctionStatusResponse));
       return;
     }
     if (
@@ -3058,6 +3137,11 @@ test("automatic pagination checkpoints each canonical page and records coverage"
   );
   assert.equal(result.data.scan.pages, 2);
   assert.equal(result.data.scan.scannedCount, 525);
+  assert.equal(result.data.pagination.pageScannedCount, 25);
+  assert.equal(
+    Object.hasOwn(result.data.pagination, "scannedCount"),
+    false,
+  );
   assert.equal(result.data.scan.outputPath, output);
   assert.equal(result.data.scan.filterSummariesComplete, true);
   assert.deepEqual(materialized.data.clientFilter, {

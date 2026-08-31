@@ -39,11 +39,19 @@ canonical structured data.
   described below. The human's normal AI Energy and sponsor path applies;
   Lumine does not need to remain running.
 
-`auto` selects Zero first when no completed rotation exists, then alternates
-after a successfully completed run that performed a mutation. Failed,
-abandoned, expired, and read-only runs do not advance rotation. Reusing a run
-key returns the original run and identity. One writer-locked identity-state row
-serializes concurrent starts.
+The Zero/Ciel shift is assigned by **Asia/Bangkok calendar day, not by run**.
+The schedule is anchored with 2026-08-31 assigned to Zero and alternates by
+elapsed Bangkok dates from there. Every automatic primary, supplemental,
+retry, read-only, or resumed run started on one date uses that date's same
+actor; a skipped date still counts in the alternation. Completing, failing,
+abandoning, or expiring a run never changes the schedule. An explicit
+`--identity zero` or `--identity ciel` is an auditable override for that run
+only: it does not rewrite the scheduled identity. Automatic runs expire at the
+next Bangkok midnight so yesterday's actor cannot continue as today's
+automatic identity. Reusing a live run key still returns the original run and
+identity. `identity use zero|ciel` is the separate, explicit persistent
+override for future starts; it remains in force until `identity use auto`, and
+does not alter the underlying calendar schedule reported by status commands.
 
 Comment mode is stored only on the current run:
 
@@ -245,7 +253,15 @@ posts that most need Zero or Ciel are the ones nobody else answered.
   mention is what notifies him (`postComment` runs `processMentions` /
   `postMentions` and emits `new_targeted_upload`), so a bug-report comment
   without `@mikey` fails its main job. Restate what the child observed; never
-  promise a fix or a timeline.
+  promise a fix or a timeline. This reporting duty does not suspend the acting
+  bot's character: the public comment must still sound like Zero or Ciel
+  talking naturally to that member, not like an operator, ticket, or incident
+  report. Read the full thread first. If the bot already noticed, explained, or
+  apologized for the bug, do not post another reply that treats it as a fresh
+  discovery or repeats the same acknowledgement. Continue from what the bot
+  already said and add only what is missing, such as naturally bringing
+  `@mikey` into the conversation. Put the formal defect summary, evidence, and
+  review request in the private run escalation.
 - **Guide users through the website, without waiting to be asked.** A post can
   show that a child is stuck, confused, or unaware a feature exists without ever
   containing a question — someone begging for coins who does not know about
@@ -262,15 +278,45 @@ posts that most need Zero or Ciel are the ones nobody else answered.
   question should normally receive Level 3. Level 3 is the highest delegated
   setting, and the level tells respondents that substantial, carefully
   reasoned answers are wanted.
+- **Ongoing series are participation, not noise.** Daily records, journals,
+  logs, recurring updates, and serialized creative work are not spam, filler,
+  engagement farming, or duplicates merely because they reuse a title or
+  format, or because one installment is concise. Review the series context and
+  what the current entry contributes. Never lower effort, skip, withhold a
+  recommendation or comment, or propose Featured removal solely because of
+  that recurring format or brevity; only an actual duplicate or genuine noise
+  is treated as such.
 - **Sincere requests for personal help are Featured material.** Posts asking
   the community for advice about school, friendships, loneliness, or other
   ordinary real-life problems embody Twinkle's purpose; being personal is never
-  a reason to suppress or remove them. Rotate one out after it has received
-  meaningful support to make room for a newer overlooked request — not because
-  of its subject matter. Only a concrete safety/privacy issue or the author's
-  request changes that visibility judgment.
-- **Featured still selects for quality**, but when two candidates are close,
-  prefer the child who has never been featured over the one who has.
+  a reason to suppress or remove them. Receiving meaningful support does not
+  make one stale or create a duty to rotate it out; keep judging what the live
+  board contributes now, and never use prior recognition as a removal proxy.
+- **Speculative privacy is never an editorial signal.** Do not lower, remove,
+  unfeature, or escalate content because it might identify someone, mentions a
+  school, city, class, or ordinary location, or invites everyday community
+  context. Those possibilities carry zero weight in Featured decisions. An
+  actual sensitive disclosure or an author's explicit removal request follows
+  the separate concrete-safety path; it does not make the post low-quality.
+- **Featured values participation, continuity, and child voice—not adult
+  polish.** Accessible questions that many children can answer and ongoing
+  personal series such as records, journals, or recurring updates are strong
+  Featured forms. Age, brevity, simplicity, prior recognition, or a modest
+  description is not a removal reason. Review the whole subject and its role in
+  the community instead of grading its opening text like an essay.
+- **A "new" Featured addition has two non-negotiable eligibility gates.** When
+  Mikey asks for new Featured subjects, additions, or replacements, a candidate
+  must both (1) have been posted recently and (2) have never appeared on the
+  Featured board before. Unless Mikey gives a different recency window,
+  "recently" means the preceding seven calendar days; do not widen into older
+  inventory merely to fill capacity or produce a longer proposal list. Absence
+  from the current `featured list` proves only that a Subject is not Featured
+  now — it does not prove that the Subject has never been Featured. Verify
+  lifetime Featured history from canonical evidence before recommending or
+  adding it. If the available CLI/API cannot prove that history, leave the
+  candidate out and report the capability gap instead of guessing. Quality is
+  still required after both eligibility gates pass; recent and never-Featured
+  does not make filler acceptable.
 - **The live Featured board is Mikey's word.** Do not remove or reorder a
   currently Featured subject without first showing Mikey the planned removals
   and replacements and getting his go-ahead. Additions have standing approval
@@ -282,7 +328,8 @@ posts that most need Zero or Ciel are the ones nobody else answered.
   deliberately — never re-feature it to "restore" the board, even when space
   is available, and never treat any subject as a permanent fixture from memory
   or old run notes. Derive the board fresh from `featured list` at the start of
-  every run; the only pins that exist are the ones currently on it.
+  every Featured review or mutation; the only pins that exist are the ones
+  currently on it.
 
 Sensitive disclosures, active disputes, and anything needing crisis or medical
 judgment remain out of scope for a bot comment no matter how neglected the post
@@ -296,11 +343,13 @@ happen. **Every run ends with an escalation list**, and it belongs in the run's
 final report whether or not anyone asks for it.
 
 Keep that list narrow enough to be useful. Escalate concrete child-safety,
-exploitation, privacy, targeted harassment, or platform/system-abuse risk — not
+exploitation, targeted harassment, or platform/system-abuse risk — not
 ordinary children experimenting, arguing, making rumors, proposing informal
 in-site loans or contests, asking where media can be found, or making an
 unverified ownership claim. Those may merit a normal age-appropriate response,
 but they are not escalations without credible harmful conduct or a real victim.
+Hypothetical identifiability and ordinary school, city, class, or location
+references are not escalation signals.
 
 Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
 `/comments/<id>` URL, a one-line summary, and why it needs him:
@@ -565,6 +614,8 @@ type DailyRun = {
   failedAt: number | null;
   failureReason: string | null;
   identity: Identity;
+  scheduledDay: string; // YYYY-MM-DD in Asia/Bangkok
+  scheduledIdentity: Identity;
 };
 ```
 
@@ -592,6 +643,9 @@ type IdentityList = Success<{
 type IdentityStatus = Success<{
   preferredIdentity: "auto" | "zero" | "ciel";
   lastCompletedIdentity: "zero" | "ciel" | null;
+  scheduledDay: string;
+  scheduledIdentity: Identity;
+  scheduleTimeZone: "Asia/Bangkok";
   activeRun: DailyRun | null;
 }>;
 
@@ -643,8 +697,10 @@ type IdentityCandidate = {
 };
 ```
 
-`identity use` changes only the preference for a future start. It never changes
-an active run or advances rotation.
+`identity use zero|ciel` changes the explicit persistent override for future
+starts; `identity use auto` returns future starts to the Bangkok calendar
+schedule. It never changes an active run, alters the reported scheduled
+identity, or advances rotation.
 
 ```bash
 lumine admin daily-run start --identity auto --comment-mode off --json
@@ -668,6 +724,9 @@ Schemas:
 ```ts
 type DailyRunStart = Success<{
   run: DailyRun;
+  scheduledDay: string;
+  scheduledIdentity: Identity;
+  scheduleTimeZone: "Asia/Bangkok";
   carryoverTodos: CarryoverTodos;
 }>;
 type DailyRunStatus = Success<{
@@ -676,7 +735,7 @@ type DailyRunStatus = Success<{
 }>;
 type DailyRunComplete = Success<{
   run: DailyRun;
-  rotationAdvanced: boolean;
+  rotationAdvanced: false; // legacy field; calendar schedules never advance by run
 }>;
 type DailyRunFail = DailyRunComplete;
 ```
@@ -730,9 +789,12 @@ section.** Base it on a fresh `featured list`. When capacity exists, make and
 report strong additions during the run under the standing approval above; do
 not defer them as proposals. Then name each current Subject proposed for
 removal with its canonical URL and a concrete editorial reason, followed by
-any replacement that would require that removal. Never omit the section; when
-no removal or reorder is honestly warranted, say `None` and explain why.
-Removing or reordering pins remains a proposal until Mikey gives his go-ahead.
+any replacement that would require that removal. Every proposed or completed
+addition described as new must include its posting date and canonical evidence
+that it has never been Featured; omit it when either gate is unverified. Never
+omit the section; when no removal or reorder is honestly warranted, say `None`
+and explain why. Removing or reordering pins remains a proposal until Mikey
+gives his go-ahead.
 
 Creating an escalation belongs to the active run; acknowledging, annotating,
 resolving, or reopening it does not. Use the run-independent `escalation`
@@ -1108,6 +1170,7 @@ type CommentGet = Success<{
     id: number;
     url: string;
     title: string | null;
+    author: Author;
     secretShown: boolean;
   } | null;
 }>;
@@ -2484,8 +2547,29 @@ type InsightsBrief = Success<{
 }>;
 ```
 
+### Narrow comment-correction sessions
+
+Correcting one existing bot comment does not require opening a daily run:
+
+```bash
+lumine admin correction start <commentId> --json
+lumine admin comments get <commentId> --json
+lumine admin comment edit <commentId> --file corrected.md --json
+lumine admin correction complete <sessionId> --json
+```
+
+The server derives Zero or Ciel from the comment's actual author; the caller
+cannot choose or override that identity. The authorization lasts ten minutes,
+is bound to that exact comment, permits only reading that target and editing
+it, and never runs daily duties, changes the Bangkok calendar assignment, or
+contributes to a daily-run mutation count. A correction cannot target a human
+comment, notification record, deleted comment, or Build thread. Build comments
+still require a fresh version-bound correction reply after genuinely reviewing
+the published app. Starting a newer correction supersedes an older active one.
+Finish it explicitly after the canonical edit is confirmed.
+
 **Editing the bot's own comments.** `comment edit <commentId> --file
-<comment.md>` replaces the text of a comment the ACTING bot itself authored —
+<comment.md>` replaces the text of a comment the acting bot itself authored —
 for correcting a factual error, an unfulfillable claim, or outdated guidance
 in Zero/Ciel's own words. It is deliberately not a moderation verb: comments
 by the other bot, by any human, and hidden notification records are all
@@ -2495,12 +2579,14 @@ composed-comment rules (plain UTF-8, 10,000-character limit, truth about what
 the session actually did) and publishes through the website's canonical
 comment-edit pipeline — mentions are reprocessed (a newly added `@mikey`
 notifies him), and Earn-candidate projections resync. Submitting identical
-text returns `already_done`. Requires the `comment:post` scope of a
-comment-mode `post` run, and is audited as `comment.edit` with the previous
-content in `beforeState` and `data.edit.previousContent`. Edit sparingly:
+text returns `already_done`. It requires either the exact active correction
+session above or the `comment:post` scope of a comment-mode `post` run, and is
+audited as `comment.edit` with the previous content in `beforeState` and
+`data.edit.previousContent`. Edit sparingly:
 kids may have already read the original, so a comment that changed meaning
 (not just wording) usually deserves a follow-up reply instead of a silent
-rewrite.
+rewrite. Inside a normal daily run it still requires that run's `comment:post`
+scope; for a one-comment repair, use the narrower correction session above.
 
 ## Direct bot chat messages
 
@@ -2656,6 +2742,33 @@ from memory:
   draft-vs-skip judgment rules, which still govern composed comments: skip
   decisions are yours to make and record with `post skip` or in the run
   report).
+
+Persona and conversational state are continuous across the whole thread,
+including acknowledgements, corrections, bug reports, `@mikey` notifications,
+and other reporting duties. The acting bot must remember what it already said:
+do not reintroduce a conclusion, apology, explanation, question, or offer as if
+the earlier bot comment did not exist. A follow-up should advance the existing
+conversation and make its relationship to the prior reply natural and clear.
+Accuracy and escalation requirements never authorize a sudden formal admin
+voice. Before posting, read the full thread, identify the acting bot's existing
+claims and commitments, and preserve the canonical character plus the
+established conversational register where they agree: phrasing,
+capitalization, warmth, humor, and emoji restraint should feel like the same
+Zero or Ciel continuing the conversation. Do not mechanically copy typos,
+mistakes, unsafe behavior, or a voice that conflicts with the canonical
+persona. Keep the two surfaces distinct: the public comment is an in-character
+continuation for the member, while `daily-run escalation add` and the final
+management report carry the concise operator-facing diagnosis and evidence. A
+comment that is factually correct but ignores the bot's earlier reply, repeats
+it as new, or reads like a support ticket or management audit fails this
+requirement.
+
+Keep participant ownership exact while continuing that thread. The
+`subject.author` (or root post's `author`) owns the topic, subject, post, or
+project. A selected comment's `author` owns only that comment. Addressing a
+commenter does not make the root content theirs: never call the root topic,
+subject, post, or project “yours” unless that participant is also its canonical
+author. Read both author fields before composing a reply.
 
 **Lumine Build apps and app posts are composed-only, and only after actually looking
 (Mikey's direction, 2026-08-10).** When a post is about a Build app — the
