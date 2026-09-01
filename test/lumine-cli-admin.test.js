@@ -1207,6 +1207,69 @@ test("new subject, featured, reward, and comment commands map to stable API cont
   );
   assert.deepEqual(
     parseAdminOperation(
+      parseArgs([
+        "admin",
+        "featured",
+        "rotate",
+        "--remove-subject-ids",
+        "3,2",
+        "--add-subject-ids",
+        "9,8",
+      ]),
+    ),
+    {
+      name: "featured.rotate",
+      method: "PUT",
+      path: "/cli/admin/subjects/featured/rotation",
+      body: { removeIds: [3, 2], addIds: [9, 8] },
+      mutates: true,
+    },
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "featured",
+          "rotate",
+          "--remove-subject-ids",
+          "3,2",
+        ]),
+      ),
+    /--add-subject-ids/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "featured",
+          "rotate",
+          "--remove-subject-ids",
+          "3,2",
+          "--add-subject-ids",
+          "9",
+        ]),
+      ),
+    /same number of removal and addition IDs/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "featured",
+          "rotate",
+          "--remove-subject-ids",
+          "3,2",
+          "--add-subject-ids",
+          "9,3",
+        ]),
+      ),
+    /must not overlap/,
+  );
+  assert.deepEqual(
+    parseAdminOperation(
       parseArgs(["admin", "post", "reward", "comment:9", "--twinkles", "3"]),
     ),
     {
@@ -1953,6 +2016,28 @@ test("admin subject inspection and reorder preserve canonical API JSON", async (
     (request) => request.url === "/cli/admin/subjects/featured/order",
   );
   assert.deepEqual(reorderRequest?.body, { ids: [3, 2, 1] });
+
+  const rotate = await runCli([
+    "admin",
+    "featured",
+    "rotate",
+    "--remove-subject-ids",
+    "3,2",
+    "--add-subject-ids",
+    "9,8",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(rotate.code, 0, rotate.stderr);
+  const rotateRequest = fixture.requests.find(
+    (request) => request.url === "/cli/admin/subjects/featured/rotation",
+  );
+  assert.deepEqual(rotateRequest?.body, {
+    removeIds: [3, 2],
+    addIds: [9, 8],
+  });
+  assert.equal(rotateRequest?.runId, "91");
+  assert.match(rotateRequest?.requestId, /^cli:[0-9a-f-]{36}$/);
 });
 
 test("forbidden and partial failures are one JSON value with nonzero exit", async (t) => {

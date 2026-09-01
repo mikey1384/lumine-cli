@@ -1202,6 +1202,8 @@ lumine admin subject feature 123 --json
 lumine admin subject unfeature 123 --json
 lumine admin featured list --json
 lumine admin featured reorder --subject-ids 30,20,10 --json
+lumine admin featured rotate --remove-subject-ids 30,20 \
+  --add-subject-ids 50,40 --json
 ```
 
 Schemas:
@@ -1238,6 +1240,17 @@ type SubjectFeature = FeaturedList & {
 
 type SubjectUnfeature = SubjectFeature;
 type FeaturedReorder = SubjectFeature;
+type FeaturedRotate = FeaturedList & {
+  status: "success" | "already_done";
+  changed: boolean;
+  data: FeaturedList["data"] & {
+    rotation: {
+      removeSubjectIds: number[];
+      addSubjectIds: number[];
+      finalSubjectIds: number[];
+    };
+  };
+};
 ```
 
 `reveal` publishes the existing hidden “viewed without responding” notification
@@ -1253,6 +1266,29 @@ Featured reorder is a complete-set replacement: it rejects duplicates,
 unknown/deleted IDs, missing current members, non-subject rows, and more than
 20 subjects. Permanent pins and editorial ordering policy are deliberately not
 hardcoded.
+
+Featured rotate is the direct, atomic replacement verb for an approved
+rotation. `--remove-subject-ids` names the exact current members Mikey approved
+for removal; `--add-subject-ids` names the same number of replacements in
+descending editorial relevance. The API locks the canonical board, requires
+every removal to still be present and every addition to still be absent,
+validates every subject, then commits one complete-set replacement. Additions
+become the front of the board in the supplied order and all surviving members
+keep their relative order. A stale or partly mismatched plan fails without
+changing anything; an exact retry returns the canonical completed response.
+The response includes the canonical final board and the confirmed rotation
+IDs, so callers never synthesize Featured state locally.
+
+The two lists must have the same nonzero length, so rotation never changes the
+board's count. That also lets an approved swap proceed when the website has
+left a pre-existing board above the delegated maximum without growing it;
+repair the inherited overflow separately with an approved `subject unfeature`.
+
+This mutation deliberately does not choose candidates or override the
+editorial gates above. Before invoking it, the management agent must have
+freshly reviewed the board, shown Mikey the removals and replacements, received
+his go-ahead, and verified that every proposed new addition is recent and has
+never previously been Featured from canonical evidence.
 
 ## Recommendation, Karma approval, and Twinkle rewards
 
@@ -3004,6 +3040,9 @@ and indexes;
 there are no runtime schema checks. The comment-targets migration backfills
 existing subject drafts into the generalized target columns. The local CLI changes
 are not available to users until a separately authorized npm publication.
+Deploy and verify the API's `/cli/admin/subjects/featured/rotation` route before
+publishing a CLI release that exposes `featured rotate`; an older API rejects
+the command without changing Featured state.
 
 Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
 `comments get`, and `recommend` remain accepted, but the singular command forms

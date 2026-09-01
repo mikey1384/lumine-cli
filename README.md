@@ -381,6 +381,8 @@ lumine admin featured list --json
 lumine admin subject feature 123 --json
 lumine admin subject unfeature 123 --json
 lumine admin featured reorder --subject-ids 30,20,10 --json
+lumine admin featured rotate --remove-subject-ids 30,20 \
+  --add-subject-ids 50,40 --json
 lumine admin brief --days 3 --json
 lumine admin notable add Minecrarft_guy --note "Created 8 thoughtful subjects and helped peers in 23 comments this window." --json
 lumine admin post recommend comment:456 --anyone-can-reward --reward-twinkles 3 --json
