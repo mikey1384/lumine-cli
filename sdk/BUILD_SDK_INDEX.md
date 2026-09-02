@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.38.2
-Updated: 2026-08-27
-Generated: 2026-08-27T12:11:09.595Z
+Version: 1.38.3
+Updated: 2026-09-02
+Generated: 2026-09-02T00:33:23.098Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -463,11 +463,11 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - Omit model to use the normal Lite/Medium/High routing. model accepts gpt-5.6-sol, claude-opus-5, or claude-fable-5, and every explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back.
+  - Omit model to use the normal Lite/Medium/High routing. model accepts gpt-5.6-sol, claude-opus-5, or claude-fable-5-1, and every explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back.
   - thinkingMode low uses GPT-5.6 Luna and consumes the viewer's AI Energy from confirmed provider usage; its smaller model is usually cheaper than Medium or High.
   - thinkingMode medium uses Grok 4.6 with medium reasoning and consumes normal AI Energy.
   - thinkingMode high without model uses GPT-5.6 Sol with high reasoning and consumes high AI Energy. Explicit model: 'gpt-5.6-sol' selects Sol with xhigh reasoning at the same High AI Energy tier.
-  - claude-opus-5 uses Anthropic adaptive High thinking. claude-fable-5 uses Anthropic xhigh thinking and normally consumes more AI Energy for comparable token use. Both debit confirmed provider usage at the High tier.
+  - claude-opus-5 uses Anthropic adaptive High thinking. claude-fable-5-1 uses Anthropic xhigh thinking and normally consumes more AI Energy for comparable token use. Both debit confirmed provider usage at the High tier.
   - Pass onStatus, onReasoning, and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
   - onReasoning receives accumulated provider-supplied, app-visible reasoning summaries plus { done, delta, requestId, status }. A provider retry may replace the accumulated summary; treat each callback's first argument as the current source of truth. This callback never exposes hidden/private model chain-of-thought.
   - onText receives accumulated structured-output text plus { done, delta, requestId, status }. Partial output is intentionally incomplete and may include provider formatting; parse only when done is true, when the callback receives the canonical object serialized as JSON, and use the resolved object as the source of truth.
