@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.38.3
-Updated: 2026-09-02
-Generated: 2026-09-02T00:33:23.098Z
+Version: 1.39.0
+Updated: 2026-09-03
+Generated: 2026-09-03T04:17:20.106Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -256,8 +256,8 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Unsubscribe the current viewer from Build notifications for a subject's new pages or updates.
 
 ### Twinkle.chess
-- async bestMove({ fen, depth?, skillLevel?, maxTimeMs?, timeoutMs? }) | scopes: none
-  - Returns: { success, move, bestMove, from, to, promotion, evaluation, depth, mate, error, engine }
+- async bestMove({ fen, depth?, skillLevel?, maxTimeMs?, timeoutMs?, multiPv? }) | scopes: none
+  - Returns: { success, move, bestMove, from, to, promotion, evaluation, depth, mate, lines: [{ rank, move, from, to, promotion, evaluation, mate, depth, pv }], error, engine }
   - Ask the parent-hosted Stockfish engine for the best move from a FEN position.
   - Always available in the build iframe.
   - Stockfish runs in a parent-managed worker with bounded depth, timeout, and serialized requests.
@@ -265,14 +265,18 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - skillLevel 20 defaults to the strongest bounded search budget.
   - maxTimeMs and timeoutMs are clamped between 500 and 60000 milliseconds.
   - This returns engine analysis only. Use app code or a chess rules library to validate legal moves, manage board state, detect game over, and render the board.
+  - multiPv (1-10, default 1) returns the top N moves as lines, ranked best first, all from the same search (a movetime stop can leave a line one iteration behind; keep the engine's rank order rather than re-sorting by score). Compare line evaluations against each other to grade a candidate move; do not compare evaluations from separate searches of different positions.
+  - evaluation and line evaluations are centipawns from the side to move's point of view; mate is a signed mate distance (positive = side to move mates).
   - Example: const result = await Twinkle.chess.bestMove({ fen: game.fen(), skillLevel: 8, maxTimeMs: 1000 });
 if (result.success) game.move({ from: result.from, to: result.to, promotion: result.promotion || undefined });
-- async evaluate({ fen, depth?, skillLevel?, maxTimeMs?, timeoutMs? }) | scopes: none
-  - Returns: { success, move, bestMove, from, to, promotion, evaluation, depth, mate, error, engine }
+- async evaluate({ fen, depth?, skillLevel?, maxTimeMs?, timeoutMs?, multiPv? }) | scopes: none
+  - Returns: { success, move, bestMove, from, to, promotion, evaluation, depth, mate, lines: [{ rank, move, from, to, promotion, evaluation, mate, depth, pv }], error, engine }
   - Analyze a FEN position and return Stockfish's current best move plus centipawn or mate evaluation.
   - Always available in the build iframe.
   - evaluation is the Stockfish centipawn score from the engine output when available; mate is the mate distance when Stockfish reports one.
   - Do not call this from a render loop, animation loop, or high-frequency polling path.
+  - multiPv (1-10, default 1) returns the top N moves as lines, ranked best first, all from the same search (a movetime stop can leave a line one iteration behind; keep the engine's rank order rather than re-sorting by score). Compare line evaluations against each other to grade a candidate move; do not compare evaluations from separate searches of different positions.
+  - evaluation and line evaluations are centipawns from the side to move's point of view; mate is a signed mate distance (positive = side to move mates).
   - Example: const analysis = await Twinkle.chess.evaluate({ fen: game.fen(), depth: 12 });
 console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
 
