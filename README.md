@@ -350,6 +350,7 @@ lumine admin economy trace lock --days 3 \
 lumine admin rescue wordle-audit --days 30 \
   --reason "Identify recorded Wordle breaks and rescue status" --json
 lumine admin daily-run start --identity auto --comment-mode off --json
+lumine admin daily-run start --scope featured --identity auto --json
 lumine admin sponsor applications list --status pending --json
 lumine admin sponsor applications review 12 --decision approve \
   --note "Approved for probationary duty" --json
@@ -378,6 +379,9 @@ lumine admin subject reveal 123 --json
 lumine admin subject effort set 123 --level 3 --json
 lumine admin subject creator set-made-by-poster 123 --json
 lumine admin featured list --json
+lumine admin featured history --subject-ids 50,40 --all --json
+lumine admin featured add --subject-ids 50,40 \
+  --posted-after 2026-08-27T00:00:00+07:00 --json
 lumine admin subject feature 123 --json
 lumine admin subject unfeature 123 --json
 lumine admin featured reorder --subject-ids 30,20,10 --json
@@ -412,7 +416,19 @@ and posts use the selected bot's server-owned canonical persona. Outside Build
 threads, a later human reply is handled by Twinkle's existing autonomous
 Zero/Ciel responder without Lumine remaining active.
 
-Management agents also inspect recent public Build candidates during each run.
+`--scope full` is the default and authorizes the complete daily-management
+workflow. `--scope featured` is a deliberately narrow run for a requested
+Featured-only slice: it cannot comment, does not surface carry-over todos, does
+not write full-run queue coverage, does not require sponsor review, and never
+advances full-run review windows. Its dedicated start endpoint also prevents an
+older API from silently interpreting it as a full run. The
+atomic `featured add` verb preserves the supplied relevance order and requires
+the server to prove both a strict posting-date boundary and complete
+never-Featured history. `featured history` returns that evidence without the
+large repeated board snapshots in the general audit trail.
+
+Management agents also inspect recent public Build candidates during each full
+daily review.
 `builds review` opens one published app in an isolated temporary Chromium
 profile, captures a screenshot and console evidence, verifies that the
 published version stayed fixed, and writes a review receipt in a unique output
@@ -451,6 +467,9 @@ follows them automatically, fsyncs each confirmed page to a private NDJSON
 candidate spool, saves only bounded cursor/boundary/count metadata in the
 checkpoint, and records completed queue coverage in the run audit; `--resume`
 verifies the confirmed spool prefix and continues the exact same request. The
+automatic checkpoint name includes the exact request fingerprint (including
+client-side view filters and result-transform inputs), and an
+exclusive adjacent lock prevents concurrent processes from sharing it. The
 final JSON contract still contains the complete collection, streamed from the
 spool instead of accumulated in memory. With `--all --json`, bounded progress
 goes to stderr so stdout remains one pipe-safe JSON value. Recommendation scans default to the previous completed
@@ -462,7 +481,7 @@ cursors are bound to the original date and effort filters.
 `news claim` can write both the canonical leased digest and an editable
 editorial scaffold. `news validate` is local and checks every citation and
 quote before submission; `news submit --claim` reads the lease identity from
-the claim file. Every `daily-run start` response includes writer-confirmed
+the claim file. Every full `daily-run start` response includes writer-confirmed
 unfinished private todos, with once-per-run surfacing telemetry, so an agent
 can resume earlier work without relying on conversation memory. Record progress
 with `todo update`; completing a run does not complete its todos. Experiments
@@ -470,7 +489,7 @@ must meet their stated acceptance criteria—lower AI cost with weaker user
 responses is not a successful optimization. `daily-run report` summarizes
 confirmed mutations, completed queue coverage, explicitly recorded escalations,
 unfinished todos, sponsor-integrity state, and the run brief before the run is
-completed. A run cannot complete until its bounded sponsor-integrity snapshot
+completed. A full run cannot complete until its bounded sponsor-integrity snapshot
 has been scanned and every selected case is cleared or disqualified. `hold` and
 `flag` deliberately keep the run open for human judgment; scans never suspend,
 revoke, or disqualify a sponsor automatically.

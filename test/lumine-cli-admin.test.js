@@ -11,10 +11,12 @@ import { fileURLToPath } from "node:url";
 
 import {
   adminCommand,
+  assertAdminOperationAllowedForRunScope,
   assertAiEmailPolicySetResult,
   assertComposedCommentDraftResult,
   assertAdminTodoHandoffResult,
   assertRecommendationWindowResult,
+  canonicalAdminRunScope,
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
   formatAdminJsonError,
@@ -25,6 +27,7 @@ import {
   parseRecommendationWindow,
   parseRecommendationTarget,
   resolveOperatorViewFilter,
+  shouldRecordAdminQueueCoverage,
 } from "../lib/admin.js";
 import {
   createNewsEditorialScaffold,
@@ -233,6 +236,7 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
     body: {
       identity: "auto",
       commentMode: "post",
+      scope: "full",
       runKey: "daily:2026-08-06:test",
     },
     mutates: true,
@@ -241,6 +245,58 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   const nextRun = parseArgs(["admin", "daily-run", "start"]);
   assert.equal(parseAdminOperation(nextRun).body.commentMode, "off");
   assert.equal(parseAdminOperation(nextRun).body.identity, undefined);
+  assert.equal(parseAdminOperation(nextRun).body.scope, "full");
+
+  const featuredRun = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "daily-run",
+      "start",
+      "--scope",
+      "featured",
+    ]),
+  );
+  assert.equal(featuredRun.body.scope, "featured");
+  assert.equal(featuredRun.path, "/cli/admin/daily-runs/start/featured");
+  assert.match(featuredRun.body.runKey, /^scoped:featured:\d{4}-\d{2}-\d{2}:/);
+  assert.equal(canonicalAdminRunScope({}), "full");
+  assert.equal(canonicalAdminRunScope({ runScope: "featured" }), "featured");
+  assert.throws(
+    () => canonicalAdminRunScope({ runScope: "everything" }),
+    /invalid administrator run scope/,
+  );
+  assert.equal(shouldRecordAdminQueueCoverage("full"), true);
+  assert.equal(shouldRecordAdminQueueCoverage("featured"), false);
+  assert.equal(shouldRecordAdminQueueCoverage(null), false);
+  assert.doesNotThrow(() =>
+    assertAdminOperationAllowedForRunScope({
+      operation: { name: "featured.add", path: "/cli/admin/subjects/featured/additions" },
+      runScope: "featured",
+    }),
+  );
+  assert.throws(
+    () =>
+      assertAdminOperationAllowedForRunScope({
+        operation: { name: "build.review", path: "" },
+        runScope: "featured",
+      }),
+    /does not authorize build\.review/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "daily-run",
+          "start",
+          "--scope",
+          "featured",
+          "--comment-mode",
+          "draft",
+        ]),
+      ),
+    /requires --comment-mode off/,
+  );
 
   const correctionStart = parseArgs([
     "admin",
@@ -656,6 +712,58 @@ test("todo lifecycle carries experiments between runs without requiring a public
   assert.throws(
     () => assertAdminTodoHandoffResult({ data: { run: { id: 31 } } }),
     /did not confirm the canonical carry-over todo handoff/,
+  );
+  assert.deepEqual(
+    assertAdminTodoHandoffResult(
+      {
+        data: {
+          run: { id: 32, runScope: "featured" },
+          carryoverTodos: {
+            included: false,
+            items: [],
+            count: 0,
+            surfacedForRunId: null,
+            newlySurfacedCount: 0,
+          },
+        },
+      },
+      "featured",
+    ).items,
+    [],
+  );
+  assert.throws(
+    () =>
+      assertAdminTodoHandoffResult(
+        {
+          data: {
+            run: { id: 32 },
+            carryoverTodos: {
+              items: [],
+              count: 0,
+              surfacedForRunId: 32,
+              newlySurfacedCount: 0,
+            },
+          },
+        },
+        "featured",
+      ),
+    /returned a full run when the CLI requested featured/,
+  );
+  assert.throws(
+    () =>
+      assertAdminTodoHandoffResult({
+        data: {
+          run: { id: 32, runScope: "featured" },
+          carryoverTodos: {
+            included: false,
+            items: [{ id: 12 }],
+            count: 1,
+            surfacedForRunId: null,
+            newlySurfacedCount: 0,
+          },
+        },
+      }),
+    /carry-over telemetry was suppressed/,
   );
 });
 
@@ -1204,6 +1312,62 @@ test("new subject, featured, reward, and comment commands map to stable API cont
       parseArgs(["admin", "featured", "reorder", "--subject-ids", "3,2,1"]),
     ).body,
     { ids: [3, 2, 1] },
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "featured",
+        "add",
+        "--subject-ids",
+        "9,8",
+        "--posted-after",
+        "2026-08-27T00:00:00+07:00",
+      ]),
+    ),
+    {
+      name: "featured.add",
+      method: "POST",
+      path: "/cli/admin/subjects/featured/additions",
+      body: {
+        addIds: [9, 8],
+        postedAfter: "2026-08-27T00:00:00+07:00",
+      },
+      mutates: true,
+    },
+  );
+  const history = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "featured",
+      "history",
+      "--subject-ids",
+      "9,8",
+      "--cursor",
+      "opaque",
+    ]),
+  );
+  assert.equal(history.name, "featured.history");
+  assert.equal(
+    history.path,
+    "/cli/admin/subjects/featured/history?subjectIds=9%2C8&cursor=opaque&limit=50",
+  );
+  assert.deepEqual(history.pagination, {
+    collectionKey: "events",
+    filters: { subjectIds: [9, 8] },
+  });
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "featured",
+          "add",
+          "--subject-ids",
+          "9,8",
+        ]),
+      ),
+    /--posted-after/,
   );
   assert.deepEqual(
     parseAdminOperation(
@@ -3300,6 +3464,338 @@ test("automatic pagination keeps checkpoint and result paths distinct", async ()
   assert.equal(fs.existsSync(output), false);
 });
 
+test("automatic pagination keys default checkpoints to the exact request", async () => {
+  const runId = Date.now();
+  const makeOperation = (subjectId) => ({
+    name: "subject.comments",
+    path: `/cli/admin/subjects/${subjectId}/comments?limit=50`,
+    pagination: {
+      collectionKey: "comments",
+      filters: { subjectId },
+    },
+  });
+  const scan = async (subjectId) =>
+    runAutomaticPagination({
+      options: {
+        adminCheckpoint: "",
+        adminResume: false,
+        adminOutput: "",
+      },
+      operation: makeOperation(subjectId),
+      runId,
+      fetchPage: async () => ({
+        ok: true,
+        status: "success",
+        data: {
+          comments: [],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 0,
+            snapshotMaxId: 1,
+            snapshotTimeStamp: null,
+            after: null,
+          },
+        },
+      }),
+      transformPage: (page) => page,
+    });
+  const first = await scan(101);
+  const second = await scan(202);
+  const paths = [first, second].map((result) => result.data.scan.checkpointPath);
+  try {
+    assert.notEqual(paths[0], paths[1]);
+    assert.match(
+      path.basename(paths[0]),
+      /subject\.comments-[a-f0-9]{64}\.json$/,
+    );
+    assert.match(
+      path.basename(paths[1]),
+      /subject\.comments-[a-f0-9]{64}\.json$/,
+    );
+  } finally {
+    for (const result of [first, second]) {
+      fs.rmSync(result.data.scan.checkpointPath, { force: true });
+      fs.rmSync(result.data.scan.candidateStorage.path, { force: true });
+      fs.rmSync(`${result.data.scan.checkpointPath}.lock`, { force: true });
+    }
+  }
+});
+
+test("automatic Build checkpoints include the result Site URL", async () => {
+  const runId = Date.now() + 1;
+  const operation = {
+    name: "builds.candidates",
+    path: "/cli/admin/builds/candidates?limit=50",
+    pagination: {
+      collectionKey: "builds",
+      filters: {},
+    },
+  };
+  const scan = async (siteUrl) =>
+    runAutomaticPagination({
+      options: {
+        adminCheckpoint: "",
+        adminResume: false,
+        adminOutput: "",
+        siteUrl,
+      },
+      operation,
+      runId,
+      fetchPage: async () => ({
+        ok: true,
+        status: "success",
+        data: {
+          builds: [],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 0,
+            snapshotMaxId: 1,
+            snapshotTimeStamp: null,
+            after: null,
+          },
+        },
+      }),
+      transformPage: (page) => page,
+    });
+  const first = await scan("https://www.twin-kle.com");
+  const second = await scan("https://staging.twin-kle.com");
+  try {
+    assert.notEqual(
+      first.data.scan.checkpointPath,
+      second.data.scan.checkpointPath,
+    );
+  } finally {
+    for (const result of [first, second]) {
+      fs.rmSync(result.data.scan.checkpointPath, { force: true });
+      fs.rmSync(result.data.scan.candidateStorage.path, { force: true });
+    }
+  }
+});
+
+test("automatic pagination resumes a legacy default checkpoint path", async () => {
+  const runId = Date.now() + 1;
+  const operation = {
+    name: "subjects.candidates",
+    path: "/cli/admin/subjects?limit=50",
+    pagination: {
+      collectionKey: "subjects",
+      filters: {},
+    },
+  };
+  const legacyCheckpoint = path.join(
+    os.tmpdir(),
+    `lumine-admin-run-${runId}-subjects.candidates.json`,
+  );
+  const initial = await runAutomaticPagination({
+    options: {
+      adminCheckpoint: legacyCheckpoint,
+      adminResume: false,
+      adminOutput: "",
+    },
+    operation,
+    runId,
+    fetchPage: async () => ({
+      ok: true,
+      status: "success",
+      data: {
+        subjects: [{ id: 1 }],
+        pagination: {
+          nextCursor: null,
+          exhausted: true,
+          scannedCount: 1,
+          snapshotMaxId: 1,
+          snapshotTimeStamp: null,
+          after: null,
+        },
+      },
+    }),
+    transformPage: (page) => page,
+  });
+  try {
+    const resumed = await runAutomaticPagination({
+      options: {
+        adminCheckpoint: "",
+        adminResume: true,
+        adminOutput: "",
+      },
+      operation,
+      runId,
+      fetchPage: async () => assert.fail("an exhausted scan must not refetch"),
+      transformPage: (page) => page,
+    });
+    assert.equal(resumed.data.scan.checkpointPath, legacyCheckpoint);
+    assert.equal(resumed.data.scan.resumed, true);
+  } finally {
+    fs.rmSync(legacyCheckpoint, { force: true });
+    fs.rmSync(initial.data.scan.candidateStorage.path, { force: true });
+    fs.rmSync(`${legacyCheckpoint}.lock`, { force: true });
+  }
+});
+
+test("automatic pagination exclusively locks a shared checkpoint", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-lock-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  let enterFetch;
+  let releaseFetch;
+  const fetching = new Promise((resolve) => {
+    enterFetch = resolve;
+  });
+  const blocked = new Promise((resolve) => {
+    releaseFetch = resolve;
+  });
+  const operation = {
+    name: "subjects.candidates",
+    path: "/cli/admin/subjects?limit=50",
+    pagination: {
+      collectionKey: "subjects",
+      filters: {},
+    },
+  };
+  const args = {
+    options: {
+      adminCheckpoint: checkpoint,
+      adminResume: false,
+      adminOutput: "",
+    },
+    operation,
+    runId: 91,
+    transformPage: (page) => page,
+  };
+  const first = runAutomaticPagination({
+    ...args,
+    fetchPage: async () => {
+      enterFetch();
+      await blocked;
+      return {
+        ok: true,
+        status: "success",
+        data: {
+          subjects: [],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 0,
+            snapshotMaxId: 1,
+            snapshotTimeStamp: null,
+            after: null,
+          },
+        },
+      };
+    },
+  });
+  let result;
+  try {
+    await fetching;
+    await assert.rejects(
+      () =>
+        runAutomaticPagination({
+          ...args,
+          fetchPage: async () => assert.fail("the locked scan must not fetch"),
+        }),
+      /owns checkpoint/,
+    );
+    releaseFetch();
+    result = await first;
+    assert.equal(fs.existsSync(`${checkpoint}.lock`), false);
+  } finally {
+    releaseFetch();
+    await first.catch(() => {});
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.equal(result.data.pagination.exhausted, true);
+});
+
+test("automatic pagination recovers a lock owned by a dead process", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-dead-lock-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  fs.writeFileSync(
+    `${checkpoint}.lock`,
+    `${JSON.stringify({
+      kind: "admin-pagination-lock",
+      pid: 2_147_483_647,
+      token: "00000000-0000-4000-8000-000000000000",
+      operationFingerprint: "0".repeat(64),
+      createdAt: new Date(0).toISOString(),
+    })}\n`,
+    { mode: 0o600 },
+  );
+  try {
+    const result = await runAutomaticPagination({
+      options: {
+        adminCheckpoint: checkpoint,
+        adminResume: false,
+        adminOutput: "",
+      },
+      operation: {
+        name: "subjects.candidates",
+        path: "/cli/admin/subjects?limit=50",
+        pagination: {
+          collectionKey: "subjects",
+          filters: {},
+        },
+      },
+      runId: 92,
+      fetchPage: async () => ({
+        ok: true,
+        status: "success",
+        data: {
+          subjects: [],
+          pagination: {
+            nextCursor: null,
+            exhausted: true,
+            scannedCount: 0,
+            snapshotMaxId: 1,
+            snapshotTimeStamp: null,
+            after: null,
+          },
+        },
+      }),
+      transformPage: (page) => page,
+    });
+    assert.equal(result.data.pagination.exhausted, true);
+    assert.equal(fs.existsSync(`${checkpoint}.lock`), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("automatic pagination leaves malformed checkpoint locks untouched", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-bad-lock-"));
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const lockPath = `${checkpoint}.lock`;
+  fs.writeFileSync(lockPath, "not a Lumine lock\n", { mode: 0o600 });
+  try {
+    await assert.rejects(
+      () =>
+        runAutomaticPagination({
+          options: {
+            adminCheckpoint: checkpoint,
+            adminResume: false,
+            adminOutput: "",
+          },
+          operation: {
+            name: "subjects.candidates",
+            path: "/cli/admin/subjects?limit=50",
+            pagination: {
+              collectionKey: "subjects",
+              filters: {},
+            },
+          },
+          runId: 93,
+          fetchPage: async () => assert.fail("a locked scan must not fetch"),
+          transformPage: (page) => page,
+        }),
+      /owns checkpoint/,
+    );
+    assert.equal(fs.readFileSync(lockPath, "utf8"), "not a Lumine lock\n");
+    assert.equal(fs.existsSync(`${lockPath}.reclaim`), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("automatic pagination never overwrites its resumed candidate spool", async () => {
   const dir = fs.mkdtempSync(
     path.join(os.tmpdir(), "lumine-pagination-spool-collision-"),
@@ -4031,6 +4527,21 @@ test("operator view filters reject unsupported commands before authentication or
     }),
     "unviewed",
   );
+  assert.equal(supported.pagination.filters.operatorView, "unviewed");
+  const comments = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "subject",
+      "comments",
+      "55",
+      "--viewed",
+    ]),
+  );
+  assert.equal(comments.pagination.filters.operatorView, "viewed");
+  const unfilteredComments = parseAdminOperation(
+    parseArgs(["admin", "subject", "comments", "55"]),
+  );
+  assert.deepEqual(unfilteredComments.pagination.filters, {});
   const mutation = parseAdminOperation(
     parseArgs(["admin", "post", "reward", "comment:8", "--twinkles", "3"]),
   );

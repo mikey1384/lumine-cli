@@ -15,9 +15,13 @@ canonical structured data.
   server-owned Zero and Ciel user IDs are approved. Usernames and CLI flags are
   not authority.
 - `daily-run start` creates or returns a six-hour `delegated-admin` run with
-  explicit scopes and one public actor. Every run-scoped CLI command loads the
-  canonical active run and sends its ID; the API rejects a missing, expired, or
-  mismatched run.
+  one allowlisted run scope and one public actor. `--scope full` is the full
+  daily-management review. `--scope featured` is only an authorization
+  envelope for a specifically requested Featured slice; it does not authorize
+  or imply the newspaper, queues, conduct review, logs, costs, sponsors,
+  carry-over work, or final full-run report. Every run-scoped CLI command loads
+  the canonical active run and sends its ID; the API rejects a missing,
+  expired, scope-mismatched, or actor-mismatched run.
 - The public content actor is Zero or Ciel. Mikey's operator ID is retained in
   private audit rows and is not embedded in public comment metadata.
 - Delegated HTTP work never authenticates as the bot, opens a bot socket, changes
@@ -58,6 +62,15 @@ Comment mode is stored only on the current run:
 - `off` (default): no draft or post scope.
 - `draft`: server-generated drafts, no public comment.
 - `post`: drafts plus idempotent publication through the ordinary comment path.
+
+A Featured-only run always uses comment mode `off` and grants only Featured
+subject inspection, subject reveal, Featured mutation, and run completion. It can complete
+without a sponsor-integrity scan. Completing it does not advance any full-run
+content/cost/conduct window, queue-coverage record, last-completed identity, or
+carry-over surfacing telemetry. Start one only when Mikey requested that slice; never turn a small
+request into a full review merely because the technical command needs a run.
+The API enforces these scopes, and the CLI also rejects out-of-scope operations
+before calling endpoints outside the Lumine Admin router (notably Build review).
 
 ### Private AI-bucket maintenance
 
@@ -210,9 +223,11 @@ coins, streaks, buckets, messages, or public content.
 
 ## Editorial priorities
 
-The CLI enforces none of this — it is the standing instruction for the operator
-or agent making the judgments, and it applies to every verb below: recommends,
-rewards, effort levels, Featured, skips, comments, and replies.
+The CLI never makes the qualitative judgments in this section; they are the
+standing instruction for the operator or agent and apply to every verb below:
+recommends, rewards, effort levels, Featured, skips, comments, and replies. It
+does enforce deterministic server-provable boundaries documented below, such
+as the posting-date and lifetime-history gates for a new Featured addition.
 
 Public text authored as Ciel must be English. This is an operator and generation
 instruction, not a script or keyword test: writing systems do not identify a
@@ -337,9 +352,9 @@ is. Those go to Mikey.
 
 ## Escalation to Mikey
 
-A run is not finished when the mutations are done. Curation surfaces things only
+A full daily management run is not finished when the mutations are done. Curation surfaces things only
 a human owner can decide, and a finding nobody reports is a finding that did not
-happen. **Every run ends with an escalation list**, and it belongs in the run's
+happen. **Every full run ends with an escalation list**, and it belongs in the run's
 final report whether or not anyone asks for it.
 
 Keep that list narrow enough to be useful. Escalate concrete child-safety,
@@ -604,6 +619,7 @@ type DailyRun = {
   publicActorUserId: number;
   identityMode: "auto" | "zero" | "ciel";
   commentMode: "off" | "draft" | "post";
+  runScope: "full" | "featured";
   sessionKind: "delegated-admin";
   scopes: string[];
   status: "active" | "completed" | "failed" | "expired";
@@ -704,6 +720,7 @@ identity, or advances rotation.
 
 ```bash
 lumine admin daily-run start --identity auto --comment-mode off --json
+lumine admin daily-run start --scope featured --identity auto --json
 lumine admin daily-run start --identity ciel --comment-mode draft \
   --run-key daily:2026-08-06:review --json
 lumine admin daily-run status --json
@@ -744,7 +761,7 @@ type DailyRunFail = DailyRunComplete;
 
 This is the approved Zero/Ciel Build Workshop sponsor role, not the ordinary
 AI Energy sponsor flow. Applications originate only from `lumine sponsor`.
-Website-management agents review them inside an active daily run:
+Website-management agents review them inside an active full daily run:
 
 ```bash
 lumine admin sponsor applications list --status pending --json
@@ -773,10 +790,11 @@ cleared.
 `disqualify` makes it ineligible. `hold` and `flag` require an evidence note and
 remain open. The scan itself never changes sponsor status or applies a sanction.
 Use the separate, audited `sponsor status set` command for an explicit human
-decision. `daily-run complete` is rejected until the scan has covered its full
+decision. Full `daily-run complete` is rejected until the scan has covered its full
 snapshot and no pending, held, or flagged case remains.
 
-Record only qualifying escalations as they are confirmed. `daily-run report`
+During a full review, record only qualifying escalations as they are confirmed.
+`daily-run report`
 then composes the active run's canonical audit events, successful mutations,
 completed queue scans, recorded escalations, and the most useful brief deltas
 into one result. Generate it before `complete`, because run-scoped reads require
@@ -784,7 +802,7 @@ the current active run. Queue coverage is written automatically only after an
 `--all` traversal reaches canonical exhaustion; an interrupted scan remains in
 its local checkpoint and cannot be misreported as complete.
 
-**Every agent-authored final management report includes a `Featured rotation`
+**Every agent-authored final full-management report includes a `Featured rotation`
 section.** Base it on a fresh `featured list`. When capacity exists, make and
 report strong additions during the run under the standing approval above; do
 not defer them as proposals. Then name each current Subject proposed for
@@ -818,13 +836,17 @@ Starting with a run key that belongs to a finished or expired run fails with
 `CLI_ADMIN_RUN_KEY_ALREADY_USED`; supply a fresh `--run-key` (for example
 `daily:2026-08-07:2`) to start again the same day. Reusing the key of the
 live active run returns that run only when the requested `--comment-mode`
-and any explicit `--identity` match it; otherwise the start fails with
+and `--scope`, plus any explicit `--identity`, match it; otherwise the start fails with
 `CLI_ADMIN_RUN_SETTINGS_MISMATCH` instead of silently returning a run with
 different scopes. The same check applies when a start without the active
 run's key would fall back to that active run.
 
-The default run key is `daily:YYYY-MM-DD` in Asia/Bangkok. Supply `--run-key`
-for a separate explicit run. `--idempotency-key` may be supplied to any
+The default full-run key is `daily:YYYY-MM-DD` in Asia/Bangkok. Scoped Featured
+runs receive a fresh `scoped:featured:...` key so completing one slice cannot
+consume the day's full-run key or prevent a later explicitly requested slice.
+They also use a dedicated API start endpoint, so an older API cannot ignore the
+scope and silently create a full run; it fails before creating any run instead.
+Supply `--run-key` for a separate explicit run. `--idempotency-key` may be supplied to any
 mutation when a caller needs the same retry identity across processes. The CLI
 generates a fresh key for every mutation invocation; if a mutation fails, its
 JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
@@ -850,7 +872,7 @@ audit path: canonical todo state and its private `todo.create` / `todo.update`
 audit response commit together, and no public bot, public mutation count, or
 rotation signal is involved.
 
-Every successful `daily-run start` response automatically includes all
+Every successful full `daily-run start` response automatically includes all
 unfinished items under `data.carryoverTodos`. The same run ID increments an
 item's surfacing telemetry at most once, even when start is retried. This is the
 canonical handoff: read it before discretionary new work, resume what can safely
@@ -860,6 +882,8 @@ still-unfinished set again. Completing a daily run never silently completes its
 todos. A CLI carrying this contract rejects a start response that does not echo
 the canonical handoff, so a newer CLI against an API deployed before the todo
 migration cannot quietly treat unsupported telemetry as an empty list.
+A Featured-only start instead returns an explicitly suppressed, empty handoff
+and performs no todo reads, writes, capacity checks, or surfacing increments.
 
 `kind` is `task` or `experiment`. New items may start `open`, `in_progress`, or
 `blocked`; updates may also use `completed` or `cancelled`. A progress note is
@@ -899,9 +923,10 @@ type AdminTodoList = Success<{
 type AdminTodoMutation = Success<{ todo: AdminTodo }>;
 
 type CarryoverTodos = {
+  included: boolean;
   items: AdminTodo[];
   count: number;
-  surfacedForRunId: number;
+  surfacedForRunId: number | null;
   newlySurfacedCount: number;
 };
 ```
@@ -1009,6 +1034,18 @@ the spool and can be copied to a separate `--output` file, while `--checkpoint`
 remains resumable operational state. Subject `--after` is inclusive, and every
 opaque cursor is bound to its original filters.
 
+An automatic checkpoint filename includes a fingerprint of the exact request,
+so two scans with the same operation name and run ID but different subjects,
+server filters, client-side view filters, or result-transform inputs cannot
+overwrite one another. An exclusive adjacent lock rejects a
+second process using the same checkpoint while the first scan is active and
+recovers a lock only when its recorded process no longer exists. Resume still
+recognizes the pre-fingerprint default filename, validates its stored request
+fingerprint, and migrates it through the existing checkpoint path.
+Legacy Build-candidate checkpoints intentionally fail that validation because
+they did not bind the Site URL used to materialize candidate links; start those
+scans fresh so one result cannot mix origins.
+
 For `--all --json`, stdout remains exactly one JSON value. Scan-start, first-
 page, every-tenth-page, and exhaustion progress is written to **stderr** with
 only page/scanned/candidate counts and the private checkpoint path. A long
@@ -1047,7 +1084,7 @@ learned during that review. The receipt binds the draft to the exact reviewed
 artifact without copying a version number by hand; the server owns the Build,
 version, method, and review-time fields around that understanding.
 
-During every management run, scan recent Build candidates back through the
+During every full daily management review, scan recent Build candidates back through the
 run's review window alongside Subjects and the recommendation queue. An app
 that is thin, broken, private, unchanged since a prior substantive bot
 comment, or not meaningfully understood may be left alone. A new or materially
@@ -1201,6 +1238,9 @@ lumine admin subject creator set-made-by-poster 123 --json
 lumine admin subject feature 123 --json
 lumine admin subject unfeature 123 --json
 lumine admin featured list --json
+lumine admin featured history --subject-ids 50,40 --all --json
+lumine admin featured add --subject-ids 50,40 \
+  --posted-after 2026-08-27T00:00:00+07:00 --json
 lumine admin featured reorder --subject-ids 30,20,10 --json
 lumine admin featured rotate --remove-subject-ids 30,20 \
   --add-subject-ids 50,40 --json
@@ -1233,12 +1273,58 @@ type FeaturedList = Success<{
   maximum: 20;
 }>;
 
+type FeaturedHistory = Success<{
+  coverage: {
+    complete: boolean;
+    startedAt: number | null;
+    updatedAt: number | null;
+  };
+  subjects: Array<{
+    id: number;
+    url: string;
+    title: string | null;
+    createdAt: number | null;
+    deleted: boolean | null;
+    featured: { member: boolean; order: number | null };
+    knownFeatured: boolean;
+    neverFeatured: boolean | null;
+    firstRecordedFeaturedAt: number | null;
+    lastRecordedFeaturedAt: number | null;
+  }>;
+  events: Array<{
+    id: number;
+    mutationId: string;
+    subjectId: number;
+    action: "featured" | "unfeatured" | "reordered" | "snapshot";
+    fromPosition: number | null;
+    toPosition: number | null;
+    source: "website" | "lumine-admin" | "coverage-bootstrap";
+    operation: string;
+    actorUserId: number | null;
+    operatorUserId: number | null;
+    adminAuditId: number | null;
+    occurredAt: number;
+  }>;
+  pagination: Pagination;
+}>;
+
 type SubjectFeature = FeaturedList & {
   status: "success" | "already_done";
   changed: boolean;
 };
 
 type SubjectUnfeature = SubjectFeature;
+type FeaturedAdd = FeaturedList & {
+  status: "success" | "already_done";
+  changed: boolean;
+  data: FeaturedList["data"] & {
+    addition: {
+      addSubjectIds: number[];
+      postedAfter: number;
+      finalSubjectIds: number[];
+    };
+  };
+};
 type FeaturedReorder = SubjectFeature;
 type FeaturedRotate = FeaturedList & {
   status: "success" | "already_done";
@@ -1266,6 +1352,34 @@ Featured reorder is a complete-set replacement: it rejects duplicates,
 unknown/deleted IDs, missing current members, non-subject rows, and more than
 20 subjects. Permanent pins and editorial ordering policy are deliberately not
 hardcoded.
+
+`featured history` is the compact canonical evidence path. It returns only
+coverage metadata, per-subject lifetime summaries, and paginated mutation
+events; it does not repeat full audit before/after board snapshots. An event of
+any action proves the subject has appeared on Featured. `neverFeatured: true`
+is returned only when no event exists and the subject was created strictly
+after the finalized coverage boundary. `null` means the subject predates provable
+coverage—never convert that unknown into “never Featured.” Both the website
+editor and Lumine mutations write this append-only history in the same
+transaction as the canonical board replacement.
+For a retry whose board transaction committed but whose canonical detail reload
+failed, the audit-linked history event is the durable receipt: the API re-reads
+the current board and preserves the original changed-mutation accounting.
+
+`featured add` is the atomic verb for genuinely new additions. The supplied
+IDs are placed at the front in descending relevance order while existing
+members retain their order. The server requires the whole batch to be absent,
+fit within the 20-subject maximum, have no Featured event, fall inside complete
+history coverage, and have a creation time strictly after `--posted-after`.
+That boundary accepts Unix seconds, an ISO-8601 date (interpreted as UTC), or
+an ISO-8601 timestamp with an explicit `Z`/numeric offset; timezone-free
+timestamps and permissively normalized dates are rejected.
+Any failed gate leaves the entire board unchanged. An exact completed retry is
+replayed from its audit response, while recovery after a committed board change
+is proven by that request's audit-linked history receipt. A fresh request for
+an already-present subject fails instead of inferring a retry from board shape.
+Use the ordinary singular `subject feature` only for an explicit manual
+override; it does not claim that a subject is new.
 
 Featured rotate is the direct, atomic replacement verb for an approved
 rotation. `--remove-subject-ids` names the exact current members Mikey approved
@@ -1617,7 +1731,7 @@ platform absorbs the cost, exactly like their coin-exempt recommends and
 rewards. When a day's first edition is printed, the server notifies the app's
 notification subscribers (users can mute the app or unsubscribe in the app;
 the bots never need to send anything). All three mutations require the
-`news:print` scope (in every run's base scopes) and are audited as `news.print`
+`news:print` scope (in every full run's base scopes) and are audited as `news.print`
 / `news.claim` / `news.submit` against `news_edition` targets.
 
 ```ts
@@ -1678,7 +1792,7 @@ type NewsClaim = Success<{
 type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 ```
 
-## Bot conduct review (standing duty, every run)
+## Bot conduct review (standing duty, every full daily review)
 
 ```bash
 lumine admin bot-output --json
@@ -1686,7 +1800,8 @@ lumine admin bot-output --days 3 --json
 lumine admin bot-output --cursor '<pagination.nextCursor>' --json
 ```
 
-**Every run reviews what Zero and Ciel themselves said since the last run.**
+**Every full daily review reads what Zero and Ciel themselves said since the
+last completed full review.**
 The bots talk to children constantly — chat replies, Daily Reflection
 responses, autonomous comment-assistant comments — and a harmful message must
 never depend on a kid being brave enough to report it (real incident,
@@ -1694,7 +1809,7 @@ never depend on a kid being brave enough to report it (real incident,
 streak — "I'm telling you: Stop", guilt framing, ordering him to quit Daily
 Reflections — and it surfaced only because the kid showed Mikey).
 
-`bot-output` returns, windowed since the operator's last completed run
+`bot-output` returns, windowed since the operator's last completed full run
 (`--days 1..30` overrides): `chatMessages` (every stored Zero/Ciel chat and
 reflection reply, with full text and recipient metadata when its best-effort
 prompt audit exists) and `comments`
@@ -1712,7 +1827,7 @@ right after the brief, and **read every row** — the tool deliberately does no
 filtering, scoring, or keyword matching, because the judgment is the reviewing
 agent's.
 
-### API runtime-log review (same phase, every run)
+### API runtime-log review (same phase, every full daily review)
 
 The bot-conduct review also owns a bounded production API log review. Bot
 responses, community-management reads, and delegated mutations can succeed at
@@ -1882,7 +1997,7 @@ This requires a `comment-mode post` run, sends as that run's selected bot,
 and only works when that bot and member already have a direct channel. It
 never opens a new conversation. The message is audited and idempotent, reopens
 the existing DM canonically, and leaves the child's unread pointer untouched.
-A run report that skipped the conduct review is incomplete.
+A full-run report that skipped the conduct review is incomplete.
 
 ## Daily brief (management insights)
 
@@ -1896,16 +2011,17 @@ lumine admin notable add Minecrarft_guy --note "Helped three new builders debug 
 ```
 
 Read-only management insights for the delegated workflow, windowed since the
-operator's last completed run by default (`--days 1..30` overrides; capped at
-30 days). Call it early in every run — right after the newspaper check — and
-end every run report with an **"Insights for Mikey"** section carrying only
+operator's last completed full run by default (`--days 1..30` overrides;
+capped at 30 days). Call it early in every full daily review — right after the
+newspaper check — and end every full-run report with an **"Insights for
+Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
 
-### Application AI calendar-month cost (standing duty, every run)
+### Application AI calendar-month cost (standing duty, every full daily review)
 
-Run `lumine admin ai-costs monthly --json` during every website-management
-run. This read-only command requires the active delegated run and returns one
+Run `lumine admin ai-costs monthly --json` during every full daily management
+review. This read-only command requires the active delegated run and returns one
 server-owned calendar summary from the canonical deduplicated application AI-
 cost ledger. It deliberately takes no `--days`: all boundaries are UTC calendar
 months, so the result is directly comparable from one run to the next.
@@ -2004,13 +2120,13 @@ owned. Deploy and verify the compatible `twinkle-api` route before publishing
 or installing the Lumine CLI release that invokes it; an older API will reject
 the new command instead of synthesizing figures locally.
 
-### Lumine media feature cost and cleanup watch (standing duty, every run)
+### Lumine media feature cost and cleanup watch (standing duty, every full daily review)
 
-Run `lumine admin media-costs monthly --json` during every website-management
-run. This read-only, delegated-run-gated command reports the canonical Media
+Run `lumine admin media-costs monthly --json` during every full daily management
+review. This read-only, delegated-run-gated command reports the canonical Media
 Energy ledger for short clips, livestream input/viewer usage, and replay
 storage/viewing. Include in
-**"Insights for Mikey"** on every run:
+**"Insights for Mikey"** in every full-run report:
 
 - current-month settled estimated cost, active reservations, cross-month
   carryover, guarded total, global limit, remaining headroom, and percent used;
@@ -2040,7 +2156,7 @@ conservative provider-cost estimates. It is not an AWS invoice. Photo capture
 uses existing Build runtime file storage rather than the paid Media Energy
 ledger; `operations.runtimeStorage.readyImages` therefore reports all ready
 Build runtime images, not camera captures alone. Reconcile delayed AWS
-MediaConvert and IVS service charges every run as described below. S3 is shared
+MediaConvert and IVS service charges every full review as described below. S3 is shared
 with other Twinkle uploads, so report its service-level cost as shared context,
 not as photo-only spend.
 
@@ -2062,13 +2178,13 @@ Replay storage and write cost is conservatively embedded in an opted-in
 `live-input` reservation; `replay-viewer` is a separate kind. Report
 `operations.replays` (pending, processing, ready, failed, deleting,
 delete-failed, overdue finalization/deletion, expired-ready, bytes, and object
-count) and `operations.replayViewers` on every run. A replay finalization or
+count) and `operations.replayViewers` on every full review. A replay finalization or
 deletion alert is an operational incident because private recording cleanup is
 part of the feature contract.
 
-### AWS monthly bill expectation (standing duty, every run)
+### AWS monthly bill expectation (standing duty, every full daily review)
 
-Starting 2026-08-27, every website-management run must also check AWS Cost
+Starting 2026-08-27, every full daily website-management review must also check AWS Cost
 Explorer and include the current calendar month's expected AWS bill in
 **"Insights for Mikey"**. This is an account-level infrastructure cost check,
 not the `aiSpending` application-cost section above. Never substitute one for
@@ -2140,9 +2256,9 @@ For the media watch, separately identify AWS Elemental MediaConvert and Amazon
 Interactive Video Service rows when present. Also report Amazon S3 as shared
 storage context, without attributing the whole S3 row to Lumine media.
 
-### Combined application AI and AWS cost (standing duty, every run)
+### Combined application AI and AWS cost (standing duty, every full daily review)
 
-Every website-management report must also give Mikey one **Combined AI + AWS
+Every full daily website-management report must also give Mikey one **Combined AI + AWS
 tracked operating cost** view. This is a mixed-source estimate, not an invoice
 or a claim to cover every company expense. Keep the independent AI and AWS
 figures visible so the total remains auditable.
@@ -2189,7 +2305,7 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   report period can begin up to one day before or after the exact brief window,
   so use those bounds when describing it. `generatedAt` is the report
   snapshot time. **`endDayInProgress: true` means the trailing bucket was the
-  current UTC day at that snapshot and was still filling** — a daily run reads
+  current UTC day at that snapshot and was still filling** — a full daily review reads
   it mid-day, before the after-school peak, so never report that bucket as a full day's
   spend. `aiSpending.byDay` contains the canonical daily rows. For a truthful
   daily figure, widen the window (`--days 2..7`), exclude the row whose
@@ -2621,7 +2737,7 @@ audited as `comment.edit` with the previous content in `beforeState` and
 `data.edit.previousContent`. Edit sparingly:
 kids may have already read the original, so a comment that changed meaning
 (not just wording) usually deserves a follow-up reply instead of a silent
-rewrite. Inside a normal daily run it still requires that run's `comment:post`
+rewrite. Inside a full comment-enabled daily run it still requires that run's `comment:post`
 scope; for a one-comment repair, use the narrower correction session above.
 
 ## Direct bot chat messages
@@ -3043,6 +3159,19 @@ are not available to users until a separately authorized npm publication.
 Deploy and verify the API's `/cli/admin/subjects/featured/rotation` route before
 publishing a CLI release that exposes `featured rotate`; an older API rejects
 the command without changing Featured state.
+
+For scoped runs and Featured history, also apply
+`add-lumine-admin-run-scope.sql` and `add-featured-subject-history.sql` before
+the API release. After every serving API worker is verified on that release
+and no pre-history worker or request remains running or in flight, run
+`finalize-featured-subject-history-coverage.sql`; only then publish a CLI
+that exposes `featured add`. The guard fails closed until that finalization.
+After coverage is finalized, rolling back to an API that does not record
+history is forbidden because it would create an unprovable lifetime gap.
+After any scoped run exists, an API whose review-window queries do not filter
+for `runScope = 'full'` is also rollback-incompatible because it would treat a
+narrow slice as a completed full review. A forward fix must preserve both
+contracts.
 
 Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
 `comments get`, and `recommend` remain accepted, but the singular command forms
