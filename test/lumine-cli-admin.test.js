@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -16,6 +16,7 @@ import {
   assertComposedCommentDraftResult,
   assertAdminTodoHandoffResult,
   assertRecommendationWindowResult,
+  assertSubjectWindowResult,
   canonicalAdminRunScope,
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
@@ -26,6 +27,7 @@ import {
   parseRecommendationContentTypes,
   parseRecommendationWindow,
   parseRecommendationTarget,
+  parseSubjectWindow,
   resolveOperatorViewFilter,
   shouldRecordAdminQueueCoverage,
 } from "../lib/admin.js";
@@ -217,6 +219,54 @@ test("recommendation scans default to the run window and require explicit legacy
   );
 });
 
+test("Subject scans default to a bounded run window and require explicit legacy scope", () => {
+  const current = parseArgs(["admin", "subjects", "candidates", "--all"]);
+  const operation = parseAdminOperation(current);
+  assert.equal(parseSubjectWindow(current).mode, "since-run");
+  assert.match(operation.path, /sinceRun=true/);
+  assert.doesNotThrow(() =>
+    assertSubjectWindowResult({
+      operation,
+      result: {
+        data: {
+          pagination: {
+            after: 1_725_000_000,
+            snapshotTimeStamp: 1_725_000_100,
+          },
+        },
+      },
+    }),
+  );
+
+  const legacy = parseAdminOperation(
+    parseArgs(["admin", "subjects", "candidates", "--include-legacy"]),
+  );
+  assert.equal(legacy.pagination.coverageMode, "legacy");
+  assert.match(legacy.path, /includeLegacy=true/);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "subjects",
+          "candidates",
+          "--after",
+          "2026-09-01",
+          "--include-legacy",
+        ]),
+      ),
+    /Choose one Subject window/,
+  );
+  assert.throws(
+    () =>
+      assertSubjectWindowResult({
+        operation,
+        result: { data: { pagination: { exhausted: false } } },
+      }),
+    /did not confirm the bounded Subject window/,
+  );
+});
+
 test("delegated identity and daily-run parsing keeps comment permission run-local", () => {
   const start = parseArgs([
     "admin",
@@ -248,13 +298,7 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   assert.equal(parseAdminOperation(nextRun).body.scope, "full");
 
   const featuredRun = parseAdminOperation(
-    parseArgs([
-      "admin",
-      "daily-run",
-      "start",
-      "--scope",
-      "featured",
-    ]),
+    parseArgs(["admin", "daily-run", "start", "--scope", "featured"]),
   );
   assert.equal(featuredRun.body.scope, "featured");
   assert.equal(featuredRun.path, "/cli/admin/daily-runs/start/featured");
@@ -270,7 +314,10 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
   assert.equal(shouldRecordAdminQueueCoverage(null), false);
   assert.doesNotThrow(() =>
     assertAdminOperationAllowedForRunScope({
-      operation: { name: "featured.add", path: "/cli/admin/subjects/featured/additions" },
+      operation: {
+        name: "featured.add",
+        path: "/cli/admin/subjects/featured/additions",
+      },
       runScope: "featured",
     }),
   );
@@ -298,12 +345,7 @@ test("delegated identity and daily-run parsing keeps comment permission run-loca
     /requires --comment-mode off/,
   );
 
-  const correctionStart = parseArgs([
-    "admin",
-    "correction",
-    "start",
-    "342752",
-  ]);
+  const correctionStart = parseArgs(["admin", "correction", "start", "342752"]);
   assert.deepEqual(parseAdminOperation(correctionStart), {
     name: "correction.start",
     method: "POST",
@@ -400,7 +442,10 @@ test("a correction session rejects a contradictory requested identity", async (t
   ]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /does not match correction session #812 \(ciel\)/);
+  assert.match(
+    result.stderr,
+    /does not match correction session #812 \(ciel\)/,
+  );
   assert.equal(
     fixture.requests.some(
       (request) => request.url === "/cli/admin/comments/342752",
@@ -1128,6 +1173,7 @@ test("identity, escalation, notable, and todo bookkeeping do not open a daily ru
       "--include-private-evidence",
       "--json",
     ],
+    ["admin", "notable", "status", "Stealth", "--json"],
     [
       "admin",
       "notable",
@@ -1200,6 +1246,12 @@ test("identity, escalation, notable, and todo bookkeeping do not open a daily ru
     (request) => request.url === "/cli/admin/notable-users",
   );
   assert.equal(notable?.runId, null);
+  const notableStatus = fixture.requests.find(
+    (request) =>
+      request.url === "/cli/admin/notable-users/status?username=Stealth",
+  );
+  assert.equal(notableStatus?.runId, null);
+  assert.equal(notableStatus?.requestId, null);
   const escalationList = fixture.requests.find(
     (request) => request.url === "/cli/admin/escalations?status=all&limit=50",
   );
@@ -1359,13 +1411,7 @@ test("new subject, featured, reward, and comment commands map to stable API cont
   assert.throws(
     () =>
       parseAdminOperation(
-        parseArgs([
-          "admin",
-          "featured",
-          "add",
-          "--subject-ids",
-          "9,8",
-        ]),
+        parseArgs(["admin", "featured", "add", "--subject-ids", "9,8"]),
       ),
     /--posted-after/,
   );
@@ -1509,7 +1555,28 @@ test("comment edit sends composed replacement content for a bot comment", () => 
   );
 });
 
-test("notable add resolves numeric and username targets", () => {
+test("notable status and add resolve numeric and username targets", () => {
+  const statusByUsername = parseAdminOperation(
+    parseArgs(["admin", "notable", "status", "Stealth", "--json"]),
+  );
+  assert.equal(statusByUsername.name, "notable.status");
+  assert.equal(statusByUsername.method, "GET");
+  assert.equal(
+    statusByUsername.path,
+    "/cli/admin/notable-users/status?username=Stealth",
+  );
+  assert.equal(statusByUsername.mutates, false);
+  assert.equal(statusByUsername.requiresRun, false);
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "notable", "status", "12445"]))
+      .path,
+    "/cli/admin/notable-users/status?userId=12445",
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "notable", "status"])),
+    /notable status <userId\|username>/,
+  );
+
   const byId = parseAdminOperation(
     parseArgs([
       "admin",
@@ -1634,6 +1701,88 @@ test("monthly AI costs map to the calendar-month read route", () => {
         parseArgs(["admin", "ai-costs", "monthly", "--days", "30"]),
       ),
     /does not accept --days/,
+  );
+});
+
+test("closed-day AI costs and completed-run reports are run-independent", () => {
+  const day = parseAdminOperation(
+    parseArgs(["admin", "ai-costs", "day", "2026-09-03"]),
+  );
+  assert.deepEqual(day, {
+    name: "ai-costs.day",
+    method: "GET",
+    path: "/cli/admin/ai-costs/day/2026-09-03",
+    body: undefined,
+    mutates: false,
+    requiresRun: false,
+  });
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "ai-costs", "day", "2026-02-30"]),
+      ),
+    /real UTC calendar date/,
+  );
+
+  const report = parseAdminOperation(
+    parseArgs(["admin", "daily-run", "report", "431"]),
+  );
+  assert.equal(report.path, "/cli/admin/daily-runs/431/report");
+  assert.equal(report.requiresRun, false);
+  assert.equal(report.historicalRunId, 431);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "daily-run", "report", "431", "--run", "432"]),
+      ),
+    /Usage: lumine admin daily-run report/,
+  );
+});
+
+test("runtime-log commands are run-independent and finishing requires review confirmation", () => {
+  const start = parseAdminOperation(
+    parseArgs(["admin", "runtime-logs", "start"]),
+  );
+  assert.equal(start.name, "runtime-logs.start");
+  assert.equal(start.requiresRun, false);
+  assert.equal(start.mutates, true);
+
+  const read = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "runtime-logs",
+      "read",
+      "--review-session",
+      "/tmp/review.json",
+    ]),
+  );
+  assert.equal(read.name, "runtime-logs.capture");
+  assert.equal(read.runtimeLogAction, "capture");
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "runtime-logs",
+          "finish",
+          "--review-session",
+          "/tmp/review.json",
+        ]),
+      ),
+    /confirm with --reviewed/,
+  );
+  assert.equal(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "runtime-logs",
+        "finish",
+        "--review-session",
+        "/tmp/review.json",
+        "--reviewed",
+      ]),
+    ).runtimeLogAction,
+    "complete",
   );
 });
 
@@ -2323,6 +2472,48 @@ test("completed run retries use canonical lastRun while content commands require
   assert.equal(JSON.parse(list.stdout).error.code, "CLI_ADMIN_NO_ACTIVE_RUN");
 });
 
+test("closed-day costs and historical reports do not probe or borrow an active run", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    runStatusResponse: { run: null, lastRun: null },
+  });
+  const day = await runCli([
+    "admin",
+    "ai-costs",
+    "day",
+    "2026-09-03",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(day.code, 0, day.stderr);
+  const report = await runCli([
+    "admin",
+    "daily-run",
+    "report",
+    "431",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(report.code, 0, report.stderr);
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/daily-runs/status",
+    ),
+    false,
+  );
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/ai-costs/day/2026-09-03",
+    ),
+    true,
+  );
+  assert.equal(
+    fixture.requests.some(
+      (request) => request.url === "/cli/admin/daily-runs/431/report",
+    ),
+    true,
+  );
+});
+
 test("per-command identity assertions cannot override the canonical run actor", async (t) => {
   const fixture = await createFixtureServer(t);
   const mismatch = await runCli([
@@ -2747,6 +2938,313 @@ test("management reply guidance keeps root and comment authors distinct", () => 
   );
 });
 
+test("runtime-log workflow downloads verified private snapshots and closes only after post-clear review", async (t) => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-runtime-log-workflow-"),
+  );
+  const outputBase = path.join(tmpDir, "operator-selected-output");
+  const authFile = path.join(tmpDir, "auth.json");
+  const reviewId = 77;
+  const leaseToken = "11111111-1111-4111-8111-111111111111";
+  const baselineBytes = Buffer.from("baseline error\n", "utf8");
+  const postClearBytes = Buffer.alloc(0);
+  const makeSnapshot = ({
+    snapshotId,
+    segmentId,
+    sequence,
+    phase,
+    bytes,
+    startOffset,
+  }) => ({
+    schemaVersion: 1,
+    snapshotId,
+    sequence,
+    phase,
+    capturedAt: 1_788_000_000 + sequence,
+    segments: [
+      {
+        segmentId,
+        fileName: "twinkle-api.err.log",
+        stream: "error",
+        startOffset,
+        endOffsetExclusive: startOffset + bytes.length,
+        byteLength: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        boundaryLost: false,
+        boundaryLossReason: null,
+        baselineTailOnly: false,
+        previousBoundary: null,
+        currentBoundary: {
+          device: "1",
+          inode: "2",
+          size: startOffset + bytes.length,
+        },
+      },
+    ],
+    missingFiles: [],
+    totalBytes: bytes.length,
+  });
+  const baseline = makeSnapshot({
+    snapshotId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    segmentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    sequence: 1,
+    phase: "baseline",
+    bytes: baselineBytes,
+    startOffset: 0,
+  });
+  const postClear = makeSnapshot({
+    snapshotId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    segmentId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    sequence: 2,
+    phase: "post_clear",
+    bytes: postClearBytes,
+    startOffset: baselineBytes.length,
+  });
+  const bytesBySegment = new Map([
+    [baseline.segments[0].segmentId, baselineBytes],
+    [postClear.segments[0].segmentId, postClearBytes],
+  ]);
+  let latestSnapshot = baseline;
+  let latestAcknowledged = false;
+  let reviewStatus = "active";
+  let clearCount = 0;
+  let completeCalls = 0;
+  const requests = [];
+  const review = (includeToken = false) => ({
+    id: reviewId,
+    status: reviewStatus,
+    startedAt: 1_788_000_000,
+    expiresAt: 1_788_100_000,
+    completedAt: reviewStatus === "completed" ? 1_788_000_100 : null,
+    snapshotSequence: latestSnapshot.sequence,
+    clearCount,
+    lastClearedAt: clearCount ? 1_788_000_050 : null,
+    latestSnapshot,
+    latestSnapshotAcknowledged: latestAcknowledged,
+    ...(includeToken ? { leaseToken } : {}),
+  });
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, "http://localhost");
+    const body = await readRequestBody(req);
+    requests.push({ method: req.method, path: url.pathname, body });
+    res.setHeader("content-type", "application/json");
+    const send = (value, statusCode = 200) => {
+      res.statusCode = statusCode;
+      res.end(JSON.stringify(value));
+    };
+    if (req.method === "GET" && url.pathname === "/cli/session") {
+      send({
+        userId: 7,
+        username: "mikey",
+        scopes: ["build:read", "build:write"],
+      });
+      return;
+    }
+    assert.equal(
+      req.headers["x-lumine-admin-runtime-log-token"] || null,
+      url.pathname === "/cli/admin/runtime-logs/reviews" ? null : leaseToken,
+    );
+    if (
+      req.method === "POST" &&
+      url.pathname === "/cli/admin/runtime-logs/reviews"
+    ) {
+      send({
+        ok: true,
+        status: "success",
+        changed: true,
+        data: { review: review(true), snapshot: baseline },
+      });
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      url.pathname === `/cli/admin/runtime-logs/reviews/${reviewId}`
+    ) {
+      send({
+        ok: true,
+        status: "success",
+        changed: false,
+        data: { review: review() },
+      });
+      return;
+    }
+    const chunkMatch = url.pathname.match(
+      /^\/cli\/admin\/runtime-logs\/reviews\/77\/snapshots\/([^/]+)\/segments\/([^/]+)$/,
+    );
+    if (req.method === "GET" && chunkMatch) {
+      const bytes = bytesBySegment.get(chunkMatch[2]);
+      assert.ok(bytes);
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const limit = Number(url.searchParams.get("limit") || bytes.length);
+      const chunk = bytes.subarray(offset, offset + limit);
+      send({
+        ok: true,
+        status: "success",
+        data: {
+          chunk: {
+            reviewId,
+            snapshotId: chunkMatch[1],
+            segmentId: chunkMatch[2],
+            fileName: "twinkle-api.err.log",
+            offset,
+            byteLength: chunk.length,
+            nextOffset: offset + chunk.length,
+            exhausted: offset + chunk.length === bytes.length,
+            contentBase64: chunk.toString("base64"),
+            segmentByteLength: bytes.length,
+            segmentSha256: createHash("sha256").update(bytes).digest("hex"),
+          },
+        },
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname.endsWith("/acknowledge")) {
+      assert.equal(body.receipts.length, 1);
+      latestAcknowledged = true;
+      send({
+        ok: true,
+        status: "success",
+        changed: true,
+        data: {
+          review: review(),
+          acknowledgedSnapshotId: latestSnapshot.snapshotId,
+        },
+      });
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      url.pathname === `/cli/admin/runtime-logs/reviews/${reviewId}/complete`
+    ) {
+      completeCalls += 1;
+      assert.equal(body.reviewedSnapshotId, latestSnapshot.snapshotId);
+      if (completeCalls === 1) {
+        latestSnapshot = postClear;
+        latestAcknowledged = false;
+        clearCount = 1;
+        send({
+          ok: true,
+          status: "success",
+          changed: true,
+          data: {
+            completionStatus: "post_clear_review_required",
+            reviewedSnapshotId: baseline.snapshotId,
+            review: review(),
+            snapshot: postClear,
+            clear: {
+              fileName: "twinkle-api.err.log",
+              clearedBytes: baselineBytes.length,
+            },
+          },
+        });
+        return;
+      }
+      reviewStatus = "completed";
+      send({
+        ok: true,
+        status: "success",
+        changed: true,
+        data: {
+          completionStatus: "completed",
+          reviewedSnapshotId: postClear.snapshotId,
+          review: review(),
+          snapshot: null,
+          clear: null,
+        },
+      });
+      return;
+    }
+    send({ error: { message: "not found" } }, 404);
+  });
+  t.after(() => {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  fs.writeFileSync(authFile, JSON.stringify({ token: "test-token", apiUrl }));
+  const common = [
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+    "--json",
+  ];
+
+  const started = await runCli([
+    "admin",
+    "runtime-logs",
+    "start",
+    "--output-dir",
+    outputBase,
+    ...common,
+  ]);
+  assert.equal(started.code, 0, started.stderr);
+  assert.doesNotMatch(started.stdout, new RegExp(leaseToken));
+  const startResult = JSON.parse(started.stdout);
+  const sessionPath = startResult.data.artifacts.reviewSessionPath;
+  const sessionDirectory = path.dirname(sessionPath);
+  assert.equal(path.dirname(sessionDirectory), path.resolve(outputBase));
+  assert.equal(fs.statSync(sessionPath).mode & 0o777, 0o600);
+  const baselineArtifact = startResult.data.artifacts.latestSnapshot;
+  assert.equal(
+    fs.readFileSync(baselineArtifact.artifacts[0].path, "utf8"),
+    baselineBytes.toString("utf8"),
+  );
+  assert.equal(
+    fs.statSync(baselineArtifact.artifacts[0].path).mode & 0o777,
+    0o600,
+  );
+
+  const firstFinish = await runCli([
+    "admin",
+    "runtime-logs",
+    "finish",
+    "--review-session",
+    sessionPath,
+    "--reviewed",
+    ...common,
+  ]);
+  assert.equal(firstFinish.code, 0, firstFinish.stderr);
+  assert.equal(
+    JSON.parse(firstFinish.stdout).data.completionStatus,
+    "post_clear_review_required",
+  );
+  const secondFinish = await runCli([
+    "admin",
+    "runtime-logs",
+    "finish",
+    "--review-session",
+    sessionPath,
+    "--reviewed",
+    ...common,
+  ]);
+  assert.equal(secondFinish.code, 0, secondFinish.stderr);
+  assert.equal(
+    JSON.parse(secondFinish.stdout).data.completionStatus,
+    "completed",
+  );
+
+  const replay = await runCli([
+    "admin",
+    "runtime-logs",
+    "finish",
+    "--review-session",
+    sessionPath,
+    "--reviewed",
+    ...common,
+  ]);
+  assert.equal(replay.code, 0, replay.stderr);
+  assert.equal(JSON.parse(replay.stdout).status, "already_done");
+  assert.equal(completeCalls, 2);
+  assert.equal(
+    requests.some((request) => request.path === "/cli/admin/daily-runs/status"),
+    false,
+  );
+});
+
 async function createFixtureServer(
   t,
   {
@@ -2840,10 +3338,7 @@ async function createFixtureServer(
       res.end(JSON.stringify(subjectResponse));
       return;
     }
-    if (
-      req.method === "PUT" &&
-      req.url === "/cli/admin/ai-email-policies"
-    ) {
+    if (req.method === "PUT" && req.url === "/cli/admin/ai-email-policies") {
       const accountUserIds = [17640, 17727];
       res.end(
         JSON.stringify({
@@ -3387,10 +3882,7 @@ test("automatic pagination checkpoints each canonical page and records coverage"
   assert.equal(result.data.scan.pages, 2);
   assert.equal(result.data.scan.scannedCount, 525);
   assert.equal(result.data.pagination.pageScannedCount, 25);
-  assert.equal(
-    Object.hasOwn(result.data.pagination, "scannedCount"),
-    false,
-  );
+  assert.equal(Object.hasOwn(result.data.pagination, "scannedCount"), false);
   assert.equal(result.data.scan.outputPath, output);
   assert.equal(result.data.scan.filterSummariesComplete, true);
   assert.deepEqual(materialized.data.clientFilter, {
@@ -3427,6 +3919,123 @@ test("automatic pagination checkpoints each canonical page and records coverage"
       operatorView: "unviewed",
     },
   });
+});
+
+test("automatic pagination aborts in-flight work and resumes from its last confirmed page", async () => {
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-interrupt-"),
+  );
+  const checkpoint = path.join(dir, "checkpoint.json");
+  const signalSource = new EventEmitter();
+  const operation = {
+    name: "subjects.candidates",
+    path: "/cli/admin/subjects?sinceRun=true",
+    pagination: {
+      collectionKey: "subjects",
+      coverageQueue: "subjects",
+      coverageMode: "since-run",
+      after: null,
+      filters: {},
+    },
+  };
+  let calls = 0;
+  let coverageCalled = false;
+  try {
+    await assert.rejects(
+      () =>
+        runAutomaticPagination({
+          options: {
+            adminCheckpoint: checkpoint,
+            adminResume: false,
+            adminOutput: "",
+          },
+          operation,
+          runId: 88,
+          signalSource,
+          fetchPage: async (_requestPath, signal) => {
+            calls += 1;
+            if (calls === 1) {
+              return {
+                ok: true,
+                status: "success",
+                data: {
+                  subjects: [{ id: 1 }],
+                  pagination: {
+                    nextCursor: "page-two",
+                    exhausted: false,
+                    scannedCount: 1,
+                    snapshotMaxId: 20,
+                    snapshotTimeStamp: 200,
+                    after: 100,
+                  },
+                },
+              };
+            }
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason), {
+                once: true,
+              });
+              setImmediate(() => signalSource.emit("SIGINT"));
+            });
+          },
+          transformPage: (page) => page,
+          recordCoverage: async () => {
+            coverageCalled = true;
+          },
+        }),
+      (error) => {
+        assert.equal(error.code, "LUMINE_ADMIN_SCAN_CANCELLED");
+        assert.equal(error.data.error.details.signal, "SIGINT");
+        assert.equal(error.data.error.details.checkpointPath, checkpoint);
+        return true;
+      },
+    );
+    assert.equal(coverageCalled, false);
+    assert.equal(fs.existsSync(`${checkpoint}.lock`), false);
+    const saved = JSON.parse(fs.readFileSync(checkpoint, "utf8"));
+    assert.equal(saved.pages, 1);
+    assert.equal(saved.nextCursor, "page-two");
+    assert.equal(saved.candidateCount, 1);
+
+    const resumed = await runAutomaticPagination({
+      options: {
+        adminCheckpoint: checkpoint,
+        adminResume: true,
+        adminOutput: "",
+      },
+      operation,
+      runId: 88,
+      signalSource: new EventEmitter(),
+      fetchPage: async (requestPath) => {
+        assert.match(requestPath, /cursor=page-two/);
+        return {
+          ok: true,
+          status: "success",
+          data: {
+            subjects: [{ id: 2 }],
+            pagination: {
+              nextCursor: null,
+              exhausted: true,
+              scannedCount: 1,
+              snapshotMaxId: 20,
+              snapshotTimeStamp: 200,
+              after: 100,
+            },
+          },
+        };
+      },
+      transformPage: (page) => page,
+      recordCoverage: async () => undefined,
+    });
+    const materialized = await materializePaginatedResult(resumed);
+    assert.deepEqual(
+      materialized.data.subjects.map((subject) => subject.id),
+      [1, 2],
+    );
+    assert.equal(resumed.data.scan.resumed, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("automatic pagination keeps checkpoint and result paths distinct", async () => {
@@ -3502,7 +4111,9 @@ test("automatic pagination keys default checkpoints to the exact request", async
     });
   const first = await scan(101);
   const second = await scan(202);
-  const paths = [first, second].map((result) => result.data.scan.checkpointPath);
+  const paths = [first, second].map(
+    (result) => result.data.scan.checkpointPath,
+  );
   try {
     assert.notEqual(paths[0], paths[1]);
     assert.match(
@@ -3708,7 +4319,9 @@ test("automatic pagination exclusively locks a shared checkpoint", async () => {
 });
 
 test("automatic pagination recovers a lock owned by a dead process", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-dead-lock-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-dead-lock-"),
+  );
   const checkpoint = path.join(dir, "checkpoint.json");
   fs.writeFileSync(
     `${checkpoint}.lock`,
@@ -3762,7 +4375,9 @@ test("automatic pagination recovers a lock owned by a dead process", async () =>
 });
 
 test("automatic pagination leaves malformed checkpoint locks untouched", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-bad-lock-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-pagination-bad-lock-"),
+  );
   const checkpoint = path.join(dir, "checkpoint.json");
   const lockPath = `${checkpoint}.lock`;
   fs.writeFileSync(lockPath, "not a Lumine lock\n", { mode: 0o600 });
@@ -4529,13 +5144,7 @@ test("operator view filters reject unsupported commands before authentication or
   );
   assert.equal(supported.pagination.filters.operatorView, "unviewed");
   const comments = parseAdminOperation(
-    parseArgs([
-      "admin",
-      "subject",
-      "comments",
-      "55",
-      "--viewed",
-    ]),
+    parseArgs(["admin", "subject", "comments", "55", "--viewed"]),
   );
   assert.equal(comments.pagination.filters.operatorView, "viewed");
   const unfilteredComments = parseAdminOperation(

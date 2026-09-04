@@ -729,6 +729,7 @@ lumine admin daily-run escalation add --target subject:123 \
 lumine admin daily-run escalation add --target chatMessage:3768159 \
   --note "Concrete safety issue in a bot-authored chat message" --json
 lumine admin daily-run report --json
+lumine admin daily-run report --run 123 --json
 lumine admin daily-run complete --json
 lumine admin daily-run fail --reason "operator stopped" --json
 lumine admin escalation list --status all --json
@@ -798,7 +799,17 @@ During a full review, record only qualifying escalations as they are confirmed.
 then composes the active run's canonical audit events, successful mutations,
 completed queue scans, recorded escalations, and the most useful brief deltas
 into one result. Generate it before `complete`, because run-scoped reads require
-the current active run. Queue coverage is written automatically only after an
+the current active run. After completion,
+`daily-run report --run <completed-run-id>` is the run-independent recovery
+path. It reconstructs immutable run/audit/coverage/escalation evidence and the
+closed-day calendar cost view at the run's completion boundary. It labels that
+basis `historical_reconstruction`: later canonical ledger corrections to those
+closed days are reflected, while the boundary day's then-open cost bucket is
+omitted. The former live brief, carry-over-todo snapshot, and pending sponsor-
+application count are returned as unavailable rather than being synthesized
+from today's state; sponsor scan/case status is explicitly labeled as current
+canonical state for that run's scan. Queue coverage is
+written automatically only after an
 `--all` traversal reaches canonical exhaustion; an interrupted scan remains in
 its local checkpoint and cannot be misreported as complete.
 
@@ -942,6 +953,8 @@ lumine admin recommendations list --include-legacy --all --json
 lumine admin recommendations list --unviewed --json
 lumine admin subjects candidates --after 2026-08-01T00:00:00Z \
   --all --checkpoint subjects.json --json
+lumine admin subjects candidates --since-run --all --json
+lumine admin subjects candidates --include-legacy --all --json
 lumine admin subjects candidates --effort unassigned --json
 lumine admin subjects candidates --unviewed --json
 lumine admin builds candidates --all --limit 50 --json
@@ -1052,6 +1065,13 @@ only page/scanned/candidate counts and the private checkpoint path. A long
 traversal therefore no longer looks stalled, while piping stdout to `jq` or a
 file remains safe.
 
+`Ctrl+C` and `SIGTERM` abort the in-flight page request, leave the last
+server-confirmed page fsynced in the private checkpoint/spool, and release the
+adjacent process lock. The cancellation error names the checkpoint. Continue
+only by rerunning the exact same command with `--resume`; the next invocation
+verifies the request fingerprint and confirmed spool digest before requesting
+another page. An interrupted request is never counted as queue coverage.
+
 Recommendations default to `--since-run`: the server uses the previous
 completed run's start time (or the same bounded seven-day fallback used by the
 brief on a first run). That deliberate start-to-start overlap gives the queue
@@ -1061,6 +1081,13 @@ All-history traversal is deliberately available only through
 `--include-legacy`. The CLI requires the API to echo the canonical `after`
 boundary for bounded modes, so deploying a new CLI against an older API cannot
 silently fall back to a million-row historical scan.
+
+Subject candidates follow the same window contract. They default to the
+previous completed full run's start (with the seven-day first-run fallback),
+accept an explicit inclusive `--after`, and require `--include-legacy` for a
+lifetime traversal. `--since-run`, `--after`, and `--include-legacy` are
+mutually exclusive. The CLI also requires the API to echo the bounded Subject
+window before accepting a page.
 
 `builds candidates` is a management-agent discovery view over the canonical
 public Build browser, ordered by the current published release. It is
@@ -1843,27 +1870,56 @@ The current API-side files are:
 - `/home/ec2-user/server/logs/twinkle-image-optimizer.out.log`
 
 Treat every current `/home/ec2-user/server/logs/*.err.log` and `*.out.log` as
-in scope so a later API-side worker is not silently omitted. Use the production
-SSH endpoint and key from the repository agent guide; all inspection commands
-are read-only.
+in scope so a later API-side worker is not silently omitted. Use the delegated,
+run-independent workflow; it holds one server lease across the review and
+writes private, digest-verified local artifacts:
 
-1. Immediately after `daily-run start`, record each matching file's inode and
-   byte size, inspect its current tail to establish service health, and read
-   every non-empty error log before accepting that position as the run
-   baseline. The prior run is supposed to leave the live API error log empty,
-   so unexplained pre-existing stderr is evidence, not a reason to skip ahead.
-2. Run and fully paginate `bot-output`, reading every row as required above.
-   In this same phase, read every byte appended to both error and normal-output
-   files since the recorded baseline. Refresh the offsets after inspection.
-   Do not rely on a fixed-line `tail`: a busy or multiline failure can begin
-   before that arbitrary window.
-3. Immediately before `daily-run report` and `daily-run complete`, inspect the
-   delta again. This catches failures caused by the curation actions performed
-   after the first conduct/log review. If a file's inode changed or its size
-   shrank, do not assume the missing range was clean: inspect the replacement
-   from byte zero, check the relevant `twinkle-api.service` or
-   `twinkle-image-optimizer.service` journal interval, and report the lost
-   boundary.
+```bash
+lumine admin runtime-logs start --output-dir ./runtime-log-review --json
+# Read every file under data.artifacts.latestSnapshot.snapshotPath.
+
+# After bot-output and again after later management actions:
+lumine admin runtime-logs read \
+  --review-session <data.artifacts.reviewSessionPath> --json
+# Read every newly returned snapshot artifact.
+
+# Immediately before the daily report/completion:
+lumine admin runtime-logs finish \
+  --review-session <data.artifacts.reviewSessionPath> --reviewed --json
+```
+
+`start` captures every byte of each non-empty error log and a bounded 64 KiB
+health tail of each normal-output log. `read` captures every byte appended
+after the last immutable server boundary. Each snapshot fixes file inode,
+offset, byte length, and SHA-256 before the CLI downloads it in bounded chunks;
+the CLI acknowledges only matching local bytes. If an inode changes, a file
+shrinks, or a new/missing file crosses the boundary, the manifest says so and
+captures the replacement from byte zero. Review that evidence and the relevant
+service journal interval; never assume the missing range was clean.
+
+Only one operator can own the production-log boundary. The API's database
+lease and filesystem guard serialize starts, captures, and the eventual clear;
+every legacy service clear (API stdout/stderr and image-optimizer stderr)
+refuses to cross an active or starting Lumine review. A dropped CLI response
+is recoverable from the private `--review-session`: the next command
+materializes and acknowledges the pending
+snapshot, returns it as `needs_review`, and stops before taking another action.
+
+`finish --reviewed` confirms that every artifact returned by prior invocations
+was actually read. If any error log changed since the last artifact, it returns
+a new `needs_review` snapshot and does not clear. At a stable error boundary it
+clears only `twinkle-api.err.log`; lease verification, exact device/inode/size
+checking, and in-place truncation occur on the same open descriptor. It then
+returns `post_clear_review_required` with another immutable snapshot. That
+snapshot also captures normal-output bytes that arrived after the prior
+acknowledged cutoff, so routine stdout traffic cannot make the review infinite.
+Read it and run the same `finish --reviewed` command again. The lease closes
+only when the reviewed error boundary is still stable and the API error log
+remains empty; concurrent errors produce another snapshot before another clear.
+Normal output after the acknowledged post-clear snapshot is outside that
+finite review cutoff and belongs to the next review. Never delete, recreate,
+editor-save, or manually truncate a live log, and never clear stdout or
+optimizer logs through this workflow.
 
 For each warning, fallback, retry loop, or failure, correlate timestamps and
 request/target IDs with the canonical CLI response and private audit event.
@@ -1883,25 +1939,10 @@ carry-over todo with the exact finding and acceptance criteria, and tell Mikey
 in the run report. Do not mark that todo complete until the fix is verified
 live.
 
-Preserve all log evidence while any finding remains. Once every issue found in
-`/home/ec2-user/server/logs/twinkle-api.err.log` has been fixed and verified
-live, or conclusively classified as expected/non-defective, clear that exact
-live API stderr log through the only safe path:
-
-```bash
-ssh -i /Users/mikey/twinkle-api.pem -o IdentitiesOnly=yes \
-  ec2-user@api.twinkle.network \
-  'cd /home/ec2-user/server && npm run logs:clear-errors'
-```
-
-That command truncates the file through the service's inode-safe lifecycle; it
-does not restart the API. Never delete, recreate, editor-save, or manually
-truncate any log. Do not clear normal stdout or the optimizer logs. After the
-safe clear, inspect the error file and all bytes appended to the normal logs
-once more, and include the reviewed file set, boundaries, findings/fixes,
-live-verification result, clear result, and any remaining todo in the final run
-report. If any error-log issue remains unresolved or unverified, do not clear
-the error log.
+Preserve all downloaded evidence while any finding remains. Include the
+reviewed file set, boundary-loss notices, findings/fixes, live-verification
+result, clear result, and any remaining todo in the final run report. If any
+error-log issue remains unresolved or unverified, do not invoke `finish`.
 
 **Purpose and privacy boundary:** this audits how Twinkle's bots treated
 members; it is not thought-policing or a moderation queue for members' private
@@ -2006,6 +2047,7 @@ lumine admin brief --json
 lumine admin brief --days 3 --json
 lumine admin ai-costs monthly --json
 lumine admin media-costs monthly --json
+lumine admin notable status Stealth --json
 lumine admin notable add 12647 --note "Top authored-activity kid of the window: 11 subjects, 61 comments." --json
 lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
@@ -2048,6 +2090,20 @@ with the previous closed month. They are run-rate scenarios, not forecasts
 from a billing provider. All ledger values are pricing-based estimates rather
 than invoices and can change if canonical usage attribution or pricing is
 corrected.
+
+For an exact provider/model/operation breakdown after the run has already
+closed, use the run-independent closed-day drilldown:
+
+```bash
+lumine admin ai-costs day 2026-09-03 --json
+```
+
+The date is a UTC `YYYY-MM-DD` key and must be earlier than the current UTC
+day. `data.dailyAiCosts` uses the same canonical deduplicated ledger as the
+monthly report and returns the exact closed-day summary plus `byDay`,
+`bySurface`, `byProviderModel`, `byBillingPolicy`, `byOperation`, and Lumine
+provider status/model telemetry. It never includes a still-filling day or
+reconstructs totals client-side.
 
 The stable JSON payload is `data.monthlyAiCosts`:
 
@@ -2115,10 +2171,13 @@ type MonthlyAiCostProjection = {
 };
 ```
 
-Release boundary: `/cli/admin/ai-costs/monthly` and all calendar math are API-
-owned. Deploy and verify the compatible `twinkle-api` route before publishing
-or installing the Lumine CLI release that invokes it; an older API will reject
-the new command instead of synthesizing figures locally.
+Release boundary: `/cli/admin/ai-costs/monthly`, `/cli/admin/ai-costs/day/:day`,
+the historical daily-run report, exact notable-user status, Subject-window
+resolution, and the runtime-log lease/snapshot workflow are API-owned. Apply
+the runtime-log review migration, then deploy and verify the compatible
+`twinkle-api` routes before publishing or installing the Lumine CLI release
+that invokes them. An older API will reject the new commands instead of
+synthesizing figures locally.
 
 ### Lumine media feature cost and cleanup watch (standing duty, every full daily review)
 
@@ -2362,6 +2421,11 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   service). It can therefore record Mikey's approval after the daily run has
   closed without opening another delegated run. Without his approval the run
   only proposes.
+  Check an exact current username or user ID without opening a run using
+  `lumine admin notable status <userId|username> --json`. This reads the
+  canonical writer and returns only the resolved public account identity,
+  current membership, and the roster rationale/timestamps when present; it
+  does not expose the private roster fields.
   **Always pass `--note`** with a concrete one-or-two-sentence record of what
   made them notable — real numbers and specifics from the brief window, not
   "active user". It lands in the management page's reason column, which is
