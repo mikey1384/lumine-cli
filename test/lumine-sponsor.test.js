@@ -1915,6 +1915,8 @@ test("a job syncs its branch from Main under the job identity and moves the rest
   let agentCompletionBody = null;
   let completeBody = null;
   let saveCount = 0;
+  const detailsRequests = [];
+  const dialogueBodies = [];
   const server = http.createServer(async (req, res) => {
     const body = await readRequestBody(req);
     res.setHeader("Content-Type", "application/json");
@@ -1978,6 +1980,16 @@ test("a job syncs its branch from Main under the job identity and moves the rest
     if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/agents") {
       jobStatus = "working";
       res.end(JSON.stringify({ agentId: 77, role: "coordinator", ordinal: 0, startedAt: 101, changed: true }));
+      return;
+    }
+    if (req.method === "PUT" && req.url === "/build/73") {
+      detailsRequests.push({ auth: req.headers.authorization, body });
+      res.end(JSON.stringify({ build: { id: 73, title: body.title || "mikey's Adopt Me branch", description: body.description || "" } }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/dialogue") {
+      dialogueBodies.push(body);
+      res.end(JSON.stringify({ changed: true, update: { id: 300 + dialogueBodies.length, direction: "lumine_to_persona", speaker: "Lumine", message: body.message, kind: body.kind || "progress", phase: body.phase, createdAt: 105 }, dialogue: { requesterUserId: 5, jobId: 9, persona: "zero", personaName: "Zero", jobStatus: "working", canProgress: true, dialogue: [] } }));
       return;
     }
     if (req.method === "POST" && req.url === "/build/41/contributions/73/notify-owner") {
@@ -2094,6 +2106,28 @@ test("a job syncs its branch from Main under the job identity and moves the rest
   const refreshedAssignment = await fs.readFile(assignment.assignmentPath, "utf8");
   assert.match(refreshedAssignment, /Restore point: artifact version #4/);
 
+  // A question to the user goes out as its own dialogue kind.
+  const questionFile = path.join(tmpDir, "question.md");
+  await fs.writeFile(questionFile, "Should the music loop stay on the title screen?");
+  const question = await runCli(["sponsor", "job", "update", "9", "--file", questionFile, "--phase", "music", "--kind", "question", "--json", ...sharedArgs], { environment });
+  assert.equal(question.code, 0, question.stderr);
+  assert.equal(dialogueBodies[0].kind, "question");
+  assert.equal(dialogueBodies[0].message, "Should the music loop stay on the title screen?");
+  const badKind = await runCli(["sponsor", "job", "update", "9", "--file", questionFile, "--kind", "shout", ...sharedArgs], { environment });
+  assert.equal(badKind.code, 1);
+  assert.match(badKind.stderr, /--kind must be progress/);
+  assert.match(assignmentText, /--kind question/);
+  // Title and description of the approved workspace, under the job identity.
+  // This job targets a branch, which keeps the project's original details;
+  // the wrappers refuse before touching the network. (Main-target jobs, like
+  // a freshly created project, go through PUT /build/<id> under the job token.)
+  const renamed = await runCli(["sponsor", "job", "rename", "9", "Adopt", "Me", "Deluxe", "--json", ...sharedArgs], { environment });
+  assert.equal(renamed.code, 1);
+  assert.match(renamed.stderr, /a branch keeps the original details/);
+  const described = await runCli(["sponsor", "job", "describe", "9", "A cozy pet town with music.", "--json", ...sharedArgs], { environment });
+  assert.equal(described.code, 1);
+  assert.equal(detailsRequests.length, 0);
+  assert.match(assignmentText, /lumine sponsor job rename 9 <title>/);
   const noNote = await runCli(["sponsor", "job", "suggest", "9", "branch", ...sharedArgs], { environment });
   assert.equal(noNote.code, 1);
   assert.match(noNote.stderr, /Lumine composes it from the actual work/);
