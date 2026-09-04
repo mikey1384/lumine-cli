@@ -18,7 +18,8 @@ canonical structured data.
   one allowlisted run scope and one public actor. `--scope full` is the full
   daily-management review. `--scope featured` is only an authorization
   envelope for a specifically requested Featured slice; it does not authorize
-  or imply the newspaper, queues, conduct review, logs, costs, sponsors,
+  or imply the newspaper, queues, conduct review, logs, costs, AI Energy
+  budget health, sponsors,
   carry-over work, or final full-run report. Every run-scoped CLI command loads
   the canonical active run and sends its ID; the API rejects a missing,
   expired, scope-mismatched, or actor-mismatched run.
@@ -887,7 +888,8 @@ Every successful full `daily-run start` response automatically includes all
 unfinished items under `data.carryoverTodos`. The same run ID increments an
 item's surfacing telemetry at most once, even when start is retried. This is the
 canonical handoff: read it before discretionary new work, resume what can safely
-progress after the run's mandatory newspaper/brief/conduct duties, and record a
+progress after the run's mandatory newspaper/brief/conduct/log-review/cost/
+energy-budget duties, and record a
 concrete progress note before the run closes. The daily-run report includes the
 still-unfinished set again. Completing a daily run never silently completes its
 todos. A CLI carrying this contract rejects a start response that does not echo
@@ -1889,9 +1891,13 @@ lumine admin runtime-logs finish \
 ```
 
 `start` captures every byte of each non-empty error log and a bounded 64 KiB
-health tail of each normal-output log. `read` captures every byte appended
-after the last immutable server boundary. Each snapshot fixes file inode,
-offset, byte length, and SHA-256 before the CLI downloads it in bounded chunks;
+health tail of each normal-output log. `read` captures every error byte
+appended after the last immutable server boundary and at most an 8 MiB tail
+of each normal-output log's growth; a segment whose start was moved forward by
+that cap carries `tailOnly: true` and `omittedBytes` in the manifest, so treat
+the omitted stdout range as unreviewed operational chatter, never as missing
+error evidence (error streams are never tail-capped). Each snapshot fixes file
+inode, offset, byte length, and SHA-256 before the CLI downloads it in bounded chunks;
 the CLI acknowledges only matching local bytes. If an inode changes, a file
 shrinks, or a new/missing file crosses the boundary, the manifest says so and
 captures the replacement from byte zero. Review that evidence and the relevant
@@ -1905,6 +1911,33 @@ is recoverable from the private `--review-session`: the next command
 materializes and acknowledges the pending
 snapshot, returns it as `needs_review`, and stops before taking another action.
 
+A dropped `start` response is the one case with no session file yet. The CLI
+persists its start request key (`runtime-log-review-start-intent.json` under
+`--output-dir`, next to `--review-session`, or — with neither flag — a
+per-account file in the OS temp directory) before sending, so simply rerunning
+the same `start` command replays that key and the API answers with the same
+review. The key survives only transport failures, timeouts, and 5xx answers; a
+definitive 4xx clears it, and a key that belongs to a finished review is
+replaced once automatically. Every replayed `start` rotates the lease token the
+same way `resume` does, so if two shells of the same account raced, only the
+last responder holds a valid token and the other gets 403 until it runs
+`resume`. Two further owner-only recovery commands exist:
+
+```bash
+# Your own active review, with a freshly rotated lease token (the old token
+# stops working) and its latest snapshot materialized into a new session.
+lumine admin runtime-logs resume --output-dir ./runtime-log-review --json
+
+# Release your own active review: database state, filesystem lease, a start
+# guard left by a dead start, and preserved artifacts. Never clears a log.
+lumine admin runtime-logs abandon [--review-session <file>] --json
+```
+
+Prefer `resume` (it keeps the reviewed boundary); use `abandon` only when the
+review cannot continue. A review lives at most 24 hours regardless of how
+often it captures; after that the API reports `CLI_ADMIN_RUNTIME_LOG_REVIEW_EXPIRED`
+and the next `start` supersedes it without clearing anything.
+
 `finish --reviewed` confirms that every artifact returned by prior invocations
 was actually read. If any error log changed since the last artifact, it returns
 a new `needs_review` snapshot and does not clear. At a stable error boundary it
@@ -1913,13 +1946,23 @@ checking, and in-place truncation occur on the same open descriptor. It then
 returns `post_clear_review_required` with another immutable snapshot. That
 snapshot also captures normal-output bytes that arrived after the prior
 acknowledged cutoff, so routine stdout traffic cannot make the review infinite.
-Read it and run the same `finish --reviewed` command again. The lease closes
-only when the reviewed error boundary is still stable and the API error log
-remains empty; concurrent errors produce another snapshot before another clear.
-Normal output after the acknowledged post-clear snapshot is outside that
-finite review cutoff and belongs to the next review. Never delete, recreate,
-editor-save, or manually truncate a live log, and never clear stdout or
-optimizer logs through this workflow.
+Read it and run the same `finish --reviewed` command again. A review clears
+`twinkle-api.err.log` at most once. The lease closes when the reviewed error
+boundary is still stable, i.e. every byte now in the API error log arrived
+after that clear and was captured and acknowledged; errors that arrive before
+the boundary settles produce another `needs_review` snapshot first. Bytes still
+in the file at completion were reviewed but not cleared — the response reports
+them as `retainedErrorBytes` and the next review's baseline captures them
+again — which is what keeps a steadily erroring service from turning the
+review into an endless clear/capture/acknowledge loop. Normal output after the
+acknowledged post-clear snapshot is outside that finite review cutoff and
+belongs to the next review. The `needs_review` loop itself is bounded only by
+the review's 24-hour lifetime: if errors arrive faster than a finish
+round-trip, every `finish` returns another snapshot and the boundary never
+settles. `abandon` is the escape in that case — it releases the review without
+clearing anything, and the next review's baseline picks the bytes up again.
+Never delete, recreate, editor-save, or manually truncate a live log, and never
+clear stdout or optimizer logs through this workflow.
 
 For each warning, fallback, retry loop, or failure, correlate timestamps and
 request/target IDs with the canonical CLI response and private audit event.
@@ -2172,12 +2215,46 @@ type MonthlyAiCostProjection = {
 ```
 
 Release boundary: `/cli/admin/ai-costs/monthly`, `/cli/admin/ai-costs/day/:day`,
-the historical daily-run report, exact notable-user status, Subject-window
-resolution, and the runtime-log lease/snapshot workflow are API-owned. Apply
-the runtime-log review migration, then deploy and verify the compatible
-`twinkle-api` routes before publishing or installing the Lumine CLI release
-that invokes them. An older API will reject the new commands instead of
-synthesizing figures locally.
+`/cli/admin/energy-budget/report`, the historical daily-run report, exact
+notable-user status, Subject-window resolution, and the runtime-log
+lease/snapshot workflow are API-owned. Apply the runtime-log review and energy
+telemetry migrations, then deploy and verify the compatible `twinkle-api`
+routes before publishing or installing the Lumine CLI release that invokes
+them. An older API will reject the new commands instead of synthesizing
+figures locally.
+
+### AI Energy budget health (standing duty, every full daily review)
+
+Read the report at run start, before any other duty, so the day confirms the
+AI Energy budget system (one live Lumine run per user, per-run energy ceiling
+with an exact round cap, settled stops) is still behaving:
+
+```bash
+lumine admin energy-budget --json            # last 7 UTC days (max --days 31)
+```
+
+It is owner-only and run-independent. Every UTC day carries the canonical
+energy ledger (`chargedUsd`, `overflowUsd`, `users`, `recharges`; 1,000,000
+units = $1), every telemetry counter (`busy_refusal`, `autofix_yielded`,
+`autofix_superseded`, `reservation_admitted` with `avgRunBudgetUsd`,
+`budget_stop_changed` / `budget_stop_unchanged` / `run_completed` with a
+per-model breakdown, `stop_settled`, `tool_limit_settled`) and per-model
+per-run usage stats (`runs`, `callsPerRun`, `usdPerRun`, each avg and
+nearest-rank p90). The current UTC day is returned with `inProgress: true`.
+**Headline `lastCompletedDay` (its exact `dayKey`) — never the in-progress
+day**, exactly as the closed-day AI-cost duty does.
+
+`flags` lists every tripped check with its exact numbers: `overflow_usd`
+(overflow above $1 on a completed day), `budget_stop_unchanged_ratio` (more
+than 30% of at least 5 budget stops ended with nothing saved),
+`busy_refusals` (more than 20 in a day), and `telemetry_missing` (runs
+recorded usage while the telemetry table has no rows for that day — the
+writer is broken). Record every tripped flag, and any anomaly you judge from
+the numbers (a per-run p90 far above the average run budget, a sudden drop in
+`run_completed` while runs still record usage, recharges climbing), as a
+carry-over todo with the exact figures and day. **Never auto-enforce** —
+escalate to Mikey; this duty observes, it does not change budgets, caps, or
+user state.
 
 ### Lumine media feature cost and cleanup watch (standing duty, every full daily review)
 

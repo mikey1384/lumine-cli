@@ -1704,6 +1704,29 @@ test("monthly AI costs map to the calendar-month read route", () => {
   );
 });
 
+test("energy-budget maps to the run-independent report route with bounded --days", () => {
+  const report = parseAdminOperation(parseArgs(["admin", "energy-budget"]));
+  assert.equal(report.name, "energy-budget.report");
+  assert.equal(report.method, "GET");
+  assert.equal(report.path, "/cli/admin/energy-budget/report");
+  assert.equal(report.mutates, false);
+  assert.equal(report.requiresRun, false);
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "energy-budget", "--days", "14"]))
+      .path,
+    "/cli/admin/energy-budget/report?days=14",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "energy-budget", "--days", "32"])),
+    /between 1 and 31/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "energy-budget", "monthly"])),
+    /Usage/,
+  );
+});
+
 test("closed-day AI costs and completed-run reports are run-independent", () => {
   const day = parseAdminOperation(
     parseArgs(["admin", "ai-costs", "day", "2026-09-03"]),
@@ -1784,6 +1807,241 @@ test("runtime-log commands are run-independent and finishing requires review con
     ).runtimeLogAction,
     "complete",
   );
+  for (const action of ["resume", "abandon"]) {
+    const operation = parseAdminOperation(
+      parseArgs(["admin", "runtime-logs", action]),
+    );
+    assert.equal(operation.name, `runtime-logs.${action}`);
+    assert.equal(operation.runtimeLogAction, action);
+    assert.equal(operation.requiresRun, false);
+    assert.equal(operation.mutates, true);
+  }
+});
+
+test("runtime-log start persists its request key before sending so a rerun replays idempotently, and abandon releases the session", async (t) => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-runtime-log-start-intent-"),
+  );
+  const outputBase = path.join(tmpDir, "output");
+  const authFile = path.join(tmpDir, "auth.json");
+  const leaseToken = "22222222-2222-4222-8222-222222222222";
+  const startKeys = [];
+  const abandonBodies = [];
+  const captureCalls = [];
+  const startScript = ["drop", "not_active", "ok", "too_large"];
+  let reviewStatus = "active";
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, "http://localhost");
+    const body = await readRequestBody(req);
+    res.setHeader("content-type", "application/json");
+    const send = (value, statusCode = 200) => {
+      res.statusCode = statusCode;
+      res.end(JSON.stringify(value));
+    };
+    if (req.method === "GET" && url.pathname === "/cli/session") {
+      send({ userId: 7, username: "mikey", scopes: ["build:write"] });
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      url.pathname === "/cli/admin/runtime-logs/reviews"
+    ) {
+      startKeys.push(req.headers["x-lumine-idempotency-key"]);
+      const step = startScript.shift();
+      if (step === "drop") {
+        // Simulate the response being lost after the server started the review.
+        req.socket.destroy();
+        return;
+      }
+      if (step === "not_active") {
+        send(
+          {
+            ok: false,
+            status: "error",
+            error: {
+              code: "CLI_ADMIN_RUNTIME_LOG_REVIEW_NOT_ACTIVE",
+              message: "The idempotent start key belongs to a finished review.",
+            },
+          },
+          409,
+        );
+        return;
+      }
+      if (step === "too_large") {
+        send(
+          {
+            ok: false,
+            status: "error",
+            error: {
+              code: "CLI_ADMIN_RUNTIME_LOG_SNAPSHOT_TOO_LARGE",
+              message: "too large",
+            },
+          },
+          413,
+        );
+        return;
+      }
+      send({
+        ok: true,
+        status: "already_done",
+        changed: false,
+        data: {
+          review: {
+            id: 91,
+            status: "active",
+            leaseToken,
+            latestSnapshotAcknowledged: false,
+          },
+          snapshot: {
+            schemaVersion: 1,
+            snapshotId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            sequence: 1,
+            phase: "baseline",
+            capturedAt: 1_788_000_001,
+            segments: [],
+            missingFiles: [],
+            totalBytes: 0,
+          },
+        },
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname.endsWith("/acknowledge")) {
+      send({ ok: true, status: "success", changed: true, data: {} });
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      url.pathname === "/cli/admin/runtime-logs/reviews/91"
+    ) {
+      send({
+        ok: true,
+        status: "success",
+        data: {
+          review: {
+            id: 91,
+            status: reviewStatus,
+            latestSnapshot: null,
+            latestSnapshotAcknowledged: true,
+          },
+        },
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname.endsWith("/capture")) {
+      captureCalls.push(url.pathname);
+      send({ error: { message: "must not be reached" } }, 409);
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      url.pathname === "/cli/admin/runtime-logs/reviews/abandon"
+    ) {
+      abandonBodies.push(body);
+      reviewStatus = "abandoned";
+      send({
+        ok: true,
+        status: "success",
+        changed: true,
+        data: {
+          review: { id: 91, status: "abandoned" },
+          releasedFilesystemLease: true,
+          releasedStartGuard: false,
+        },
+      });
+      return;
+    }
+    send({ error: { message: "not found" } }, 404);
+  });
+  t.after(() => {
+    server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  fs.writeFileSync(authFile, JSON.stringify({ token: "test-token", apiUrl }));
+  const common = [
+    "--api-url",
+    apiUrl,
+    "--auth-file",
+    authFile,
+    "--no-update-check",
+    "--json",
+  ];
+  const startArgs = [
+    "admin",
+    "runtime-logs",
+    "start",
+    "--output-dir",
+    outputBase,
+    ...common,
+  ];
+  const intentPath = path.join(
+    outputBase,
+    "runtime-log-review-start-intent.json",
+  );
+
+  const lost = await runCli(startArgs);
+  assert.notEqual(lost.code, 0);
+  assert.equal(startKeys.length, 1);
+  assert.ok(fs.existsSync(intentPath), "request key persisted before send");
+  assert.equal(fs.statSync(intentPath).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
+
+  // The rerun replays the persisted key; the server says that key belongs to
+  // a finished review, so the CLI clears it and starts over once, fresh.
+  const replayed = await runCli(startArgs);
+  assert.equal(replayed.code, 0, replayed.stderr);
+  assert.deepEqual(startKeys.slice(0, 2), [startKeys[0], startKeys[0]]);
+  assert.equal(startKeys.length, 3);
+  assert.notEqual(startKeys[2], startKeys[0], "a dead key is replaced once");
+  assert.equal(fs.existsSync(intentPath), false, "intent cleared once the session holds the lease");
+  const sessionPath = JSON.parse(replayed.stdout).data.artifacts.reviewSessionPath;
+  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).reviewId, 91);
+
+  const abandoned = await runCli([
+    "admin",
+    "runtime-logs",
+    "abandon",
+    "--review-session",
+    sessionPath,
+    ...common,
+  ]);
+  assert.equal(abandoned.code, 0, abandoned.stderr);
+  assert.deepEqual(abandonBodies, [{ reviewId: 91 }]);
+  assert.doesNotMatch(abandoned.stdout, new RegExp(leaseToken));
+  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).status, "abandoned");
+
+  // A session that did not see the abandon must not start downloading.
+  fs.writeFileSync(
+    sessionPath,
+    JSON.stringify({
+      ...JSON.parse(fs.readFileSync(sessionPath, "utf8")),
+      status: "active",
+    }),
+    { mode: 0o600 },
+  );
+  const read = await runCli([
+    "admin",
+    "runtime-logs",
+    "read",
+    "--review-session",
+    sessionPath,
+    ...common,
+  ]);
+  assert.equal(read.code, 0, read.stderr);
+  const readResult = JSON.parse(read.stdout);
+  assert.equal(readResult.status, "already_done");
+  assert.equal(readResult.data.completionStatus, "abandoned");
+  assert.deepEqual(captureCalls, []);
+  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).status, "abandoned");
+
+  // A definitive 4xx on start clears the persisted key instead of replaying it.
+  const rejected = await runCli(startArgs);
+  assert.notEqual(rejected.code, 0);
+  assert.equal(startKeys.length, 4);
+  assert.equal(fs.existsSync(intentPath), false, "a 4xx never leaves a dead key behind");
 });
 
 test("monthly media costs map to the canonical feature-cost route", () => {
