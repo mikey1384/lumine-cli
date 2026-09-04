@@ -1186,11 +1186,12 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   assert.equal((await fs.stat(state.jobs["9"].authFile)).mode & 0o777, 0o600);
 
   const begin = await runCli(
-    ["sponsor", "job", "begin", "9", "--json", ...sharedArgs],
+    ["sponsor", "job", "begin", "9", "--json", "--no-lease-keeper", ...sharedArgs],
     { environment },
   );
   assert.equal(begin.code, 0, begin.stderr);
   assert.equal(JSON.parse(begin.stdout).coordinator.agentId, 77);
+  assert.equal(JSON.parse(begin.stdout).leaseKeeperPid, null);
   sponsorForumAccess = false;
   const revokedForumPulse = await runCli(
     ["sponsor", "job", "pulse", "9", "--json", ...sharedArgs],
@@ -1881,6 +1882,256 @@ test("stopping duty archives recoverable work without credentials", async (t) =>
   );
   await assert.rejects(fs.stat(legacyJobAuthFile), { code: "ENOENT" });
   await assert.rejects(fs.stat(statePath), { code: "ENOENT" });
+});
+
+test("a job syncs its branch from Main under the job identity and moves the restore point", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-sync-main-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const duty = canonicalDuty();
+  const relay = {
+    id: 101,
+    kind: "initial_request",
+    summary: "Sync the branch with Main, then add music.",
+    projectTitleHint: "Adopt Me",
+    requestedOutcome: "The branch carries Main plus music",
+    constraints: ["Sync the branch with Main before making changes."],
+    acceptanceCriteria: ["Main changes are present"],
+    dialogueText: "Sync the branch with Main, then add music.",
+    createdAt: 100,
+  };
+  let claimed = false;
+  let jobStatus = "leased";
+  let restorePoint = { artifactVersionId: 500, versionNumber: 1 };
+  let branchFiles = [
+    { path: "index.html", content: "<!doctype html><title>Adopt Me</title>" },
+  ];
+  let branchFilesHash = "base-files-hash";
+  let syncRequest = null;
+  let suggestRequest = null;
+  let thumbnailSuggestRequest = null;
+  let agentCompletionBody = null;
+  let completeBody = null;
+  let saveCount = 0;
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/sponsor/agreement") {
+      res.end(JSON.stringify({ version: "2026-08-31", disclosure: ["x"] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/agreement/accept") {
+      res.end(JSON.stringify({ changed: true, agreementVersion: "2026-08-31", acceptedAt: 100 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
+      res.end(JSON.stringify({ duty, leaseToken: "duty-lease", heartbeatEverySeconds: 20 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/4/heartbeat") {
+      res.end(JSON.stringify({ ...duty, heartbeatAt: 100, expiresAt: 400 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/claim") {
+      if (claimed) {
+        res.end(JSON.stringify({ job: null }));
+        return;
+      }
+      claimed = true;
+      res.end(JSON.stringify(workshopClaim(relay, { forumAccess: false })));
+      return;
+    }
+    if (req.method === "GET" && req.url?.startsWith("/cli/build/73/files")) {
+      assert.equal(req.headers.authorization, "Bearer workspace-access");
+      res.end(
+        JSON.stringify({
+          build: {
+            id: 73,
+            title: "mikey's Adopt Me branch",
+            contributionRootBuildId: 41,
+            contributionBranchNumber: 2,
+            canWrite: true,
+          },
+          projectFiles: branchFiles,
+          filesHash: branchFilesHash,
+          projectManifest: null,
+        }),
+      );
+      return;
+    }
+    if (req.method === "GET" && req.url === "/cli/session") {
+      res.end(JSON.stringify({ userId: 5, username: "mikey", scopes: ["build:read", "build:write", "build:sdk"] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/heartbeat") {
+      res.end(
+        JSON.stringify({
+          job: { ...workshopClaim(relay, { forumAccess: false }).job, status: jobStatus, restorePoint },
+          relays: [relay],
+          leaseExpiresAt: 900,
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/agents") {
+      jobStatus = "working";
+      res.end(JSON.stringify({ agentId: 77, role: "coordinator", ordinal: 0, startedAt: 101, changed: true }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/build/41/contributions/73/notify-owner") {
+      suggestRequest = { auth: req.headers.authorization, body };
+      res.end(JSON.stringify({ channel: { id: 5 }, isNew: false, message: { id: 901 } }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/build/41/contributions/73/suggest-thumbnail") {
+      thumbnailSuggestRequest = { auth: req.headers.authorization, body };
+      res.end(JSON.stringify({ channel: { id: 5 }, isNew: false, message: { id: 902 } }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/relays/applied") {
+      res.end(JSON.stringify({ changed: true, appliedRelayIds: [101] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/relays/close") {
+      res.end(JSON.stringify({ closed: true, closedAt: 103, relays: [] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/agents/77/complete") {
+      agentCompletionBody = body;
+      res.end(JSON.stringify({ changed: true, status: "completed" }));
+      return;
+    }
+    if (req.method === "PUT" && req.url === "/build/73/project-files") {
+      saveCount += 1;
+      res.end(JSON.stringify({ artifactVersion: { versionId: 999 }, filesHash: "should-not-save" }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/complete") {
+      completeBody = body;
+      jobStatus = "completed";
+      res.end(JSON.stringify({ job: { ...workshopClaim(relay, { forumAccess: false }).job, status: "completed" } }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/build/41/contributions/73/update-from-main") {
+      syncRequest = { auth: req.headers.authorization, body };
+      branchFiles = [
+        { path: "/index.html", content: "<!doctype html><title>Adopt Me</title><p>from main</p>" },
+        { path: "/music.js", content: "export const bpm = 112;" },
+      ];
+      branchFilesHash = "merged-files-hash";
+      restorePoint = { artifactVersionId: 777, versionNumber: 4 };
+      res.end(
+        JSON.stringify({
+          success: true,
+          contribution: { id: 73, contributionRootBuildId: 41, canWrite: true },
+          artifactVersion: { versionId: 777, versionNumber: 4 },
+          projectFiles: branchFiles,
+          filesHash: branchFilesHash,
+          autoMergedPaths: ["/index.html"],
+          conflicts: [],
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  let workshopTempDir = null;
+  t.after(async () => {
+    if (workshopTempDir) {
+      await fs.rm(workshopTempDir, { recursive: true, force: true });
+    }
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const sharedArgs = ["--api-url", apiUrl, "--auth-file", authFile, "--no-update-check", "--no-open"];
+  const environment = codexEnvironment("sync-main-owner-session");
+  const agreement = await runCli(
+    ["sponsor", "agreement", "accept", "--accept-agreement", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(agreement.code, 0, agreement.stderr);
+  const start = await runCli(
+    ["sponsor", "duty", "start", "--provider", "codex", "--model", "gpt-5.6-sol", "--effort", "max", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(start.code, 0, start.stderr);
+  const watch = await runCli(["sponsor", "duty", "watch", "--json", ...sharedArgs], { environment });
+  assert.equal(watch.code, 0, watch.stderr);
+  const assignment = JSON.parse(watch.stdout).assignment;
+  workshopTempDir = path.dirname(assignment.workspaceDir);
+  const assignmentText = await fs.readFile(assignment.assignmentPath, "utf8");
+  assert.match(assignmentText, /lumine sponsor job sync-main 9/);
+  assert.match(assignmentText, /lumine sponsor job assets 9 upload/);
+  assert.match(assignmentText, /lease keeper for this same session/);
+
+  const begin = await runCli(
+    ["sponsor", "job", "begin", "9", "--json", "--no-lease-keeper", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(begin.code, 0, begin.stderr);
+
+  const sync = await runCli(["sponsor", "job", "sync-main", "9", "--json", ...sharedArgs], { environment });
+  assert.equal(sync.code, 0, sync.stderr);
+  assert.ok(syncRequest, "the sync reached Twinkle");
+  assert.equal(syncRequest.auth, "Bearer workspace-access", "the sync runs under the job identity, not the sponsor login");
+  assert.equal(syncRequest.body.baseFilesHash, "base-files-hash");
+  assert.equal(JSON.parse(sync.stdout).job.restorePoint.versionNumber, 4);
+  const metadata = JSON.parse(
+    await fs.readFile(path.join(assignment.workspaceDir, ".twinkle", "lumine-project.json"), "utf8"),
+  );
+  assert.equal(metadata.filesHash, "merged-files-hash", "the workspace base moved to the merged snapshot");
+  assert.equal(
+    await fs.readFile(path.join(assignment.workspaceDir, "music.js"), "utf8"),
+    "export const bpm = 112;",
+  );
+  const refreshedAssignment = await fs.readFile(assignment.assignmentPath, "utf8");
+  assert.match(refreshedAssignment, /Restore point: artifact version #4/);
+
+  const noNote = await runCli(["sponsor", "job", "suggest", "9", "branch", ...sharedArgs], { environment });
+  assert.equal(noNote.code, 1);
+  assert.match(noNote.stderr, /Lumine composes it from the actual work/);
+  assert.equal(suggestRequest, null);
+  const suggest = await runCli(
+    ["sponsor", "job", "suggest", "9", "branch", "--note", "Synced with Main and added music; ready for your review.", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(suggest.code, 0, suggest.stderr);
+  assert.equal(suggestRequest.auth, "Bearer workspace-access", "the branch suggestion goes out under the job identity");
+  assert.equal(suggestRequest.body.note, "Synced with Main and added music; ready for your review.");
+  assert.equal(JSON.parse(suggest.stdout).suggestion, "branch");
+  const suggestThumb = await runCli(["sponsor", "job", "suggest", "9", "thumbnail", "--json", ...sharedArgs], { environment });
+  assert.equal(suggestThumb.code, 0, suggestThumb.stderr);
+  assert.equal(thumbnailSuggestRequest.auth, "Bearer workspace-access");
+  assert.match(assignmentText, /lumine sponsor job suggest 9 branch --note <message>/);
+  assert.equal(JSON.parse(suggestThumb.stdout).messageId, 902);
+
+  const applied = await runCli(["sponsor", "job", "relay-applied", "9", "101", "--json", ...sharedArgs], { environment });
+  assert.equal(applied.code, 0, applied.stderr);
+  // Nothing changed in the workspace after the sync, so the hand-off is the
+  // deliverable: completion reports the hand-off messages and saves nothing.
+  const complete = await runCli(
+    ["sponsor", "job", "complete", "9", "--summary", "Handed the synced branch to the owner.", "--json", ...sharedArgs],
+    { environment },
+  );
+  assert.equal(complete.code, 0, complete.stderr);
+  assert.equal(saveCount, 0, "a workflow-only job never rewrites the workspace");
+  assert.deepEqual(completeBody.handoffMessageIds, [901, 902]);
+  assert.equal(completeBody.artifactVersionId, undefined);
+  assert.equal(completeBody.reportedFilesHash.length, 64);
+  assert.deepEqual(agentCompletionBody.outcome.handoffMessageIds, [901, 902]);
+  assert.equal(agentCompletionBody.outcome.changedPathCount, 0);
+  assert.match(complete.stdout, /"status": "completed"/);
+  return;
+
+  const consultationSync = await runCli(["sponsor", "job", "assets", "9", "upload", ...sharedArgs], { environment });
+  assert.equal(consultationSync.code, 1);
+  assert.match(consultationSync.stderr, /Usage: lumine sponsor job assets 9 upload <file\.\.\.>/);
 });
 
 function canonicalDuty() {
