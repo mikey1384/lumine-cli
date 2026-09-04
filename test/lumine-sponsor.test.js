@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "../lib/commands.js";
 import { requestJson } from "../lib/http.js";
 import {
+  baseSponsorDutyStatePath,
   detectSponsorAgentSession,
   sponsorDutyStatePath,
 } from "../lib/sponsor-duty.js";
@@ -109,11 +110,11 @@ test("agent-session detection is stable and provider-specific", () => {
     /active Codex or Claude Code agent session/,
   );
   assert.notEqual(
-    sponsorDutyStatePath({
+    baseSponsorDutyStatePath({
       apiUrl: "https://api.example.test",
       authFile: "/tmp/lumine-auth-one.json",
     }),
-    sponsorDutyStatePath({
+    baseSponsorDutyStatePath({
       apiUrl: "https://api.example.test",
       authFile: "/tmp/lumine-auth-two.json",
     }),
@@ -156,7 +157,7 @@ test("a switched login cannot discard another account's local duty lease", async
     }),
     { mode: 0o600 },
   );
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   await fs.writeFile(
     statePath,
     JSON.stringify({
@@ -230,7 +231,7 @@ test("duty stop archives outdated local state after stopping the canonical duty"
   await once(server, "listening");
   const apiUrl = `http://127.0.0.1:${server.address().port}`;
   await writeTestAuth(authFile, apiUrl);
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   await fs.writeFile(
     statePath,
     JSON.stringify({
@@ -301,7 +302,7 @@ test("duty stop preserves another account's outdated local record", async (t) =>
   await once(server, "listening");
   const apiUrl = `http://127.0.0.1:${server.address().port}`;
   await writeTestAuth(authFile, apiUrl);
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   const foreignState = {
     version: 1,
     apiUrl,
@@ -514,7 +515,7 @@ test("duty start exits, bounded watches recover transport, and another session c
   );
   assert.equal(start.code, 0);
   assert.equal(JSON.parse(start.stdout).executionMode, "agent_session_v2");
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   const stateStat = await fs.stat(statePath);
   assert.equal(stateStat.mode & 0o777, 0o600);
   assert.equal((await fs.stat(tmpDir)).mode & 0o777, 0o755);
@@ -689,7 +690,7 @@ test("a stalled duty watch hits its hard deadline, releases its lock, and recove
   assert.equal(stalledWatch.code, 1);
   assert.match(stalledWatch.stderr, /hard deadline.*state lock was released/i);
   assert(Date.now() - watchStartedAt < 5_000);
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   await assert.rejects(fs.stat(`${statePath}.lock`), { code: "ENOENT" });
 
   const recoveredWatch = await runCli(
@@ -810,7 +811,7 @@ test("duty watch surfaces a team invitation without claiming Workshop work", asy
   assert.doesNotMatch(terminalWatch.stdout, /\u001b|\nFAKE/);
   assert.match(terminalWatch.stdout, /Adopt Me/);
   const state = JSON.parse(
-    await fs.readFile(sponsorDutyStatePath({ apiUrl, authFile }), "utf8"),
+    await fs.readFile(baseSponsorDutyStatePath({ apiUrl, authFile }), "utf8"),
   );
   assert.deepEqual(state.jobs, {});
 });
@@ -1178,7 +1179,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   assert.match(assignmentText, /Never inspect or infer from their private Zero\/Ciel chat/);
   assert.doesNotMatch(assignmentText, /raw private conversation/);
 
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   const stateText = await fs.readFile(statePath, "utf8");
   assert.doesNotMatch(stateText, /workspace-access/);
   const state = JSON.parse(stateText);
@@ -1515,7 +1516,7 @@ test("a consultation is inspected read-only and completes without an artifact or
   await once(server, "listening");
   const apiUrl = `http://127.0.0.1:${server.address().port}`;
   await writeTestAuth(authFile, apiUrl);
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   await fs.writeFile(
     statePath,
     JSON.stringify({
@@ -1679,7 +1680,7 @@ test("ending a failed job preserves work but removes its credential", async (t) 
     environment,
     ancestry: { codex: null, claude: null },
   });
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   await fs.writeFile(
     statePath,
     JSON.stringify({
@@ -1801,7 +1802,7 @@ test("stopping duty archives recoverable work without credentials", async (t) =>
   const apiUrl = `http://127.0.0.1:${server.address().port}`;
   await writeTestAuth(authFile, apiUrl);
   const environment = codexEnvironment("stopped-job-owner-session");
-  const statePath = sponsorDutyStatePath({ apiUrl, authFile });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   await fs.writeFile(
     statePath,
     JSON.stringify({
@@ -2132,6 +2133,76 @@ test("a job syncs its branch from Main under the job identity and moves the rest
   const consultationSync = await runCli(["sponsor", "job", "assets", "9", "upload", ...sharedArgs], { environment });
   assert.equal(consultationSync.code, 1);
   assert.match(consultationSync.stderr, /Usage: lumine sponsor job assets 9 upload <file\.\.\.>/);
+});
+
+test("a second live session on the same login joins the duty pool with its own state file", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-pool-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  let nextDutyId = 4;
+  const heartbeats = new Set();
+  const server = http.createServer(async (req, res) => {
+    await readRequestBody(req);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET" && req.url === "/cli/sponsor/agreement") {
+      res.end(JSON.stringify({ version: "2026-08-31", disclosure: ["x"] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/agreement/accept") {
+      res.end(JSON.stringify({ changed: true, agreementVersion: "2026-08-31", acceptedAt: 100 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/duty/start") {
+      const id = nextDutyId++;
+      res.end(JSON.stringify({ duty: { ...canonicalDuty(), id }, leaseToken: `lease-${id}`, heartbeatEverySeconds: 20 }));
+      return;
+    }
+    const heartbeat = /^\/cli\/sponsor\/duty\/(\d+)\/heartbeat$/.exec(req.url || "");
+    if (req.method === "POST" && heartbeat) {
+      heartbeats.add(Number(heartbeat[1]));
+      res.end(JSON.stringify({ ...canonicalDuty(), id: Number(heartbeat[1]), heartbeatAt: 100, expiresAt: 400 }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/claim") {
+      res.end(JSON.stringify({ job: null }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const sharedArgs = ["--api-url", apiUrl, "--auth-file", authFile, "--no-update-check", "--no-open"];
+  const first = codexEnvironment("pool-session-one");
+  const second = codexEnvironment("pool-session-two");
+  const startArgs = ["sponsor", "duty", "start", "--provider", "codex", "--model", "gpt-5.6-sol", "--effort", "max", "--json", ...sharedArgs];
+  assert.equal((await runCli(["sponsor", "agreement", "accept", "--accept-agreement", "--json", ...sharedArgs], { environment: first })).code, 0);
+  const startOne = await runCli(startArgs, { environment: first });
+  assert.equal(startOne.code, 0, startOne.stderr);
+  assert.equal(JSON.parse(startOne.stdout).duty.id, 4);
+  const startTwo = await runCli(startArgs, { environment: second });
+  assert.equal(startTwo.code, 0, startTwo.stderr);
+  assert.equal(JSON.parse(startTwo.stdout).duty.id, 5);
+
+  const basePath = baseSponsorDutyStatePath({ apiUrl, authFile });
+  const files = (await fs.readdir(tmpDir)).filter((name) => name.startsWith("lumine-sponsor-duty-") && name.endsWith(".json"));
+  assert.equal(files.length, 2, `two state files: ${files.join(", ")}`);
+  assert.equal(JSON.parse(await fs.readFile(basePath, "utf8")).duty.id, 4, "the first session keeps the base file");
+
+  // Each session watches its own duty and never touches the other's lease.
+  const watchOne = await runCli(["sponsor", "duty", "watch", "--wait-ms", "1000", "--json", ...sharedArgs], { environment: first });
+  assert.equal(watchOne.code, 0, watchOne.stderr);
+  const watchTwo = await runCli(["sponsor", "duty", "watch", "--wait-ms", "1000", "--json", ...sharedArgs], { environment: second });
+  assert.equal(watchTwo.code, 0, watchTwo.stderr);
+  assert.deepEqual([...heartbeats].sort(), [4, 5]);
+  assert.equal(JSON.parse(await fs.readFile(basePath, "utf8")).duty.id, 4);
 });
 
 function canonicalDuty() {
