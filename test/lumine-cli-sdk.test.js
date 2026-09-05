@@ -6,6 +6,24 @@ import {
   SDK_CLI_METHODS,
 } from "../lib/sdk.js";
 
+test("CLI arena and private compare-and-set mappings preserve exact scopes and mutation gates", () => {
+  for (const [name, route, scope, writing] of [
+    ["privateDb.compareAndSet", "private-db/compare-and-set", "privateDb:write", true],
+    ["arena.board", "arena/board", "sharedDb:read", false],
+    ["arena.publish", "arena/publish", "sharedDb:write", true],
+    ["arena.challenge", "arena/challenge", "sharedDb:write", true],
+    ["arena.bouts", "arena/bouts", "sharedDb:read", false],
+    ["arena.getBout", "arena/get-bout", "sharedDb:read", false],
+  ]) {
+    assert.deepEqual(SDK_CLI_METHODS[name], {
+      path: `api/${route}`,
+      scopes: [scope],
+      ...(writing ? { write: true } : {}),
+    });
+    assert.deepEqual(SDK_CLI_METHOD_NAMES_BY_PATH.get(`api/${route}`), [name]);
+  }
+});
+
 test("CLI exposes protected sharedDb batch methods with fail-closed scopes", () => {
   assert.deepEqual(SDK_CLI_METHODS["sharedDb.getEntriesByIds"], {
     path: "api/shared-db/entries/by-ids",

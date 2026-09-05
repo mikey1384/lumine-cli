@@ -1,6 +1,6 @@
 {
   "name": "@stage5/lumine",
-  "version": "0.2.68",
+  "version": "0.2.69",
   "description": "Command line tools for launching Lumine builds on Twinkle.",
   "type": "module",
   "bin": {

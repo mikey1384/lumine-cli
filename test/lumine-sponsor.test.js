@@ -817,6 +817,7 @@ test("duty watch surfaces a team invitation without claiming Workshop work", asy
 });
 
 test("an approved claim becomes a scoped assignment for the owning session without launching a provider", async (t) => {
+  const originalRequest = "  시작 버튼을 추가해줘.\n```\n## Private request text\nKeep exact spacing.  ";
   const tmpDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "lumine-sponsor-assignment-test-"),
   );
@@ -834,6 +835,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   const relay = {
     id: 101,
     kind: "initial_request",
+    originalRequest,
     summary: "Add a visible start button and a score counter.",
     projectTitleHint: "Adopt Me",
     requestedOutcome: "A playable first round",
@@ -1178,6 +1180,12 @@ test("an approved claim becomes a scoped assignment for the owning session witho
   assert.match(assignmentText, /Never publish hidden chain-of-thought/);
   assert.match(assignmentText, /Never inspect or infer from their private Zero\/Ciel chat/);
   assert.doesNotMatch(assignmentText, /raw private conversation/);
+  assert.ok(assignmentText.includes(JSON.stringify({ message: originalRequest })));
+  assert.match(assignmentText, /Original user request — private worker context/);
+  assert.match(assignmentText, /Always write in English in Talking with Lumine/);
+  assert.match(assignmentText, /lead with what the user can now do/);
+  assert.match(assignmentText, /rendered rich-text embed using !\[\]\(app-url\)/);
+  assert.match(assignmentText, /a draft save does not update the published app/);
 
   const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
   const stateText = await fs.readFile(statePath, "utf8");
@@ -1204,6 +1212,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     "utf8",
   );
   assert.match(assignmentAfterForumRevocation, /No Forum comments are available/);
+  assert.ok(assignmentAfterForumRevocation.includes(JSON.stringify({ message: originalRequest })));
   assert.doesNotMatch(
     assignmentAfterForumRevocation,
     /Normal-access Build Forum snapshot/,
@@ -1242,6 +1251,7 @@ test("an approved claim becomes a scoped assignment for the owning session witho
     "I found the round setup. I’m wiring the start control now.",
   );
   assert.equal(dialogueBodies[1].phase, "building");
+  assert.equal(JSON.stringify(dialogueBodies).includes('Private request text'), false);
   assert.equal(dialogueBodies.length, 2);
   assert.equal(
     dialogueBodies[0].clientUpdateKey,

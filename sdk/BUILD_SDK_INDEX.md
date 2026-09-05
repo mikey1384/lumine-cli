@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.39.0
-Updated: 2026-09-03
-Generated: 2026-09-03T04:17:20.106Z
+Version: 1.40.0
+Updated: 2026-09-05
+Generated: 2026-09-05T00:51:20.315Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -937,6 +937,13 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { item: { id, key, value, updatedAt } }
   - Upsert one JSON-serializable value in the default private per-user store.
   - Upserts one key for the current viewer. Value must be JSON-serializable (max 16 KB).
+- async compareAndSet(key, expectedValue, value, { operationId, expectedUserId }) | scopes: privateDb:write
+  - Returns: { item: { id, key, value, updatedAt }, applied, duplicate, conflict }
+  - Atomically save only when the current JSON value matches expectedValue, with a permanent idempotency receipt.
+  - Pass null as expectedValue for an absent/null value. Both values are limited to 16 KB. Optional expectedUserId prevents a held operation from crossing an account change.
+  - operationId is required: 8–64 letters, digits, underscores or hyphens. Reuse it for retries of the same logical change.
+  - On conflict, rebase the intent onto the returned canonical item before comparing again. Do not retry-loop a 429.
+  - A duplicate operation returns the current canonical item without applying again. Ordinary set/remove remain unconditional; use a dedicated key for a compare-and-save workflow.
 - async remove(key) | scopes: privateDb:write
   - Returns: { success: true, deleted: boolean }
   - Delete one key from the default private per-user JSON store.
@@ -961,6 +968,34 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { now, reminders: [{ id, buildId, userId, title, body, targetPath, payload, isEnabled, schedule, lastTriggeredAt, createdAt, updatedAt }] }
   - Returns reminders that are due right now for the current signed-in viewer.
   - autoAcknowledge defaults to true and prevents the same reminder from retriggering immediately.
+
+### Twinkle.arena
+- async board({ ruleset, cursor, revision, limit } = {}) | scopes: sharedDb:read
+  - Returns: { ruleset, revision, total, fighters, me, targets, dailyUsed, cursor, hasMore }
+  - Load a ranked page plus your fighter and all challengeable opponents independently of the page.
+  - limit defaults to 50 and is at most 100. Pass returned cursor and revision together for more rows.
+  - A 409 means the ladder changed between pages: restart from the first page. Records are canonical and do not require replaying history.
+- async publish({ ruleset, expectedUserId }) | scopes: sharedDb:write
+  - Returns: { fighter }
+  - Publish or update your own fighter from your confirmed saved career.
+  - The server derives identity, stats, gameplan and appearance from the viewer’s saved career. Supplied fighter snapshots or user IDs are not accepted.
+  - Existing rank and records are preserved; a new fighter joins at the bottom.
+- async challenge({ ruleset, opponentUserId, operationId, expectedUserId }) | scopes: sharedDb:write
+  - Returns: { bout, duplicate }
+  - Issue and adjudicate one ranked match, atomically saving its result, quota usage and ranking.
+  - operationId must contain 8–64 letters, digits, underscores or hyphens. Preserve it across ambiguous failures and reloads.
+  - The server issues the seed and uses its pinned ruleset and saved fighters. Never submit a winner, seed, or fighter snapshot.
+  - The bout contains id, ruleset, seed, a, b, outcome, winner, reason, round, tookSpot, at and by. a/b contain userId, name and snap.
+  - Three challenges per UTC day, against fighters one to three ranks above you. Duplicate requests never consume another challenge.
+  - Subscribed defender owners receive a ruleset-bound result notification from the canonical transaction. HTTP 400/409 eligibility errors with writeStatus=not_applied are definitive rejections; retain the same operationId after an ambiguous network failure.
+- async bouts({ ruleset, cursor, limit } = {}) | scopes: sharedDb:read
+  - Returns: { bouts, cursor, hasMore }
+  - Read immutable ranked bout history, newest first, with cursor pagination.
+  - limit defaults to 50 and is at most 100. There is no three-page history cutoff.
+- async getBout({ ruleset, id, legacyEntryId }) | scopes: sharedDb:read
+  - Returns: { bout }
+  - Read one immutable bout in this build and ruleset.
+  - Supply id, or legacyEntryId for an imported legacy notification. Replay new bouts only with their exact ruleset; the stored outcome is authoritative. Legacy records explicitly identify their unversioned simulation.
 
 ## Examples
 
