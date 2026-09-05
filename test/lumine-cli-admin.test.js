@@ -2889,7 +2889,7 @@ test("monthly AI costs preserve JSON and label both human projections", async (t
     fixture.requests.find(
       (request) => request.url === "/cli/admin/ai-costs/monthly",
     )?.runId,
-    "91",
+    null,
   );
 
   const humanResult = await runCli([

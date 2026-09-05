@@ -467,10 +467,10 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - Omit model to use the normal Lite/Medium/High routing. model accepts gpt-5.6-sol, claude-opus-5, or claude-fable-5-1, and every explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back.
+  - Omit model to use the normal Lite/Medium/High routing. model accepts gpt-6-astra, gpt-5.6-sol, claude-opus-5, or claude-fable-5-1, and every explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back.
   - thinkingMode low uses GPT-5.6 Luna and consumes the viewer's AI Energy from confirmed provider usage; its smaller model is usually cheaper than Medium or High.
   - thinkingMode medium uses Grok 4.6 with medium reasoning and consumes normal AI Energy.
-  - thinkingMode high without model uses GPT-5.6 Sol with high reasoning and consumes high AI Energy. Explicit model: 'gpt-5.6-sol' selects Sol with xhigh reasoning at the same High AI Energy tier.
+  - thinkingMode high without model uses GPT-5.6 Sol with high reasoning and consumes high AI Energy. Explicit model: 'gpt-5.6-sol' selects Sol with xhigh reasoning at the same High AI Energy tier. Explicit model: 'gpt-6-astra' selects GPT-6 Astra with xhigh reasoning and debits confirmed usage at its own model rates in the High tier.
   - claude-opus-5 uses Anthropic adaptive High thinking. claude-fable-5-1 uses Anthropic xhigh thinking and normally consumes more AI Energy for comparable token use. Both debit confirmed provider usage at the High tier.
   - Pass onStatus, onReasoning, and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
   - onReasoning receives accumulated provider-supplied, app-visible reasoning summaries plus { done, delta, requestId, status }. A provider retry may replace the accumulated summary; treat each callback's first argument as the current source of truth. This callback never exposes hidden/private model chain-of-thought.

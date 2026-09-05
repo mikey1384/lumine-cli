@@ -387,6 +387,17 @@ lumine admin subject unfeature 123 --json
 lumine admin featured reorder --subject-ids 30,20,10 --json
 lumine admin featured rotate --remove-subject-ids 30,20 \
   --add-subject-ids 50,40 --json
+lumine admin featured plan --remove-subject-ids 30,20 \
+  --add-subject-ids 50,40 --subject-ids 40,50,10 \
+  --posted-after 2026-09-01T00:00:00+07:00 --output featured-plan.json --json
+# Only after Mikey approves the exact mapping and final order:
+lumine admin featured apply --file featured-plan.json --approve <exact-plan-hash> --json
+lumine admin featured comments scan --checkpoint featured-read.json --json
+# Read every page file before acknowledging; downloads are not reviews.
+lumine admin featured comments acknowledge --checkpoint featured-read.json --reviewed --json
+lumine admin featured comments recommend --file featured-decisions.json \
+  --checkpoint featured-recommend.json --json
+lumine admin featured comments report --checkpoint featured-read.json --json
 lumine admin brief --days 3 --json
 lumine admin notable add Minecrarft_guy --note "Created 8 thoughtful subjects and helped peers in 23 comments this window." --json
 lumine admin post recommend comment:456 --anyone-can-reward --reward-twinkles 3 --json
@@ -418,7 +429,9 @@ Zero/Ciel responder without Lumine remaining active.
 
 `--scope full` is the default and authorizes the complete daily-management
 workflow. `--scope featured` is a deliberately narrow run for a requested
-Featured-only slice: it cannot comment, does not surface carry-over todos, does
+Featured-only slice: it can review and encourage snapshot-bound Featured
+comments, but cannot publish comments or use generic recommendation/reward
+commands. It does not surface carry-over todos, does
 not write full-run queue coverage, does not require sponsor review, and never
 advances full-run review windows. Its dedicated start endpoint also prevents an
 older API from silently interpreting it as a full run. The
@@ -426,6 +439,18 @@ atomic `featured add` verb preserves the supplied relevance order and requires
 the server to prove both a strict posting-date boundary and complete
 never-Featured history. `featured history` returns that evidence without the
 large repeated board snapshots in the general audit trail.
+
+`featured plan`/`apply` bind approval to the exact server-stored board and
+history revision; all approved replacements and ordering commit together.
+Equal-size swaps and reorders support the website's 100-Subject capacity while
+delegated growth remains capped at 20. The CLI verifies the final live order.
+`featured comments scan` walks every thread (including old/nested replies),
+with private, hashed pages and `--resume` recovery. `acknowledge --reviewed`
+records actual reading separately from downloading. `recommend` applies only
+agent-selected comments from acknowledged threads, with reward eligibility off
+by default, and resumes the exact decision file/checkpoint safely. See
+[the admin contract](sdk/LUMINE_ADMIN.md#exact-approved-refresh-and-resumable-comment-encouragement)
+for the decision-file format, partial-coverage rules, and deployment prerequisites.
 
 Management agents also inspect recent public Build candidates during each full
 daily review.

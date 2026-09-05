@@ -23,6 +23,11 @@ canonical structured data.
   carry-over work, or final full-run report. Every run-scoped CLI command loads
   the canonical active run and sends its ID; the API rejects a missing,
   expired, scope-mismatched, or actor-mismatched run.
+- `--scope newspaper` is a newspaper-only authorization envelope. It grants
+  newspaper status/claim/submit/print and completion only, with comment mode
+  `off`. It cannot inspect queues, conduct, logs, Builds, or Featured.
+  Completion does not advance full-review windows or carry-over telemetry.
+  Its distinct `/daily-runs/start/newspaper` endpoint fails closed on older APIs.
 - The public content actor is Zero or Ciel. Mikey's operator ID is retained in
   private audit rows and is not embedded in public comment metadata.
 - Delegated HTTP work never authenticates as the bot, opens a bot socket, changes
@@ -44,6 +49,13 @@ canonical structured data.
   described below. The human's normal AI Energy and sponsor path applies;
   Lumine does not need to remain running.
 
+`--output <file.json>` saves the canonical JSON result for ordinary admin
+commands, whether or not `--json` is also used. Files are atomically replaced
+with mode `0600`. Paginated scans keep their existing streaming-to-file path;
+`news claim` keeps its claim/scaffold contract. If saving fails after a server
+mutation, the structured error includes `canonicalResult`: inspect it rather
+than repeating a successful mutation to recover an output file.
+
 The Zero/Ciel shift is assigned by **Asia/Bangkok calendar day, not by run**.
 The schedule is anchored with 2026-08-31 assigned to Zero and alternates by
 elapsed Bangkok dates from there. Every automatic primary, supplemental,
@@ -64,14 +76,24 @@ Comment mode is stored only on the current run:
 - `draft`: server-generated drafts, no public comment.
 - `post`: drafts plus idempotent publication through the ordinary comment path.
 
-A Featured-only run always uses comment mode `off` and grants only Featured
-subject inspection, subject reveal, Featured mutation, and run completion. It can complete
+A Featured-only run always uses comment mode `off` and grants Featured
+subject inspection, subject reveal, Featured mutation, review-bound Featured
+comment encouragement (`featured:comments`), and run completion. It does not
+grant generic recommendation/reward authority or comment publication. It can complete
 without a sponsor-integrity scan. Completing it does not advance any full-run
 content/cost/conduct window, queue-coverage record, last-completed identity, or
 carry-over surfacing telemetry. Start one only when Mikey requested that slice; never turn a small
 request into a full review merely because the technical command needs a run.
 The API enforces these scopes, and the CLI also rejects out-of-scope operations
 before calling endpoints outside the Lumine Admin router (notably Build review).
+
+Featured capacity and delegated addition authority are separate policies:
+the website editor supports 100 Subjects, while delegated additions are limited
+to a board of 20. `maximum` remains the delegated limit for compatibility;
+`maximumScope`, `delegatedMaximum`, and `websiteMaximum` label the distinction.
+A board of 25 is not a website overflow or an instruction to remove five pins.
+Equal-size replacements and complete-set reorders accept up to the website's
+100-Subject capacity without exercising delegated growth authority.
 
 ### Private AI-bucket maintenance
 
@@ -238,7 +260,11 @@ in another language; reply naturally in concise English.
 
 **Twinkle is not Reddit.** Do not rank a run's attention by popularity,
 recommendation count, or polish. Most users here are young children, and the
-posts that most need Zero or Ciel are the ones nobody else answered.
+posts that most need Zero or Ciel are the ones nobody else answered. These
+outreach priorities do not replace the full daily Featured-comment review
+below: active threads need encouragement too. Featured selection has its own
+primary objective: invite genuine member-to-member engagement, not assemble
+the most thought-provoking posts.
 
 - **Look first at new, quiet, and overlooked users.** A child's first post, or a
   post from someone who rarely gets replies, is worth more of a run's attention
@@ -250,10 +276,10 @@ posts that most need Zero or Ciel are the ones nobody else answered.
 - **Zero engagement is a reason to act, not to skip.** A post sitting at no
   recommendations and no comments is the strongest signal in the queue that
   someone should notice it.
-- **Thought-provoking posts deserve substance, not applause — and an unnoticed
-  one is the highest priority of all.** When a child asks a real question or
-  makes a real argument and the thread is empty, that is the clearest case for
-  a Zero/Ciel comment on the whole site. Engage with the idea itself: answer it,
+- **Thought-provoking posts deserve substantive replies.** When a child asks
+  a real question or makes a real argument and the thread is empty, it is a
+  strong case for a Zero/Ciel reply, not an automatic top Featured ranking.
+  Engage with the idea itself: answer it,
   add a perspective or a counter-consideration, and leave the author somewhere
   to go next. A good question that nobody answered teaches a child that thinking
   hard is not worth it; that is the outcome these runs exist to prevent. This
@@ -305,21 +331,45 @@ posts that most need Zero or Ciel are the ones nobody else answered.
 - **Sincere requests for personal help are Featured material.** Posts asking
   the community for advice about school, friendships, loneliness, or other
   ordinary real-life problems embody Twinkle's purpose; being personal is never
-  a reason to suppress or remove them. Receiving meaningful support does not
-  make one stale or create a duty to rotate it out; keep judging what the live
-  board contributes now, and never use prior recognition as a removal proxy.
+  a reason to suppress them or judge them unsuitable. Receiving meaningful
+  support does not reduce their value. They still participate in the daily
+  Featured refresh below: rotating the spotlight is not withdrawing support,
+  and a good post does not require an indefinite pin.
 - **Speculative privacy is never an editorial signal.** Do not lower, remove,
   unfeature, or escalate content because it might identify someone, mentions a
   school, city, class, or ordinary location, or invites everyday community
   context. Those possibilities carry zero weight in Featured decisions. An
   actual sensitive disclosure or an author's explicit removal request follows
   the separate concrete-safety path; it does not make the post low-quality.
-- **Featured values participation, continuity, and child voice—not adult
-  polish.** Accessible questions that many children can answer and ongoing
-  personal series such as records, journals, or recurring updates are strong
-  Featured forms. Age, brevity, simplicity, prior recognition, or a modest
-  description is not a removal reason. Review the whole subject and its role in
-  the community instead of grading its opening text like an essay.
+- **Featured prioritizes engagement, participation, and child voice.** Choose
+  the recent eligible Subjects most likely to get members commenting on other
+  members' Subjects and responding to one another. Accessible questions,
+  everyday experiences, playful prompts, drawings, invitations, personal help,
+  and ongoing records or creative series can outperform a polished essay for
+  this purpose. Being thought-provoking is a bonus, not the primary ranking
+  criterion. Explain the concrete invitation to participate, using the full
+  Subject and thread as context; do not rank by adult polish, intellectual
+  depth, existing popularity, or raw recommendation counts. Genuine engagement
+  does not mean bait, spam, or reward farming. Age, brevity, simplicity, prior
+  recognition, or a modest description does not make a Subject low-quality.
+  Daily rotation is an independent editorial reason to refresh a good post's
+  slot; do not invent a defect to justify it.
+- **Aim to replace all of yesterday's Featured Subjects each day.** During a
+  full daily management review, plan a complete refresh of the previous day's
+  board with recent, never-before-Featured Subjects, ordered by likely genuine
+  engagement. A small handful of swaps is not the default target. Use the
+  Bangkok calendar day, not the number of runs: do not churn pins newly added
+  today because a follow-up starts another session. Quality and eligibility
+  still apply. If there are too few eligible candidates, a current explicit
+  keep instruction, an unread thread, or another concrete constraint, explain
+  each retained pin and the shortfall; do not pad the list or silently settle
+  for a partial refresh. An earlier positive assessment is not a permanent
+  keep instruction. New installments can carry a series forward without
+  treating earlier ones as noise. This daily target changes editorial judgment,
+  not mutation authority: show the full proposed rotation and obtain Mikey's
+  go-ahead before removing or reordering any pins. One go-ahead for that exact
+  complete plan authorizes executing all its swaps, not just the first one;
+  carry it through and verify the final board without seeking per-item approval.
 - **A "new" Featured addition has two non-negotiable eligibility gates.** When
   Mikey asks for new Featured subjects, additions, or replacements, a candidate
   must both (1) have been posted recently and (2) have never appeared on the
@@ -336,7 +386,7 @@ posts that most need Zero or Ciel are the ones nobody else answered.
 - **The live Featured board is Mikey's word.** Do not remove or reorder a
   currently Featured subject without first showing Mikey the planned removals
   and replacements and getting his go-ahead. Additions have standing approval
-  when a fresh `featured list` is below its canonical maximum: proactively
+  when a fresh `featured list` is below its delegated-admin maximum: proactively
   feature genuinely reviewed, editorially strong new subjects without asking
   case by case. This is judgment, not a quota — never add filler merely because
   capacity exists. If a subject that was Featured or pinned during an earlier
@@ -350,6 +400,89 @@ posts that most need Zero or Ciel are the ones nobody else answered.
 Sensitive disclosures, active disputes, and anything needing crisis or medical
 judgment remain out of scope for a bot comment no matter how neglected the post
 is. Those go to Mikey.
+
+### Daily Featured comments and refresh
+
+This is a standing duty for every **full daily management review**, after the
+newspaper duty. It is not an instruction to start or repeat a full run when
+Mikey requests a small edit, proposal, or other scoped action. A request only
+to discuss Featured candidates authorizes discussion, not recommendations or
+pin changes. The technical `--scope featured` envelope permits the review-bound
+comment workflow below only when encouragement is in Mikey's requested slice;
+it never authorizes unrelated daily work or generic recommendation commands.
+
+1. **Read all comments on every current Featured Subject each day.** Start
+   from a fresh `featured list`, save the dated board, and inspect each full
+   Subject and all top-level comments and nested replies. Include old and
+   already-viewed comments, not just new ones, the recommendation queue, or a
+   sample of the thread. Review outgoing Subjects before their approved
+   rotation so their commenters are not missed; review any newly added
+   Subjects' threads too. Use `featured comments scan --checkpoint <file>` to
+   download every snapshot-bound page, then actually read every listed page
+   file before `featured comments acknowledge --checkpoint <file> --reviewed`.
+   Fetching does not acknowledge reading. A fresh scan after rotation covers
+   the incoming board. `commentsIncluded: false` or a locked secret is not
+   an empty thread: use the ordinary authorized reveal path, never bypass
+   secret semantics, and report any inaccessible or unfinished coverage.
+   Preserve the reviewed snapshot boundaries so "all" describes actual reads.
+2. **At least recommend most comments that are not genuinely worthless.**
+   The purpose is to encourage members to comment on other users' Subjects and
+   to give those contributions visibility. A sincere answer, friendly reaction,
+   relevant joke, question, attempt to help, or conversational follow-up is
+   usually enough; it need not be profound, long, polished, or Twinkle-worthy.
+   Read in context and lean toward encouragement. A one-line or emoji response
+   can be worthwhile; brevity or "nothing for the bot to add" is not a reason
+   to withhold a recommendation. Do not restrict recognition to a few standout
+   replies. Do not mechanically approve everything: genuine spam, meaningless
+   noise, harassment, or exploit promotion is not deserving merely because it
+   appears on Featured. System/view notifications and the bots' own comments
+   are context to read, not user participation to boost or count toward this
+   duty. Leave narrow concrete-safety cases for Mikey under the existing rules.
+3. **Separate encouragement from reward eligibility.** The ordinary action is
+   a selected item in `featured comments recommend --file <decisions.json>`,
+   omitting `anyoneCanReward` and `rewardTwinkles` (defaults: `false` and `0`).
+   Turn on the UI's "everyone can
+   reward" option (`anyoneCanReward: true`) only when the comment independently
+   deserves that stronger endorsement; direct Twinkle rewards are selective
+   too. Do not withhold a basic recommendation just because rewards are not
+   deserved, and do not mass-enable rewards to satisfy this duty. Honor
+   canonical Zero/Ciel deduplication: already-recommended comments still get
+   read, but do not need a second recommendation or daily reward. A bare
+   recommend does not revoke an existing reward permission; never claim it
+   switched one off. This duty is not authority to downgrade past decisions.
+4. **Propose the whole daily refresh, get approval, then execute it.** Identify carryover
+   pins from the saved board and canonical Featured history, without assuming
+   missing pins should be restored. Review replacements under the recency and
+   never-Featured gates above and rank them by the engagement they invite.
+   Show Mikey a specific old-Subject -> new-Subject mapping with titles, IDs,
+   canonical URLs, reasons, and the proposed final order, plus any retained
+   pins and specific constraints. Explicitly ask for his go-ahead and wait
+   before performing the proposed rotation. Daily freshness
+   and giving new conversations a turn are sufficient editorial reasons; a
+   prior Subject need not become bad or unsuitable first. Keep existing
+   removal/reorder approval and addition-capacity boundaries intact. After
+   Mikey approves the exact plan, autonomously perform **all approved swaps
+   and the approved ordering**, without per-item approval or asking him to
+   operate the website. Prepare the server-stored `featured plan` before
+   presenting it, then use `featured apply --file <plan.json> --approve <hash>`
+   only after that exact plan gets his go-ahead. Membership and final ordering
+   commit together; the server rechecks the original board, history revision,
+   and new-candidate eligibility inside the board transaction.
+   Verify the exact final membership and order from the server, then report
+   completion. Recover retryable failures within the approved scope; if
+   intervening owner changes, eligibility changes, or an API limit require a
+   materially different plan, preserve the new state, report what actually
+   completed, and seek approval for that difference instead of substituting
+   candidates or overwriting changes. Report proposals separately from
+   completed actions. Approval is for the presented plan, not future boards.
+5. **Make coverage and encouragement auditable.** In the final full-run report,
+   state Subjects covered, comments read, new basic recommendations,
+   already-recommended comments, selective reward-eligibility grants/direct
+   rewards, and genuinely skipped categories. Use canonical results, not
+   attempted commands, for action counts. Report any unread Subjects/pages
+   explicitly; never call a sample, a filtered queue, or a blocked thread a
+   completed all-Featured-comment review. Include refresh progress and any
+   carryovers as required in the `Featured rotation` report section below.
 
 ## Escalation to Mikey
 
@@ -620,7 +753,7 @@ type DailyRun = {
   publicActorUserId: number;
   identityMode: "auto" | "zero" | "ciel";
   commentMode: "off" | "draft" | "post";
-  runScope: "full" | "featured";
+  runScope: "full" | "featured" | "newspaper";
   sessionKind: "delegated-admin";
   scopes: string[];
   status: "active" | "completed" | "failed" | "expired";
@@ -722,6 +855,7 @@ identity, or advances rotation.
 ```bash
 lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin daily-run start --scope featured --identity auto --json
+lumine admin daily-run start --scope newspaper --identity auto --json
 lumine admin daily-run start --identity ciel --comment-mode draft \
   --run-key daily:2026-08-06:review --json
 lumine admin daily-run status --json
@@ -815,16 +949,22 @@ written automatically only after an
 its local checkpoint and cannot be misreported as complete.
 
 **Every agent-authored final full-management report includes a `Featured rotation`
-section.** Base it on a fresh `featured list`. When capacity exists, make and
-report strong additions during the run under the standing approval above; do
-not defer them as proposals. Then name each current Subject proposed for
-removal with its canonical URL and a concrete editorial reason, followed by
-any replacement that would require that removal. Every proposed or completed
-addition described as new must include its posting date and canonical evidence
-that it has never been Featured; omit it when either gate is unverified. Never
-omit the section; when no removal or reorder is honestly warranted, say `None`
-and explain why. Removing or reordering pins remains a proposal until Mikey
-gives his go-ahead.
+section.** Base it on the dated starting board, a fresh `featured list`, and
+canonical history. Report the target of replacing **all previous-day pins**,
+the exact proposed/completed outgoing-to-incoming mapping, and each retained
+pin with its reason. Rank new candidates by likely genuine member engagement,
+not thoughtfulness. Include the all-Featured-comment coverage and encouragement
+counts described above. When genuine capacity exists, make and report strong
+additions under the standing approval above; do not defer those as proposals.
+Every proposed or completed new addition must include its posting date and
+canonical never-Featured evidence; omit it when either gate is unverified.
+If a complete refresh is constrained, state the shortfall, including inadequate
+eligible inventory, inaccessible context, specific keep instructions, or pending
+approval. Do not report `None` merely because yesterday's posts are still good
+or have received support. Removing or reordering pins remains a proposal until
+Mikey gives his go-ahead; a pending proposal is not a completed refresh. After
+approval, execute the entire approved plan and verify it without asking for
+each swap again. Never omit this section from a full-run report.
 
 Creating an escalation belongs to the active run; acknowledging, annotating,
 resolving, or reopening it does not. Use the run-independent `escalation`
@@ -1147,11 +1287,18 @@ website's canonical reward-level projection shape; deployment should verify
 (or `(contentId, ...)`) as the canonical route already requires. The joins/`NOT EXISTS` checks are necessary
 to preserve the normal recommendation and skip rules, but they run only for
 IDs in that bounded window. Subject-comment traversal uses
-`idx_comments_isDeleted_subject_id`; standalone-post comments use the existing
+`idx_comments_isDeleted_subject_id`; standalone-post and Build comments use the existing
 `idx_content_comments_root_deleted` index (whose InnoDB entries also carry the
 primary ID). Recommendation identity uses
 `uniq_content_recommendations_active_identity`; `earn_comment_candidates` is
 driven by its primary key. No offset scan or new broad table scan was added.
+
+Featured comment review adds at most 100 per-Subject `MAX(id)` probes using
+`idx_comments_isDeleted_subject_id`, then reuses the bounded 50-comment page
+path. Receipt lookups use the audit primary key; review summaries use the
+existing `idx_laae_run_id (runId, id)` range and project only coverage/action
+outcomes, not downloaded comment bodies. Approved plans use the shared board
+lock and the history primary key for `MAX(id)`. No new schema is needed.
 
 Deployment can verify the required existing index definitions with:
 
@@ -1199,7 +1346,17 @@ lumine admin subject comments 123 --cursor '<cursor>' --json
 lumine admin comments get 456 --json
 lumine admin post get https://www.twin-kle.com/ai-stories/88 --json
 lumine admin post comments dailyReflection:99 --cursor '<cursor>' --json
+lumine admin post comments build:884 --all --output build-comments.json --json
 ```
+
+Build comment inspection accepts `build:<id>`, a public `/app/<id>` URL, or
+`--type build`. It reads all root-thread comments and replies through a
+snapshot-bound cursor, with full text and `parentCommentId`/`replyToCommentId`
+relationships.
+Only public, published, canonical owner Builds qualify; contribution branches
+and private/unpublished Builds are rejected. This is thread inspection, not
+evidence of having reviewed the published app. Build-comment publication still
+requires its separate version-bound review evidence.
 
 Schemas:
 
@@ -1300,6 +1457,9 @@ type FeaturedList = Success<{
   subjects: Subject[];
   count: number;
   maximum: 20;
+  maximumScope: "delegated_admin";
+  delegatedMaximum: 20;
+  websiteMaximum: 100;
 }>;
 
 type FeaturedHistory = Success<{
@@ -1379,7 +1539,7 @@ effective level). Every response is reloaded from the writer.
 
 Featured reorder is a complete-set replacement: it rejects duplicates,
 unknown/deleted IDs, missing current members, non-subject rows, and more than
-20 subjects. Permanent pins and editorial ordering policy are deliberately not
+100 subjects. Permanent pins and editorial ordering policy are deliberately not
 hardcoded.
 
 `featured history` is the compact canonical evidence path. It returns only
@@ -1423,9 +1583,12 @@ The response includes the canonical final board and the confirmed rotation
 IDs, so callers never synthesize Featured state locally.
 
 The two lists must have the same nonzero length, so rotation never changes the
-board's count. That also lets an approved swap proceed when the website has
-left a pre-existing board above the delegated maximum without growing it;
-repair the inherited overflow separately with an approved `subject unfeature`.
+board's count. Up to 100 replacements are accepted, including an existing board
+above the delegated growth limit of 20. That is not an overflow to repair.
+The server also enforces live, recent, provably never-Featured additions. Pass
+`--posted-after` explicitly; for compatibility the legacy rotation command
+defaults to seven days before the current Bangkok day's midnight. The exact
+approved-plan workflow below always requires an explicit cutoff.
 
 This mutation deliberately does not choose candidates or override the
 editorial gates above. Before invoking it, the management agent must have
@@ -1433,11 +1596,120 @@ freshly reviewed the board, shown Mikey the removals and replacements, received
 his go-ahead, and verified that every proposed new addition is recent and has
 never previously been Featured from canonical evidence.
 
+### Exact approved refresh and resumable comment encouragement
+
+For the daily old-to-new proposal, prepare a canonical plan without changing pins:
+
+```bash
+lumine admin featured plan --remove-subject-ids 30,20 \
+  --add-subject-ids 50,40 --subject-ids 40,50,10 \
+  --posted-after 2026-09-01T00:00:00+07:00 --output featured-plan.json --json
+```
+
+Removal and addition lists are equal-size pairs. Optional `--subject-ids` is
+the **entire final ordered board**, including retained pins; without it,
+additions lead in supplied order and retained pins keep their relative order.
+The receipt contains titles, IDs, URLs, replacement pairs, final order, posting
+cutoff, run/actor identity, expected board and history revision, and `planHash`.
+Add qualitative reasons, show Mikey the exact mapping/order, and wait for his
+go-ahead. A generated hash is not itself human approval. After approval:
+
+```bash
+lumine admin featured apply --file featured-plan.json \
+  --approve <exact-plan-hash> --json
+```
+
+The API loads the immutable plan from its same-run/operator/actor audit receipt,
+checks the supplied hash, and applies all swaps and ordering in one transaction.
+It rejects intervening reorders, swaps, even a changed-then-restored board, and
+newly ineligible candidates. No substitute candidates or follow-up reorder are
+inferred. The CLI then reads the live board and verifies exact membership/order.
+Retry the identical apply command after uncertain transport failure; it reuses
+the same idempotency key. If the final read fails or finds an intervening change,
+the error retains the canonical apply receipt and never restores old state.
+Expired/different runs require a fresh plan and renewed approval.
+
+Use the following workflow for full daily comment review, or only when Mikey's
+Featured slice includes comment encouragement:
+
+```bash
+lumine admin featured comments scan --checkpoint featured-read.json --json
+# On interruption: repeat with --resume, in the same active run.
+# Read ALL pageFiles, including full root context and nested replies.
+lumine admin featured comments acknowledge \
+  --checkpoint featured-read.json --reviewed --json
+```
+
+The scan snapshots every current Featured Subject (up to 100) and its maximum
+comment ID, includes already-viewed and older comments, and downloads full-text
+pages of 50 through server-owned receipt chains. It rejects filtered scans;
+there is no popularity, length, language, or keyword selection heuristic.
+Each private mode-0600 page file has a checkpointed hash; resume verifies the
+complete chain and uses stable request keys after lost responses. Concurrent
+use of a checkpoint is locked. Deleted/unavailable Subjects and locked secrets
+remain explicitly incomplete; an empty thread still requires a terminal page.
+The scanner never automatically reveals secrets. If reveal is authorized, use
+the ordinary explicit reveal command and resume. New comments above the saved
+boundary belong to a fresh scan, not a silently expanded claim of coverage.
+
+`acknowledge --reviewed` is the agent's explicit confirmation that it read the
+downloaded terminal chains. The API validates those chains, records covered and
+missing Subject IDs and comment counts, and distinguishes complete from partial
+coverage. A download alone never counts as a read or grants recommendations.
+After a resumed scan fills a gap, read those pages and acknowledge again.
+
+Compose a decisions JSON file from the genuinely reviewed comments, using the
+returned review ID, coverage receipt ID, and each selected comment's page ID:
+
+```json
+{
+  "reviewId": 100,
+  "coverageId": 1050,
+  "selections": [
+    { "commentId": 120, "pageId": 1001 },
+    { "commentId": 119, "pageId": 1001, "anyoneCanReward": true },
+    { "commentId": 118, "pageId": 1001, "anyoneCanReward": true, "rewardTwinkles": 3 }
+  ]
+}
+```
+
+The agent chooses comments by context under the generous encouragement policy;
+the tool never auto-selects them. Reward permission defaults off; the only
+direct reward option is an explicitly selected 3-Twinkle pairing. Existing
+permissions are not revoked by a basic recommendation. Then apply and report:
+
+```bash
+lumine admin featured comments recommend --file featured-decisions.json \
+  --checkpoint featured-recommend.json --json
+# Retry exactly this file/checkpoint with --resume after interruption.
+lumine admin featured comments report --checkpoint featured-read.json --json
+```
+
+Use separate scan and recommendation checkpoints. Selection files are capped at
+20,000 unique comments/2 MiB; split larger work into explicit batches. Each
+target must belong to the reviewed page and an acknowledged Subject chain in
+this same run. The API re-reads it, rejects changed/hidden/deleted comments,
+system notifications and Zero/Ciel's own comments, and uses the normal canonical
+recommendation/reward/deduplication path. A blocked Subject does not prevent
+encouragement on acknowledged Subjects. Batches stop at a failed decision,
+retain confirmed receipts, and resume without replaying completed decisions.
+These recommendations are independent per-comment mutations, not an atomic
+batch; report partial completion honestly.
+
+The review report and full/historical daily reports' `featuredReviews` expose
+acknowledged coverage, confirmed new/basic recommendations, already-done
+actions, selective reward-permission grants, and created direct rewards. The
+counts describe canonical outcomes, not attempted commands or downloaded rows.
+Read comments that are already recommended too; use the page evidence for
+already-recommended and skipped-category totals rather than treating the
+report's selected `alreadyDone` actions as all previously recommended comments.
+
 ## Recommendation, Karma approval, and Twinkle rewards
 
 ```bash
 lumine admin post recommend 123 --json
 lumine admin post recommend https://www.twin-kle.com/ai-stories/88 --json
+lumine admin post recommend comment:456 --json
 lumine admin post recommend comment:456 --anyone-can-reward \
   --reward-twinkles 3 --idempotency-key review-456-v1 --json
 lumine admin post reward comment:456 --twinkles 3 --json
@@ -1446,6 +1718,15 @@ lumine admin post reward comment:456 --twinkles 3 --json
 Numeric targets default to `subject`. Use `subject:<id>`, `comment:<id>`,
 `aiStory:<id>`, `dailyReflection:<id>`, a canonical URL, or the corresponding
 `--type`.
+
+For daily Featured-comment encouragement, prefer the review-bound
+`featured comments` workflow above so coverage and outcomes remain linked.
+The generic bare comment recommendation has the same basic default, but is
+not available in a Featured-only run. `--anyone-can-reward` and
+`--reward-twinkles` are separate, selective judgments, not required flags for an
+ordinary worthwhile comment.
+Follow **Daily Featured comments and refresh** for full-thread coverage and
+the intentionally generous basic-recommendation threshold.
 
 ```ts
 type PriorRecommendationApproval = {
@@ -1553,7 +1834,7 @@ If recommendation succeeds but reward fails, the command exits nonzero with
 
 ```bash
 lumine admin post skip dailyReflection:99 --json
-lumine admin post skip comment:456 --reason "one-line answer, nothing to add" --json
+lumine admin post skip comment:456 --reason "duplicate coin-begging spam" --json
 lumine admin post skip-batch --target-file skip-targets.json \
   --checkpoint skip-progress.json --json
 lumine admin post skip-batch --target-file skip-targets.json \
@@ -2106,8 +2387,8 @@ dump raw sections at him.
 ### Application AI calendar-month cost (standing duty, every full daily review)
 
 Run `lumine admin ai-costs monthly --json` during every full daily management
-review. This read-only command requires the active delegated run and returns one
-server-owned calendar summary from the canonical deduplicated application AI-
+review. This read-only command does not require or attach to a delegated run.
+It returns one server-owned calendar summary from the canonical deduplicated application AI-
 cost ledger. It deliberately takes no `--days`: all boundaries are UTC calendar
 months, so the result is directly comparable from one run to the next.
 
@@ -3300,6 +3581,16 @@ are not available to users until a separately authorized npm publication.
 Deploy and verify the API's `/cli/admin/subjects/featured/rotation` route before
 publishing a CLI release that exposes `featured rotate`; an older API rejects
 the command without changing Featured state.
+
+The approved-plan and Featured-comment workflows require the new
+`/subjects/featured/plan`, `/plan/apply` (under that same Featured base), and
+`/subjects/featured/reviews` routes. Deploy the API before releasing the CLI;
+there is no fallback to unbound writes or a full daily run on an older API.
+Existing runs remain readable/completable with their original scopes, but are
+not silently granted `featured:comments`; start a fresh scoped/full run as
+appropriate after finishing the existing authorized work. No new migration is
+required for these workflows: server receipts reuse the existing audit table
+and full-board mutation history.
 
 For scoped runs and Featured history, also apply
 `add-lumine-admin-run-scope.sql` and `add-featured-subject-history.sql` before
