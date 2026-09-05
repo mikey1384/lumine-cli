@@ -1769,6 +1769,9 @@ test("runtime-log commands are run-independent and finishing requires review con
   assert.equal(start.name, "runtime-logs.start");
   assert.equal(start.requiresRun, false);
   assert.equal(start.mutates, true);
+  const targetStart = parseAdminOperation(parseArgs(["admin", "runtime-logs", "start", "target"]));
+  assert.equal(targetStart.runtimeLogHost, "target");
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "runtime-logs", "start", "arbitrary-host"])));
 
   const read = parseAdminOperation(
     parseArgs([
@@ -1987,6 +1990,14 @@ test("runtime-log start persists its request key before sending so a rerun repla
   assert.equal(startKeys.length, 1);
   assert.ok(fs.existsSync(intentPath), "request key persisted before send");
   assert.equal(fs.statSync(intentPath).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
+
+  const targetArgs = [...startArgs];
+  targetArgs.splice(targetArgs.indexOf("start") + 1, 0, "target");
+  const wrongHost = await runCli(targetArgs);
+  assert.notEqual(wrongHost.code, 0);
+  assert.match(wrongHost.stdout + wrongHost.stderr, /unresolved outcome/);
+  assert.equal(startKeys.length, 1, "different host never receives an ambiguous start replay");
   assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
 
   // The rerun replays the persisted key; the server says that key belongs to

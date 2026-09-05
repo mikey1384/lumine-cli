@@ -1038,6 +1038,53 @@ migration cannot quietly treat unsupported telemetry as an empty list.
 A Featured-only start instead returns an explicitly suppressed, empty handoff
 and performs no todo reads, writes, capacity checks, or surfacing increments.
 
+Evidence-dependent investigations must have a durable collection plan. Do not
+carry “still no recycle-under-load evidence” forward without checking the
+collector and recording new observations. Full starts and reports return
+`runtimeEvidence` with a scoped read command; this handoff is suppressed for
+Featured/newspaper slices. During a full daily run with pending runtime
+investigations, use:
+
+```sh
+lumine admin runtime evidence primary --days 7 --json
+# Only when the investigation also covers the configured target host:
+lumine admin runtime evidence target --days 7 --json
+```
+
+This is a read-only, run-independent command. It does not acquire/clear a log
+lease, trigger a recycle, or authorize an unrelated management review. Host
+routing is explicit and never silently substitutes primary for target. An
+older API without this endpoint is unsupported, not “no incidents.”
+
+The cluster primary samples existing worker health snapshots once per minute
+and records memory-guard/operator recycle lifecycle events. Records survive
+restarts in the health directory's `evidence/` subdirectory (seven UTC calendar
+days, at most 2 MiB/day; 256 KiB/day reserved for events). Work is recorded as
+counts by kind, not user IDs, request labels, messages or tokens. Evidence is
+passive: never force production load, a worker recycle or a restart merely to
+complete an experiment. New collector code requires activation of the new
+**primary generation**, not just a rolling worker reload; verify a fresh live
+sample before saying collection is running.
+
+For each affected todo, persist the checked host/runtime identity, previous and
+new evidence cutoff, sample count/gaps/freshness, qualifying event IDs and the
+next safe action. `unavailable`, `stale` or `incomplete` means investigate the
+collection gap. A healthy collector with no qualifying recycle means keep
+collecting, not stall or claim a failure. Save the relevant summary in the todo
+before the seven-day retention window passes. Missing/stale active-work or OOM
+observations remain unknown; they are never zero or idle by default.
+
+Set investigation-specific acceptance criteria before interpreting results.
+For memory/recycle investigations, distinguish a long-lived steady-memory
+baseline from a recycle observed under load. Require the requested/signalled/
+recovered sequence, fresh pre-recycle work evidence, replacement identity,
+bounded recovery time, and no OOM-counter increase across the same primary
+generation. “Topology recovered” does **not** prove each interrupted user task
+completed: correlate those tasks' existing canonical outcomes before closing
+a user-work continuity investigation. Never close based only on deployed code,
+a current healthy snapshot, or an unobserved event. Daily runs collect evidence
+and update todos; they do not change code unless Mikey separately asks.
+
 `kind` is `task` or `experiment`. New items may start `open`, `in_progress`, or
 `blocked`; updates may also use `completed` or `cancelled`. A progress note is
 required for every update. For experiments, put the acceptance criteria in the
@@ -2156,6 +2203,27 @@ Treat every current `/home/ec2-user/server/logs/*.err.log` and `*.out.log` as
 in scope so a later API-side worker is not silently omitted. Use the delegated,
 run-independent workflow; it holds one server lease across the review and
 writes private, digest-verified local artifacts:
+
+For the deploy-time two-API topology, `runtime-logs start primary` and
+`runtime-logs start target` explicitly select the host. Omitted host means
+primary; pre-migration NULL owners also mean primary. Use a separate private
+output/session directory for each completed review. Review-ID/session operations
+route back to the recorded owner; never treat a peer's files as that review's
+bytes. An unresolved start key cannot be replayed against a different host.
+The additive host-owner migration and compatible API must be live before this
+CLI capability is published.
+
+Review every participating host, including primary private-helper logs. A
+primary review does not cover the target. Finish the exclusive review before
+that host is held; a held/unavailable owner returns an explicit retryable failure,
+not another host's snapshots or an independent log service. Do not abandon its
+lease merely to bypass a deployment guard. After a planned hold, final shutdown
+deltas are reviewed via management SSH outside any active lease, recorded, and
+API stderr is cleared only with the existing guarded `npm run logs:clear-errors`
+plus post-clear re-read. This is the deployment runbook's final boundary, not
+permission to bypass an active Lumine lease. A stopped target whose final logs
+were reviewed does not need to be started for daily management; starting EC2
+requires separate authority. See `twinkle-api/DEPLOY_TIME_HANDOFF.md`.
 
 ```bash
 lumine admin runtime-logs start --output-dir ./runtime-log-review --json
