@@ -17,6 +17,7 @@ import {
   assertAdminTodoHandoffResult,
   assertRecommendationWindowResult,
   assertSubjectWindowResult,
+  assertBuildWindowResult,
   canonicalAdminRunScope,
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
@@ -2256,22 +2257,30 @@ test("management Build comments require an actual version-bound review", () => {
   );
   assert.equal(candidateOperation.name, "builds.candidates");
   assert.equal(candidateOperation.mutates, false);
-  assert.match(candidateOperation.path, /^\/build\/public\/list\?/);
-  assert.match(candidateOperation.path, /sort=recent/);
+  assert.match(candidateOperation.path, /^\/cli\/admin\/builds\/candidates\?/);
+  assert.match(candidateOperation.path, /sinceRun=true/);
   assert.match(candidateOperation.path, /cursor=opaque/);
   assert.deepEqual(
     normalizeAdminBuildCandidatesResult({
       siteUrl: "https://www.twin-kle.com",
       result: {
-        builds: [
-          {
-            id: 884,
-            title: "Chess Lab",
-            collaborationMode: "open_source",
-            publishedArtifactVersionId: 4512,
+        ok: true,
+        status: "success",
+        data: {
+          builds: [
+            {
+              id: 884,
+              title: "Chess Lab",
+              collaborationMode: "open_source",
+              publishedArtifactVersionId: 4512,
+            },
+          ],
+          pagination: {
+            nextCursor: "next-page",
+            hasMore: true,
+            exhausted: false,
           },
-        ],
-        cursor: "next-page",
+        },
       },
     }),
     {
@@ -3522,6 +3531,7 @@ async function createFixtureServer(
     monthlyAiCostsResponse = null,
     monthlyMediaCostsResponse = null,
     correctionStatusResponse = null,
+    botContextResponse = null,
   } = {},
 ) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-"));
@@ -3590,6 +3600,14 @@ async function createFixtureServer(
           },
         }),
       );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/admin/bot-output/3797910/context" &&
+      botContextResponse
+    ) {
+      res.end(JSON.stringify(botContextResponse));
       return;
     }
     if (
@@ -3743,6 +3761,175 @@ test("newspaper verbs map to the delegated news routes", () => {
     () => parseAdminOperation(parseArgs(["admin", "news", "refresh"])),
     /lumine admin news \[status\] \| news print \| news claim/,
   );
+});
+
+test("Build discovery defaults to publication-window coverage and rejects legacy API responses", () => {
+  const op = parseAdminOperation(parseArgs(["admin", "builds", "candidates"]));
+  assert.equal(op.pagination.coverageMode, "since-run");
+  assert.match(op.path, /sinceRun=true/);
+  assert.throws(
+    () =>
+      assertBuildWindowResult({
+        operation: op,
+        result: { builds: [], cursor: null },
+      }),
+    { code: "LUMINE_ADMIN_BUILD_WINDOW_UNSUPPORTED" },
+  );
+  const result = {
+    ok: true,
+    data: {
+      builds: [],
+      pagination: {
+        mode: "since-run",
+        after: 100,
+        snapshotTimeStamp: 200,
+        snapshotMaxId: 20,
+        nextCursor: null,
+        hasMore: false,
+        exhausted: true,
+      },
+    },
+  };
+  assert.doesNotThrow(() => assertBuildWindowResult({ operation: op, result }));
+  assert.throws(() =>
+    assertBuildWindowResult({
+      operation: op,
+      result: {
+        ...result,
+        data: {
+          ...result.data,
+          pagination: { ...result.data.pagination, after: null },
+        },
+      },
+    }),
+  );
+  const legacy = parseAdminOperation(
+    parseArgs(["admin", "builds", "candidates", "--include-legacy"]),
+  );
+  assert.equal(legacy.pagination.coverageMode, "legacy");
+  const explicit = parseAdminOperation(
+    parseArgs(["admin", "builds", "candidates", "--after", "2026-09-05"]),
+  );
+  assert.equal(explicit.pagination.coverageMode, "after");
+  assert.throws(() =>
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "builds",
+        "candidates",
+        "--after",
+        "2026-09-05",
+        "--include-legacy",
+      ]),
+    ),
+  );
+});
+
+test("bot context requires a reason and an exact message, and cannot become a full review", () => {
+  assert.equal(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "bot-output",
+        "context",
+        "3797910",
+        "--reason",
+        "Verify grading",
+      ]),
+    ).body.limit,
+    20,
+  );
+  const op = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "bot-output",
+      "context",
+      "3797910",
+      "--reason",
+      "Verify grading",
+      "--limit",
+      "10",
+    ]),
+  );
+  assert.equal(op.name, "bot.context");
+  assert.equal(op.path, "/cli/admin/bot-output/3797910/context");
+  assert.deepEqual(op.body, {
+    reason: "Verify grading",
+    cursor: undefined,
+    limit: 10,
+  });
+  assert.throws(() =>
+    parseAdminOperation(
+      parseArgs(["admin", "bot-output", "context", "3797910"]),
+    ),
+  );
+  for (const flag of ["--all", "--days"]) {
+    assert.throws(() =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "bot-output",
+          "context",
+          "3797910",
+          "--reason",
+          "Verify",
+          flag,
+          "2",
+        ]),
+      ),
+    );
+  }
+  assert.throws(() =>
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "bot-output",
+        "context",
+        "3797910",
+        "--reason",
+        "Verify",
+        "--limit",
+        "41",
+      ]),
+    ),
+  );
+});
+
+test("bot context reaches the audited endpoint without looking up or starting a daily run", async (t) => {
+  const botContextResponse = {
+    ok: true,
+    status: "success",
+    data: {
+      anchor: { messageId: 3797910, content: "The reply under review" },
+      messages: [{ messageId: 3797909, content: "1. 2" }],
+      pagination: { nextCursor: null, exhausted: true },
+    },
+  };
+  const fixture = await createFixtureServer(t, { botContextResponse });
+  const result = await runCli([
+    "admin",
+    "bot-output",
+    "context",
+    "3797910",
+    "--reason",
+    "Check the option-index grading",
+    "--json",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).data, botContextResponse.data);
+  assert.equal(
+    fixture.requests.some((request) => request.url.includes("daily-runs")),
+    false,
+  );
+  const request = fixture.requests.find((request) => request.method === "POST");
+  assert.equal(request.url, "/cli/admin/bot-output/3797910/context");
+  assert.deepEqual(request.body, {
+    reason: "Check the option-index grading",
+    limit: 20,
+  });
+  assert.equal(request.runId, null);
+  assert.match(request.requestId, /^cli:/);
 });
 
 test("bot-output and composed bot chat map to the review and existing-DM routes", () => {

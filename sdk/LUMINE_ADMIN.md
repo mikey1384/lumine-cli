@@ -1262,14 +1262,22 @@ verifies the request fingerprint and confirmed spool digest before requesting
 another page. An interrupted request is never counted as queue coverage.
 
 Recommendations default to `--since-run`: the server uses the previous
-completed run's start time (or the same bounded seven-day fallback used by the
-brief on a first run). That deliberate start-to-start overlap gives the queue
+completed full run's start time, even if that gap exceeds 30 days. On a first
+run, the fallback begins seven days before the current run's stored start, so
+it cannot drift between pages. Insight reports retain their separate 30-day
+limit. That deliberate start-to-start overlap gives the queue
 at-least-once coverage when content arrives after the prior snapshot but before
 that run completes. `--after` supplies an explicit inclusive timestamp.
 All-history traversal is deliberately available only through
 `--include-legacy`. The CLI requires the API to echo the canonical `after`
 boundary for bounded modes, so deploying a new CLI against an older API cannot
 silently fall back to a million-row historical scan.
+
+After upgrading the API and CLI to the stable run-start window, start a fresh
+`--since-run` scan with a new checkpoint path, without `--resume`. Older
+since-run checkpoints are rejected even when already exhausted: they may have
+captured the former 30-day reporting cap. They are left intact as evidence.
+Explicit `--after` and `--include-legacy` checkpoints retain their contracts.
 
 Subject candidates follow the same window contract. They default to the
 previous completed full run's start (with the seven-day first-run fallback),
@@ -1278,15 +1286,28 @@ lifetime traversal. `--since-run`, `--after`, and `--include-legacy` are
 mutually exclusive. The CLI also requires the API to echo the bounded Subject
 window before accepting a page.
 
-`builds candidates` is a management-agent discovery view over the canonical
-public Build browser, ordered by the current published release. It is
-available through the `admin` namespace only while a delegated run is active;
+`builds candidates` uses the admin publication-window endpoint, ordered by
+`publishedAt` and Build ID, not workspace `updatedAt`. Like Subject discovery,
+it defaults to the previous completed full run's start (seven-day first-run
+fallback), accepts inclusive `--after`, and requires `--include-legacy` for
+all history. These flags are mutually exclusive. The first page freezes the
+time boundary and an artifact-version high-water mark; the cursor and local
+checkpoint retain both. An old public-browser checkpoint cannot be reused.
+The CLI fails closed if the API does not confirm this publication window.
+
+It is available through the `admin` namespace only while a delegated run is active;
 page until `pagination.exhausted`. Each item includes its canonical app URL,
 published artifact version, and whether its code is pullable. This list does
 not decide that an app deserves a comment. The management agent must open and
 genuinely try the published runtime, or pull and read an open-source project,
 before making that judgment. Direct API/persona automation is never a review
 substitute.
+
+Only current public Main releases are candidates. Workspace-only saves and
+unchanged reactivations do not become new releases. A Build republished during
+paging can leave the snapshot; its new release is reconsidered by the next
+overlapping start-to-start window. Always recheck the current artifact before
+reviewing; this is not a frozen copy of an app or an immutable release archive.
 
 `builds review` is the managed runtime path: it fetches the current published
 artifact identity, launches the app in an isolated temporary Chromium profile,
@@ -2155,6 +2176,8 @@ type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 lumine admin bot-output --json
 lumine admin bot-output --days 3 --json
 lumine admin bot-output --cursor '<pagination.nextCursor>' --json
+lumine admin bot-output context 3797910 --reason "Check the option-index grading against the child's answer" --json
+lumine admin bot-output context 3797910 --reason "Continue the same grading investigation" --cursor '<pagination.nextCursor>' --json
 ```
 
 **Every full daily review reads what Zero and Ciel themselves said since the
@@ -2183,6 +2206,27 @@ snapshot but before completion is reviewed again instead of being lost. Run it
 right after the brief, and **read every row** — the tool deliberately does no
 filtering, scoring, or keyword matching, because the judgment is the reviewing
 agent's.
+
+Chat output now also includes `messageKind`, `attachment`, and the stored
+`generation` outcome (success, failure, cancelled, generating, or unresolved).
+This is stored-message evidence, not a live request-guard check: do not call
+an empty row an orphan solely from its text. Hidden attachment locations and
+arbitrary settings/request keys are never returned. `source: voice` identifies
+newly recorded voice transcripts, while typed input during a call says `typed`;
+older replies correctly say `not-recorded`
+because the historical schema did not distinguish typed text from voice.
+
+`bot-output context <messageId>` is a private, **run-independent** investigation.
+It requires a 1–500 character reason and records a minimized access receipt,
+not the private message text, in the audit. It returns the specified existing
+Zero/Ciel output plus preceding messages in that bot's own two-person
+conversation and exact topic/subchannel, oldest first within each page.
+Default 20, maximum 40 messages per page; continue manually with the cursor.
+The complete scope is bounded to 100 prior rows, 24 hours, and 10,000 message
+IDs before the anchor. `boundedLimitReached` means stop and report that bound,
+not that all channel history was reviewed. Deleted messages and hidden
+attachments remain hidden. Group-channel browsing, `--all`, and `--days` are
+not supported. Never start an entire daily run just to investigate one reply.
 
 ### API runtime-log review (same phase, every full daily review)
 
