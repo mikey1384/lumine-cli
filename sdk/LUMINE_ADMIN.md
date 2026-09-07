@@ -2139,12 +2139,23 @@ type NewsSubmit = NewsStatus; // "success"; newspaper includes revisionNumber
 lumine admin bot-output --json
 lumine admin bot-output --days 3 --json
 lumine admin bot-output --cursor '<pagination.nextCursor>' --json
-lumine admin bot-output context 3797910 --reason "Check the option-index grading against the child's answer" --json
-lumine admin bot-output context 3797910 --reason "Continue the same grading investigation" --cursor '<pagination.nextCursor>' --json
+lumine admin bot-output context 3797910 --reason "Review reported bot conduct in its conversation context" --json
+lumine admin bot-output context 3797910 --reason "Continue the same bot-conduct review" --cursor '<pagination.nextCursor>' --json
 ```
 
 **Every full daily review reads what Zero and Ciel themselves said since the
 last completed full review.**
+
+**Ordinary wrong answers and hallucinations are expected model limitations,
+not website incidents.** A factual error, mistaken puzzle answer, or imperfect
+reasoning alone does not warrant an escalation, engineering todo, or a code
+patch. Model quality improves through LLM upgrades; do not add hard-coded
+answer validators, secondary graders, forced research, correctness retry loops,
+or subject-specific rules to compensate. A normal conversational correction is
+enough when appropriate. This does not excuse actual harmful conduct or
+application failures, nor weaken security, permissions, billing, or canonical
+server-state checks: investigate those distinct problems on concrete evidence.
+
 The bots talk to children constantly — chat replies, Daily Reflection
 responses, autonomous comment-assistant comments — and a harmful message must
 never depend on a kid being brave enough to report it (real incident,
