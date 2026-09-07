@@ -1407,6 +1407,7 @@ test("new subject, featured, reward, and comment commands map to stable API cont
   );
   assert.deepEqual(history.pagination, {
     collectionKey: "events",
+    summaryKeys: ["coverage", "subjects"],
     filters: { subjectIds: [9, 8] },
   });
   assert.throws(
@@ -5170,12 +5171,14 @@ test("automatic pagination migrates confirmed v2 item checkpoints without rescan
   const checkpoint = path.join(dir, "checkpoint.json");
   const operation = {
     name: "recommendations.list",
-    path: "/cli/admin/recommendations?sinceRun=true",
+    // Old since-run checkpoints intentionally fail closed after the reporting
+    // cap fix. Exercise migration of an unchanged, explicitly bounded request.
+    path: "/cli/admin/recommendations?after=200",
     pagination: {
       collectionKey: "items",
       coverageQueue: "recommendations",
-      coverageMode: "since-run",
-      after: null,
+      coverageMode: "after",
+      after: 200,
       filters: {},
     },
   };

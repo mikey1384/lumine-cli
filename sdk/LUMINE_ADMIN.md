@@ -1572,6 +1572,16 @@ after the finalized coverage boundary. `null` means the subject predates provabl
 coverage—never convert that unknown into “never Featured.” Both the website
 editor and Lumine mutations write this append-only history in the same
 transaction as the canonical board replacement.
+Each API read accepts up to **100 subject IDs**, independently of the
+20-subject delegated addition policy. `--all` automatically batches larger
+lists (up to 20,000 IDs), exhausts every batch's event pages, and retains all
+per-subject summaries. Use the exact command with `--resume` after interruption;
+confirmed pages are not replayed. Single-batch `--cursor` remains available,
+but cannot be combined with `--all`. Multi-batch results explicitly use
+`pagination.snapshotScope: "per-batch"`; events are ordered by input batch,
+then descending event ID within that batch—not by one global snapshot.
+`data.scan.batches` records each batch's coverage, snapshot and private spool.
+Deploy the matching API before using the expanded read bound.
 For a retry whose board transaction committed but whose canonical detail reload
 failed, the audit-linked history event is the durable receipt: the API re-reads
 the current board and preserves the original changed-mutation accounting.
@@ -2188,6 +2198,24 @@ responses, community-management reads, and delegated mutations can succeed at
 the HTTP layer while stdout records a degraded fallback/retry loop or stderr
 records a side-effect failure. Reviewing only `bot-output` can therefore miss
 the other half of what happened.
+
+For passive RSS/recycle investigations, use the read-only command independently
+of a daily run or production-log review:
+
+```bash
+lumine admin runtime evidence primary --days 7 --output ./runtime-evidence.json --json
+# Use target explicitly only when investigating a configured second host.
+```
+
+It performs no restart, log clear, review lease acquisition, or fallback to a
+different host. `collecting`, `incomplete`, `stale`, and `unavailable` describe
+evidence coverage, not a verdict that the system is healthy. A 404 means the
+API route is not deployed; an old primary generation can also lack collector
+samples after workers update. Record that activation gap and arrange an
+authorized release—do not silently close the investigation or force a recycle.
+An observed topology recovery alone does not prove interrupted user work
+survived. Keep the evidence cutoff, gaps and actual outcomes in the relevant
+todo so the next run can continue.
 
 The current API-side files are:
 
