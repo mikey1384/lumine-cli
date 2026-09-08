@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.40.0
-Updated: 2026-09-05
-Generated: 2026-09-05T00:51:20.315Z
+Version: 1.41.0
+Updated: 2026-09-08
+Generated: 2026-09-08T05:12:06.333Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -30,9 +30,12 @@ Generated: 2026-09-05T00:51:20.315Z
 - Static media published through sharedDb is app-owned feed data. A public user-generated feed must provide a visible report flow and owner removal, and must not claim that Twinkle globally moderates those posts.
 - Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active hosts, so app code cannot hide or replace the broadcaster's Stop path.
 - Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
+- Twinkle.rewards awards real XP and Coins only in the current approved published release. Drafts, local previews, private apps and superseded releases cannot earn. The server supplies a published-runtime grant; app code cannot choose a recipient or award amount.
+- Lumine agents prepare private numeric quiz rules and budgets with prepare_reward_rules (CLI: POST /build/:buildId/rewards/prepare with { config }). Creators are kids and teens: show a simple earning summary, approval status and Send for review; do not ask them to fill in technical forms. Every code or rule update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate and publishes without reward permission; adding it back requires a fresh approval. Other protected SDKs keep their own gates. Keep protected SDK calls explicit in project source. Existing approved live rewards continue while a draft waits; approvals never publish automatically.
+- v1 verifies numeric quiz answers on the server; client scores, privateDb state, timers and completion booleans are not reward evidence. Daily limits reset at midnight in Korea. Each rule can be earned once per viewer per day, with three answer attempts per challenge. Challenge expiry is 30 minutes. Budgets apply across release changes.
 
 ## Token Scopes
-files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write
+files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write, rewards:claim
 
 ## Namespaces
 
@@ -937,6 +940,10 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { item: { id, key, value, updatedAt } }
   - Upsert one JSON-serializable value in the default private per-user store.
   - Upserts one key for the current viewer. Value must be JSON-serializable (max 16 KB).
+- async remove(key) | scopes: privateDb:write
+  - Returns: { success: true, deleted: boolean }
+  - Delete one key from the default private per-user JSON store.
+  - Deletes one key for the current viewer.
 - async compareAndSet(key, expectedValue, value, { operationId, expectedUserId }) | scopes: privateDb:write
   - Returns: { item: { id, key, value, updatedAt }, applied, duplicate, conflict }
   - Atomically save only when the current JSON value matches expectedValue, with a permanent idempotency receipt.
@@ -944,10 +951,6 @@ world.updatePresence({ x, y, z, facing });
   - operationId is required: 8–64 letters, digits, underscores or hyphens. Reuse it for retries of the same logical change.
   - On conflict, rebase the intent onto the returned canonical item before comparing again. Do not retry-loop a 429.
   - A duplicate operation returns the current canonical item without applying again. Ordinary set/remove remain unconditional; use a dedicated key for a compare-and-save workflow.
-- async remove(key) | scopes: privateDb:write
-  - Returns: { success: true, deleted: boolean }
-  - Delete one key from the default private per-user JSON store.
-  - Deletes one key for the current viewer.
 
 ### Twinkle.reminders
 - async list({ includeDisabled, limit } = {}) | scopes: reminders:read
@@ -996,6 +999,17 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { bout }
   - Read one immutable bout in this build and ruleset.
   - Supply id, or legacyEntryId for an imported legacy notification. Replay new bouts only with their exact ruleset; the stored outcome is authoritative. Legacy records explicitly identify their unversioned simulation.
+
+### Twinkle.rewards
+- await Twinkle.rewards.getStatus() | scopes: rewards:claim
+  - Returns: { mode: "live", dayKey, rules, history, balances: { xp, coins } } | { mode: "preview", rules: [], history: [], message }
+  - Read canonical earning rules (without answer keys), today’s receipts and balances. Drafts return preview mode. Unapproved or revoked published releases return an error.
+- await Twinkle.rewards.start({ ruleId }) | scopes: rewards:claim
+  - Returns: { mode: "live", challengeId, questions: [{ prompt }], reward: { xp, coins }, attemptsRemaining, expiresAt }
+  - Creates or resumes a server-issued challenge for the signed-in viewer. Render its questions and collect numeric answers in the same order. One daily challenge per rule/review; repeat starts cannot reset attempts.
+- await Twinkle.rewards.claim({ challengeId, answers: [number] }) | scopes: rewards:claim
+  - Returns: { awarded: false, attemptsRemaining } | { awarded: true, duplicate, receipt, balances: { xp, coins } }
+  - Twinkle verifies every answer, approval, current published artifact and budget before atomically recording XP and Coins. Retry the same challengeId after a lost response; a confirmed claim returns its original receipt without another award. Never update balance UI optimistically.
 
 ## Examples
 
@@ -1328,4 +1342,17 @@ await Twinkle.reminders.create({
   schedule: { type: 'daily', timeZone: 'America/Los_Angeles', hour: 9, minute: 0 },
   targetPath: '/focus'
 });
+```
+
+### Claim an approved learning reward
+Keywords: xp, coins, rewards, quiz, approval
+
+```js
+const status = await Twinkle.rewards.getStatus();
+if (status.mode === 'live') {
+  const challenge = await Twinkle.rewards.start({ ruleId: 'daily-question' });
+  // Render challenge.questions and collect numbers in the same order.
+  // const result = await Twinkle.rewards.claim({ challengeId: challenge.challengeId, answers });
+  // Display only result.balances and result.receipt after awarded === true.
+}
 ```

@@ -14,6 +14,7 @@ import {
   assertAdminOperationAllowedForRunScope,
   assertAiEmailPolicySetResult,
   assertComposedCommentDraftResult,
+  assertComposedCommentEditResult,
   assertAdminTodoHandoffResult,
   assertRecommendationWindowResult,
   assertSubjectWindowResult,
@@ -1555,6 +1556,104 @@ test("comment edit sends composed replacement content for a bot comment", () => 
       parseAdminOperation(parseArgs(["admin", "comment", "edit", "342752"])),
     /Pass composed text with --file/,
   );
+});
+
+test("Build comment edits require complete review evidence and a canonical edit receipt", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-build-edit-"));
+  try {
+    const commentPath = path.join(dir, "comment.md");
+    const contextPath = path.join(dir, "context.json");
+    fs.writeFileSync(commentPath, "Updated app feedback.\n");
+    fs.writeFileSync(
+      contextPath,
+      JSON.stringify({
+        understanding: "Tried the reply controls on the current app.",
+      }),
+    );
+    const args = ["admin", "comment", "edit", "345861", "--file", commentPath];
+    const operation = parseAdminOperation(
+      parseArgs([
+        ...args,
+        "--reviewed-version",
+        "9910",
+        "--reviewed-via",
+        "runtime",
+        "--review-context",
+        contextPath,
+      ]),
+    );
+    assert.equal(operation.path, "/cli/admin/comments/345861");
+    assert.equal(operation.correctionEligible, true);
+    assert.deepEqual(operation.body, {
+      content: "Updated app feedback.",
+      reviewedBuildVersionId: 9910,
+      buildReviewMethod: "runtime",
+      buildReviewUnderstanding: "Tried the reply controls on the current app.",
+    });
+    assert.throws(
+      () =>
+        parseAdminOperation(
+          parseArgs([
+            ...args,
+            "--reviewed-version",
+            "9910",
+            "--reviewed-via",
+            "runtime",
+          ]),
+        ),
+      /requires --review-context/,
+    );
+    assert.throws(
+      () =>
+        parseAdminOperation(
+          parseArgs([...args, "--review-context", contextPath]),
+        ),
+      /requires confirmed Build review evidence/,
+    );
+    const result = {
+      ok: true,
+      data: {
+        comment: { content: operation.body.content },
+        edit: {
+          buildReviewContextStored: true,
+          reviewedBuildVersionId: 9910,
+          managementDraftId: 237,
+        },
+      },
+    };
+    assert.doesNotThrow(() =>
+      assertComposedCommentEditResult({ result, body: operation.body }),
+    );
+    for (const edit of [
+      undefined,
+      { ...result.data.edit, buildReviewContextStored: false },
+      { ...result.data.edit, reviewedBuildVersionId: 9911 },
+    ]) {
+      assert.throws(
+        () =>
+          assertComposedCommentEditResult({
+            result: { ...result, data: { ...result.data, edit } },
+            body: operation.body,
+          }),
+        { code: "LUMINE_ADMIN_COMMENT_EDIT_UNCONFIRMED" },
+      );
+    }
+    assert.throws(
+      () =>
+        assertComposedCommentEditResult({
+          result,
+          body: { content: "A different edit." },
+        }),
+      { code: "LUMINE_ADMIN_COMMENT_EDIT_UNCONFIRMED" },
+    );
+    assert.equal(
+      parseAdminOperation(parseArgs(["admin", "builds", "review", "364"]))
+        .requiresRun,
+      false,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("notable status and add resolve numeric and username targets", () => {
@@ -5509,6 +5608,22 @@ test("managed Build review receipts bind comments to one confirmed artifact", ()
     operation.body.buildReviewUnderstanding,
     "The published runtime opens on a navigation screen with three clearly labeled destinations.",
   );
+  const edit = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "comment",
+      "edit",
+      "345861",
+      "--file",
+      commentPath,
+      "--review-receipt",
+      receiptPath,
+      "--review-context",
+      contextPath,
+    ]),
+  );
+  assert.equal(edit.body.reviewedBuildVersionId, 4512);
+  assert.equal(edit.body.buildReviewMethod, "runtime");
   assert.equal(
     parseAdminOperation(parseArgs(["admin", "builds", "review", "884"]))
       .buildId,

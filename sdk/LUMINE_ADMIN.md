@@ -484,6 +484,27 @@ it never authorizes unrelated daily work or generic recommendation commands.
    completed all-Featured-comment review. Include refresh progress and any
    carryovers as required in the `Featured rotation` report section below.
 
+## Math Lab content duty in full daily management
+
+Mikey added Math Lab question design and publishing to the full daily workflow
+on 2026-09-08. Follow [Math Lab daily question publishing](../../agent-guides/math-lab-daily.md)
+for the canonical Build 2460, owner account, 12-grade/36-question editorial
+process, verification, repeat-run recovery, release gates, and final reporting.
+This is not part of Featured-only or newspaper-only work and is not a new
+scheduler, delegated API scope, or automatic extension of admin permissions.
+Use the expressly authorized owner Build workflow for Math Lab; retain the
+normal Zero/Ciel actor separation for other administration.
+
+The initial private draft must remain unpublished until Mikey authorizes its
+launch. After launch, routine content releases follow the standing duty but
+cannot bypass a reward-enabled app's exact-version approval gate. Local edits
+and draft saves do not require release approval. Real XP/Coins may be changed
+only by the currently published, approved artifact through server-verified
+reward claims; private builds, previews, local tests, unpublished branches, and
+superseded versions cannot award real balances. These reward controls are a
+required design contract, not a claim that a reward SDK or server enforcement
+has already been implemented. See the guide before adding reward capabilities.
+
 ## Escalation to Mikey
 
 A full daily management run is not finished when the mutations are done. Curation surfaces things only
@@ -3288,10 +3309,37 @@ cannot choose or override that identity. The authorization lasts ten minutes,
 is bound to that exact comment, permits only reading that target and editing
 it, and never runs daily duties, changes the Bangkok calendar assignment, or
 contributes to a daily-run mutation count. A correction cannot target a human
-comment, notification record, deleted comment, or Build thread. Build comments
-still require a fresh version-bound correction reply after genuinely reviewing
-the published app. Starting a newer correction supersedes an older active one.
+comment, notification record, or deleted comment. A Build comment must belong
+to a public, published canonical owner Build; editing it requires a fresh review
+of the exact published version and private review context. Starting a newer
+correction supersedes an older active one.
 Finish it explicitly after the canonical edit is confirmed.
+
+For a Build, inspect the current app and its full discussion first. Managed
+runtime review does not require a daily run and does not start one:
+
+```bash
+lumine admin builds review build:884 --output-dir ./build-review --json
+lumine admin correction start 456 --json
+lumine admin comment edit 456 --file corrected.md \
+  --review-receipt ./build-review/<returned-review-directory>/review.json \
+  --review-context context.json --json
+lumine admin correction complete <sessionId> --json
+```
+
+Use the exact receipt path returned by `builds review`, or pass manual
+`--reviewed-version <artifactId> --reviewed-via runtime|code` evidence instead.
+The private context file contains only `{"understanding":"What you actually reviewed"}`.
+The API locks the Build and comment, verifies the current version and ownership,
+and commits the text, mention updates, and a new immutable review record together.
+Only the edited comment's context link moves; older bot replies retain their
+historical review context. Changed/deleted comments, changed versions, and
+private/noncanonical Builds fail without a partial edit. A fresh review can be
+stored even if the public text is unchanged. The CLI requires the exact edited
+text plus `edit.buildReviewContextStored: true`, the reviewed version, and a
+canonical review record ID before claiming success. Older APIs that still block
+Build edits must be deployed first; do not silently substitute a duplicate reply
+when Mikey requested an edit.
 
 **Editing the bot's own comments.** `comment edit <commentId> --file
 <comment.md>` replaces the text of a comment the acting bot itself authored —
@@ -3304,7 +3352,8 @@ composed-comment rules (plain UTF-8, 10,000-character limit, truth about what
 the session actually did) and publishes through the website's canonical
 comment-edit pipeline — mentions are reprocessed (a newly added `@mikey`
 notifies him), and Earn-candidate projections resync. Submitting identical
-text returns `already_done`. It requires either the exact active correction
+text returns `already_done` for non-Build comments; a Build edit can still save
+a fresh review without changing its text. It requires either the exact active correction
 session above or the `comment:post` scope of a comment-mode `post` run, and is
 audited as `comment.edit` with the previous content in `beforeState` and
 `data.edit.previousContent`. Edit sparingly:
@@ -3550,9 +3599,12 @@ sponsor pays from their own battery. Mentions elsewhere in a Build, replies to
 unlinked or legacy bot comments, replies to humans, and the other bot remain
 ineligible. If the published version has changed, the responder is told the
 stored understanding belongs to the reviewed older version and must say it has
-not checked behavior that could have changed. The generic `comment edit`
-shortcut is also disabled there; review the current version and post a
-version-bound correction reply instead.
+not checked behavior that could have changed. Editing the acting bot's own
+Build comment is supported with the same fresh reviewed-version/method and
+private-context flags, including managed review receipts. It updates the
+existing comment, not a duplicate reply. See the narrow correction workflow
+above; a version-bound follow-up remains appropriate when the conversation
+calls for an additional reply instead of an edit.
 
 **Offer a Lumine prompt when the moment invites it (Mikey's direction,
 2026-08-10).** Zero and Ciel may include one concrete, copy-pasteable Lumine
