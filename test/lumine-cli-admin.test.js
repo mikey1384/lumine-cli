@@ -1771,6 +1771,15 @@ test("runtime-log commands are run-independent and finishing requires review con
   assert.equal(start.name, "runtime-logs.start");
   assert.equal(start.requiresRun, false);
   assert.equal(start.mutates, true);
+  for (const host of ["primary", "target"]) {
+    const hostStart = parseAdminOperation(
+      parseArgs(["admin", "runtime-logs", "start", host]),
+    );
+    assert.equal(hostStart.runtimeLogHost, host);
+  }
+  assert.throws(() =>
+    parseAdminOperation(parseArgs(["admin", "runtime-logs", "start", "arbitrary-host"])),
+  );
 
   const read = parseAdminOperation(
     parseArgs([
@@ -1989,6 +1998,14 @@ test("runtime-log start persists its request key before sending so a rerun repla
   assert.equal(startKeys.length, 1);
   assert.ok(fs.existsSync(intentPath), "request key persisted before send");
   assert.equal(fs.statSync(intentPath).mode & 0o777, 0o600);
+  assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
+
+  const targetArgs = [...startArgs];
+  targetArgs.splice(targetArgs.indexOf("start") + 1, 0, "target");
+  const wrongHost = await runCli(targetArgs);
+  assert.notEqual(wrongHost.code, 0);
+  assert.match(wrongHost.stdout + wrongHost.stderr, /unresolved outcome/);
+  assert.equal(startKeys.length, 1, "a different host never receives an ambiguous start replay");
   assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
 
   // The rerun replays the persisted key; the server says that key belongs to
@@ -3280,6 +3297,8 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
   const requests = [];
   const review = (includeToken = false) => ({
     id: reviewId,
+    ownerHostId: "i-00000000000000002",
+    ownerHostRole: "target",
     status: reviewStatus,
     startedAt: 1_788_000_000,
     expiresAt: 1_788_100_000,
@@ -3310,11 +3329,11 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
     }
     assert.equal(
       req.headers["x-lumine-admin-runtime-log-token"] || null,
-      url.pathname === "/cli/admin/runtime-logs/reviews" ? null : leaseToken,
+      url.pathname === "/cli/admin/runtime-logs/hosts/target/reviews" ? null : leaseToken,
     );
     if (
       req.method === "POST" &&
-      url.pathname === "/cli/admin/runtime-logs/reviews"
+      url.pathname === "/cli/admin/runtime-logs/hosts/target/reviews"
     ) {
       send({
         ok: true,
@@ -3445,6 +3464,7 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
     "admin",
     "runtime-logs",
     "start",
+    "target",
     "--output-dir",
     outputBase,
     ...common,
@@ -3453,6 +3473,7 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
   assert.doesNotMatch(started.stdout, new RegExp(leaseToken));
   const startResult = JSON.parse(started.stdout);
   const sessionPath = startResult.data.artifacts.reviewSessionPath;
+  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).ownerHostId, "i-00000000000000002");
   const sessionDirectory = path.dirname(sessionPath);
   assert.equal(path.dirname(sessionDirectory), path.resolve(outputBase));
   assert.equal(fs.statSync(sessionPath).mode & 0o777, 0o600);
