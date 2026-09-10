@@ -3596,10 +3596,15 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
     ...common,
   ]);
   assert.equal(firstFinish.code, 0, firstFinish.stderr);
+  const firstFinishResult = JSON.parse(firstFinish.stdout);
   assert.equal(
-    JSON.parse(firstFinish.stdout).data.completionStatus,
+    firstFinishResult.data.completionStatus,
     "post_clear_review_required",
   );
+  // A non-terminal finish is not a success: the top-level status says so
+  // even though this fake API still answers the older `success` envelope.
+  assert.equal(firstFinishResult.status, "needs_review");
+  assert.equal(firstFinishResult.ok, true);
   const secondFinish = await runCli([
     "admin",
     "runtime-logs",
@@ -3610,10 +3615,9 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
     ...common,
   ]);
   assert.equal(secondFinish.code, 0, secondFinish.stderr);
-  assert.equal(
-    JSON.parse(secondFinish.stdout).data.completionStatus,
-    "completed",
-  );
+  const secondFinishResult = JSON.parse(secondFinish.stdout);
+  assert.equal(secondFinishResult.data.completionStatus, "completed");
+  assert.equal(secondFinishResult.status, "success");
 
   const replay = await runCli([
     "admin",
@@ -4047,6 +4051,13 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
     parseAdminOperation(parseArgs(["admin", "bot-output"])).path,
     "/cli/admin/bot-output",
   );
+  // Regression: the bare form once tripped "--days must be an integer"
+  // because the empty default was validated as 0. It must send no days
+  // parameter at all so the API applies its since-last-full-run window.
+  const bare = parseAdminOperation(parseArgs(["admin", "bot-output", "--json"]));
+  assert.equal(bare.path, "/cli/admin/bot-output");
+  assert.doesNotMatch(bare.path, /[?&]days=/);
+  assert.equal(parseArgs(["admin", "bot-output", "--json"]).adminDays, "");
   const review = parseAdminOperation(
     parseArgs(["admin", "bot-output", "--days", "3"]),
   );

@@ -9,6 +9,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   formatBatteryPercent,
+  resolveGenerateModel,
   readAssetUploadCandidate,
 } from "../lib/assets.js";
 
@@ -863,3 +864,12 @@ function runCli(args) {
     });
   });
 }
+
+
+test("CLI image quality supports 2.5 without changing legacy model contracts", () => {
+  assert.deepEqual(resolveGenerateModel({ model: "flare", quality: "max" }), { model: "gpt-image-2.5-flare", quality: "max" });
+  assert.deepEqual(resolveGenerateModel({ model: "gpt-image-2.5-sunburst", quality: "xhigh" }), { model: "gpt-image-2.5-sunburst", quality: "xhigh" });
+  assert.throws(() => resolveGenerateModel({ model: "gpt-image-2", quality: "max" }), /require a GPT Image 2.5/);
+  assert.throws(() => resolveGenerateModel({ model: "nano-banana", quality: "max" }), /only applies to GPT Image/);
+  assert.throws(() => resolveGenerateModel({ model: "unknown", quality: "high" }), /model is required/);
+});

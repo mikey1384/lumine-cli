@@ -912,6 +912,27 @@ type DailyRunComplete = Success<{
   rotationAdvanced: false; // legacy field; calendar schedules never advance by run
 }>;
 type DailyRunFail = DailyRunComplete;
+// `escalation add` echoes the same open-item shape `escalation list` returns,
+// so the run.escalation audit ID that `escalation set <auditId>` needs is in
+// the add response; no list round-trip is required. `recordedAt` (the audit
+// row's timestamp) appears only in `list`.
+type DailyRunEscalationAdd = Success<{
+  escalation: {
+    auditId: number; // run.escalation audit event ID = escalation identity
+    runId: number;
+    targetType: string | null;
+    targetId: number | null;
+    url: string | null;
+    summary: string;
+    severity: "attention" | "urgent";
+    status: "open";
+    decisionNote: null;
+    decisionAuditId: null;
+    decisionRevision: 0;
+    decisionUpdatedAt: null;
+    decisionByUserId: null;
+  };
+}>;
 ```
 
 ### Build Workshop sponsor applications and integrity
@@ -1169,6 +1190,8 @@ lumine admin subjects candidates --effort unassigned --json
 lumine admin subjects candidates --unviewed --json
 lumine admin builds candidates --all --limit 50 --json
 lumine admin builds review build:884 --output-dir ./build-review --json
+lumine admin builds review build:884 --output-dir ./build-review \
+  --interact ./build-review/steps.json --json
 ```
 
 Schemas:
@@ -1294,6 +1317,17 @@ All-history traversal is deliberately available only through
 boundary for bounded modes, so deploying a new CLI against an older API cannot
 silently fall back to a million-row historical scan.
 
+`recommendations list` is the Earn Recommend picker, not a "new comments"
+feed: it returns only comments on subjects with an assigned effort level,
+whose length exceeds that level's threshold (>100 / >250 / >450 / >700
+characters for effort ≤2 / 3 / 4 / 5), with no skip row and no existing
+recommendation from any effective Level 5+ user (1000+ AP or Teacher
+authority), Zero, or Ciel. Community-recommended and short comments are
+deliberately absent, so an empty page or an empty window is normal and is
+not evidence of a broken walk; Featured-subject comments are reviewed through
+the Featured comment scan instead. A successful `post recommend` does not
+imply the target was queue-eligible.
+
 After upgrading the API and CLI to the stable run-start window, start a fresh
 `--since-run` scan with a new checkpoint path, without `--resume`. Older
 since-run checkpoints are rejected even when already exhausted: they may have
@@ -1341,6 +1375,53 @@ mid-review. Attach the returned `receiptPath` with
 learned during that review. The receipt binds the draft to the exact reviewed
 artifact without copying a version number by hand; the server owns the Build,
 version, method, and review-time fields around that understanding.
+
+Without `--interact` the review captures only the start screen after
+`--wait-ms`. `--interact <steps.json>` adds a bounded, ordered interaction
+script that runs inside the app's runtime iframe after that start screenshot,
+so the receipt can show what happens when the app is actually used. The file is
+a JSON array (or `{ "steps": [...] }`) of at most **12** steps, each exactly one
+of:
+
+```json
+[
+  { "click": "text=Start" },
+  { "wait": 1500 },
+  { "screenshot": "after-start" },
+  { "type": { "selector": "input[name=name]", "text": "Zero" } },
+  { "press": "Enter" },
+  { "press": "ArrowLeft" },
+  { "screenshot": "moved" }
+]
+```
+
+- `click`: a CSS selector, or `text=<visible text>` (case-insensitive; the
+  smallest visible element whose text matches, then a bounded contains match).
+  Dispatched as a trusted mouse click at the element's centre, so canvas games
+  and buttons both receive it.
+- `type`: `{ selector, text }` — clicks the element, then inserts single-line
+  text (at most 200 characters) as trusted input.
+- `press`: `Enter`, `Space`, `Escape`, `Tab`, `Backspace`, `ArrowUp/Down/Left/Right`,
+  a letter, or a digit. The frame is focused first if nothing was clicked yet.
+- `wait`: 1–5000 ms.
+- `screenshot`: a unique label (1–40 letters/digits/`-`/`_`, not `runtime` or
+  `review`); saved as `<label>.png` beside `runtime.png`.
+
+The whole script is capped at **60 s**; it stops at the first failed step
+(element not found/not visible, budget exhausted, frame unreachable). Console
+evidence stays bounded exactly as before. `review.json` gains
+`screenshots: [{ label, path, bytes }]` (script screenshots only; the start
+screen stays in `screenshot`) and
+`interaction: { path, stepsPlanned, stepsCompleted, status, failedStep, frame,
+elapsedMs, steps }` with a per-step record (coordinates for clicks, the saved
+path for screenshots, the error for a failed step). Both are `[]`/`null`
+without `--interact`. The review remains one receipt bound to one artifact: the
+published version is re-read after the script finishes, and a script that did
+not complete makes the receipt `failed` with
+`CLI_ADMIN_BUILD_REVIEW_INTERACTION_FAILED` (the completed steps and their
+screenshots are still listed) so a draft can never cite interactions that did
+not happen. `comment draft --review-receipt` accepts a receipt only when every
+listed screenshot still exists unchanged and the script completed.
 
 During every full daily management review, scan recent Build candidates back through the
 run's review window alongside Subjects and the recommendation queue. An app
@@ -1736,7 +1817,8 @@ lumine admin featured comments scan --checkpoint featured-read.json --json
 # On interruption: repeat with --resume, in the same active run.
 # Read ALL pageFiles, including full root context and nested replies.
 lumine admin featured comments acknowledge \
-  --checkpoint featured-read.json --reviewed --json
+  --checkpoint featured-read.json --reviewed \
+  --decisions-template featured-decisions.json --json
 ```
 
 The scan snapshots every current Featured Subject (up to 100) and its maximum
@@ -1756,6 +1838,26 @@ downloaded terminal chains. The API validates those chains, records covered and
 missing Subject IDs and comment counts, and distinguishes complete from partial
 coverage. A download alone never counts as a read or grants recommendations.
 After a resumed scan fills a gap, read those pages and acknowledge again.
+
+Acknowledge returns `data.reviewedCoverage` (the coverage receipt; its `id` is
+the `coverageId` the recommend step needs — it is a different audit row from
+the review ID) and a ready-to-fill `data.decisionsTemplate`
+`{ reviewId, coverageId, selections: [] }`. With `--decisions-template <file>`
+the CLI also writes that template as a private mode-0600 file; only
+`acknowledge --reviewed` writes it (a scan rejects the flag). Start the
+decisions file from the template rather than assembling the identifiers by
+hand. `readFeaturedSelections` refuses a file whose `coverageId` equals its
+`reviewId` before any request is sent, and the API answers a wrong receipt
+with `CLI_ADMIN_FEATURED_COVERAGE_MISMATCH` naming the expected receipt, e.g.
+`coverageId 5719 is not the acknowledged coverage receipt for review 5719
+(expected 5749; 5719 is the review ID itself).` with
+`details: { reviewId, suppliedCoverageId, expectedCoverageId,
+suppliedReceiptAction, suppliedCoverageReviewId }`, or
+`CLI_ADMIN_FEATURED_COVERAGE_MISSING` when the review has no acknowledged
+coverage in this run. Other receipt failures (a page ID from another run,
+operator, or actor) keep the generic
+`Receipt #<id> is not a completed <action> receipt of this active run,
+operator and actor.` rejection.
 
 Compose a decisions JSON file from the genuinely reviewed comments, using the
 returned review ID, coverage receipt ID, and each selected comment's page ID:
@@ -2232,7 +2334,9 @@ streak — "I'm telling you: Stop", guilt framing, ordering him to quit Daily
 Reflections — and it surfaced only because the kid showed Mikey).
 
 `bot-output` returns, windowed since the operator's last completed full run
-(`--days 1..30` overrides): `chatMessages` (every stored Zero/Ciel chat and
+(`--days 1..30` overrides; the bare form sends no `days` parameter at all, so
+the API applies that default window — an older CLI wrongly validated the empty
+default and failed with "--days must be an integer"): `chatMessages` (every stored Zero/Ciel chat and
 reflection reply, with full text and recipient metadata when its best-effort
 prompt audit exists) and `comments`
 (every public bot comment/reply). Individual utterances are returned in full;
@@ -2399,7 +2503,16 @@ checking, and in-place truncation occur on the same open descriptor. It then
 returns `post_clear_review_required` with another immutable snapshot. That
 snapshot also captures normal-output bytes that arrived after the prior
 acknowledged cutoff, so routine stdout traffic cannot make the review infinite.
-Read it and run the same `finish --reviewed` command again. A review clears
+Read it and run the same `finish --reviewed` command again. **Only
+`data.completionStatus: "completed"` means the review is done.** The top-level
+`status` mirrors it: `"needs_review"` for both non-terminal outcomes
+(`needs_review` and `post_clear_review_required`, including a recovered
+pending snapshot), `"success"` only when `completed`, and `"already_done"` for
+a replay of an already-finished review. `ok` stays `true` in every case; a
+`needs_review` result is a valid response that requires another read plus
+finish, not an error. The CLI derives the top-level status from
+`completionStatus`, so it is correct against an API that still answers the
+older `success` envelope. A review clears
 `twinkle-api.err.log` at most once. The lease closes when the reviewed error
 boundary is still stable, i.e. every byte now in the API error log arrived
 after that clear and was captured and acknowledged; errors that arrive before
@@ -3003,12 +3116,19 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   is never called a dodge. Offers without redemptions are a reason to inspect
   sample size, event type, and offer age — not proof of a broken funnel by
   themselves.
-- `goneQuiet` — the inverse of `notableCandidates`: users whose `lastActive`
-  fell in the 14 days before the window (so they were around, then stopped),
-  ranked by how regular they were in the prior 30 days (daily tasks and
-  Wordle), capped at 15 with `daysQuiet`. Use it for product signal (what did
-  they stop doing?) and gentle outreach candidates; never guilt a child in
-  public about absence.
+- `goneQuiet` — the inverse of `notableCandidates`, and window-relative: a
+  user "went quiet" the moment 7 days of silence passed since their
+  `lastActive`, and the section lists only the users whose quiet moment fell
+  inside the brief's window (`lastActive` between `sinceTs - 7d` and
+  `now - 7d`). A one-day brief therefore reports one day of crossings and
+  contiguous daily runs list each user once; it never re-lists everyone seen
+  in the past fortnight. `totals.wentQuiet` is that cohort; `previouslyRegular`
+  is the subset with at least 7 distinct active days (completed daily tasks or
+  Wordle plays) in the 30 days ending on their own last active day, and
+  `users` is that subset ranked by `regularityScore` (`dailyTasks * 2 +
+  wordlePlays`, both measured over the same per-user span), capped at 15 with
+  `daysQuiet`. Use it for product signal (what did they stop doing?) and
+  gentle outreach candidates; never guilt a child in public about absence.
 - `newUserFunnel` — signups in the window with `activeOnDayOne` (any
   XP-ledger event within 24h of joining) and `returnedAfterDayOne`
   (`lastActive` beyond their first day), plus the newest few accounts.

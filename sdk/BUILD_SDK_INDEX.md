@@ -2,7 +2,7 @@
 
 Version: 1.41.0
 Updated: 2026-09-08
-Generated: 2026-09-08T05:12:06.333Z
+Generated: 2026-09-09T02:13:12.499Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -488,8 +488,8 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Listen to shared runtime AI chat stream events.
   - Usually prefer per-call onText/onStatus callbacks on Twinkle.ai.chat.
   - Events include requestId plus type status, text, done, or error.
-- async generateImage({ prompt, referenceImageB64, previousResponseId, previousImageId, engine, quality, requestId, onStatus, timeoutMs } = {}) | scopes: none
-  - Returns: { success, imageUrl, responseId, imageId, engine, quality, aiUsagePolicy } or { success: false, error, reason, code, aiUsagePolicy }
+- async generateImage({ prompt, referenceImageB64, previousResponseId, previousImageId, engine, model, quality, requestId, onStatus, timeoutMs } = {}) | scopes: none
+  - Returns: { success, imageUrl, responseId, imageId, engine, model, quality, aiUsagePolicy } or { success: false, error, reason, code, aiUsagePolicy }
   - Generate or edit an image from a prompt and optional base64/data-URL reference image.
   - Signed-in viewers only.
   - Each successful image generation consumes AI Energy from the signed-in viewer.
@@ -502,6 +502,10 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Pass requestId when you need to correlate browser logs, backend logs, and iframe status events for one generation.
   - partial_image statuses may include partialImageB64 for progressive preview UI before the final imageUrl arrives.
   - referenceImageB64 may be a raw base64 string or a data:image/...;base64 URL.
+  - Optional model: gpt-image-2.5-flare or gpt-image-2.5-sunburst. Without a model, OpenAI uses Flare for new images and Sunburst when a reference image or continuation is supplied. Explicit gpt-image-2 remains supported.
+  - Quality accepts low, medium, high, xhigh, or max. xhigh and max require a GPT Image 2.5 model. Gemini has one quality tier.
+  - GPT Image 2.5 battery spending uses actual image-model input and output token usage. The confirmation shows an image-output estimate; prompts and reference images use additional energy.
+  - responseId and imageId are opaque continuation handles. Pass them back unchanged to edit a prior result; do not assume an OpenAI ID format. Existing GPT Image 2 continuations remain usable.
   - Example: const result = await Twinkle.ai.generateImage({ prompt: 'Create a fashion guide portrait for this face with flattering colors and outfit ideas', referenceImageB64, quality: 'high', onStatus: (status) => console.log(status.stage) });
 - onImageGenerationStatus(listener) | scopes: none
   - Returns: unsubscribe function

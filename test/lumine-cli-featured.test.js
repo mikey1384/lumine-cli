@@ -338,12 +338,56 @@ test("Featured scan resumes exact full-page receipts, distinguishes locked/empty
   assert.equal(complete.data.fetched.complete, true);
   // A prior partial read receipt is not silently upgraded by downloading.
   assert.equal(complete.data.reviewedCoverage.complete, false);
+  const templatePath = path.join(dir, "decisions-template.json");
   const acknowledged = await operate(
     "acknowledge",
-    { ...options, adminReviewed: true },
+    { ...options, adminReviewed: true, adminDecisionsTemplate: templatePath },
     api.request,
   );
   assert.equal(acknowledged.data.reviewedCoverage.complete, true);
+  // Acknowledge hands back a ready decisions file: review ID plus the
+  // coverage RECEIPT id (never the review ID), so nothing is assembled by hand.
+  assert.deepEqual(acknowledged.data.decisionsTemplate, {
+    reviewId: acknowledged.data.review.id,
+    coverageId: acknowledged.data.reviewedCoverage.id,
+    selections: [],
+  });
+  assert.notEqual(
+    acknowledged.data.decisionsTemplate.coverageId,
+    acknowledged.data.decisionsTemplate.reviewId,
+  );
+  assert.equal(acknowledged.data.decisionsTemplatePath, templatePath);
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(templatePath, "utf8")),
+    acknowledged.data.decisionsTemplate,
+  );
+  assert.equal(fs.statSync(templatePath).mode & 0o777, 0o600);
+  // The written template is directly valid selection input.
+  assert.deepEqual(readFeaturedSelections(templatePath), {
+    reviewId: acknowledged.data.review.id,
+    coverageId: acknowledged.data.reviewedCoverage.id,
+    selections: [],
+  });
+  // Copying the review ID into coverageId is caught before any API call.
+  const wrongIds = path.join(dir, "wrong-ids.json");
+  write(wrongIds, {
+    reviewId: acknowledged.data.review.id,
+    coverageId: acknowledged.data.review.id,
+    selections: [{ commentId: 120, pageId: 1001 }],
+  });
+  assert.throws(
+    () => readFeaturedSelections(wrongIds),
+    /is the review ID, not the acknowledged coverage receipt/,
+  );
+  // Only acknowledge writes the template; a scan must not silently claim one.
+  await assert.rejects(
+    operate(
+      "scan",
+      { ...options, adminResume: true, adminDecisionsTemplate: templatePath },
+      api.request,
+    ),
+    /--decisions-template is written by/,
+  );
   const firstPageCalls = api.calls.filter(
     (call) => call.body?.subjectId === 1 && call.body?.previousPageId === null,
   );

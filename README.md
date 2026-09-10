@@ -158,6 +158,20 @@ Replay listing and status are available without exposing private playback
 grants. A creator or app owner can remove one with
 `lumine sdk call live.deleteReplay '{"replayId":"..."}' --allow-write`.
 
+`Twinkle.rewards` is callable too, on the same server-verified endpoints the
+published app uses — the CLI holds no award logic. `lumine sdk call
+rewards.getStatus '{}' --build <id>` is read-only and works for the build owner
+without `--allow-write` (the endpoint accepts only the `rewards:claim` scope,
+which is minted for it, but only the status operation is sent).
+`rewards.start '{"ruleId":"..."}'` and
+`rewards.claim '{"challengeId":"...","answers":[1,2]}'` mutate real XP/Coins
+state and require `--allow-write`. Every rewards call first reads the
+published-runtime reward grant from the canonical `GET /build/:id/runtime`
+payload for the signed-in account; when the server issues none (draft,
+private, unapproved or superseded release — the cases where the app itself
+sees preview mode) the call stops with an explanatory error and nothing is
+sent. `--path api/rewards/...` is refused like every other curated endpoint.
+
 ## Assets and AI image generation
 
 Binary media never lives in the workspace — assets are uploaded to Twinkle and
@@ -166,19 +180,22 @@ audio, and MIDI data (`.mid`/`.midi`; playback still needs an app-side parser
 or synth); `lumine assets list` prints your uploads and refreshes
 `.twinkle/assets.json`.
 
-`lumine assets generate "<prompt>" --model <gpt-image-2|nano-banana>` creates
+`lumine assets generate "<prompt>" --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana>` creates
 an AI-generated image asset instead of uploading one. `--model` is required
-(gpt-image-2 = best quality, slower, pricier; nano-banana = Gemini, faster,
-cheaper). Generation spends your Twinkle AI Battery, so the CLI shows the
-estimated cost and asks for confirmation first — non-interactive runs must pass
-`--yes` to consent. `--quality low|medium|high` applies to gpt-image-2 only.
+(Flare = fast generation; Sunburst = precise editing; gpt-image-2 = original
+model; nano-banana = Gemini). Generation spends your Twinkle AI Battery, so the
+CLI shows the estimated cost and asks for confirmation first — non-interactive
+runs must pass
+`--yes` to consent. `--quality low|medium|high|xhigh|max` applies to GPT Image
+models; `xhigh` and `max` require a 2.5 model. Estimates describe image output;
+actual battery usage also includes prompt and reference input.
 
 ## Thumbnails
 
 `lumine thumbnail set <file>` uploads a jpg/png/webp (max 8MB) as the build's
 thumbnail. `lumine thumbnail capture` screenshots the running app server-side
 and sets the result (add `--out <file>` to keep a local copy).
-`lumine thumbnail generate ["<prompt>"] --model <gpt-image-2|nano-banana>`
+`lumine thumbnail generate ["<prompt>"] --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana>`
 generates an AI image and sets it as the thumbnail (the image is also kept as a
 normal reusable asset); without a prompt the server composes one from the build
 title and description. Replacing an existing thumbnail asks for confirmation;

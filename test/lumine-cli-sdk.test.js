@@ -100,3 +100,82 @@ test("CLI exposes canonical Lumine media and live diagnostics", () => {
     "live.deleteReplay",
   ]);
 });
+
+test("CLI exposes Twinkle.rewards through the server-verified reward endpoints only", async () => {
+  const { isWriteCapableScope, loadRewardRuntimeGrant } = await import(
+    "../lib/sdk.js"
+  );
+  // getStatus is read-only for the build owner: the endpoint accepts only
+  // rewards:claim, so that scope is minted, but the method is not write-gated.
+  assert.equal(SDK_CLI_METHODS["rewards.getStatus"].path, "api/rewards/status");
+  assert.equal(SDK_CLI_METHODS["rewards.getStatus"].special, "rewards");
+  assert.equal(SDK_CLI_METHODS["rewards.getStatus"].operation, "status");
+  assert.deepEqual(SDK_CLI_METHODS["rewards.getStatus"].scopes, ["rewards:claim"]);
+  assert.equal(SDK_CLI_METHODS["rewards.getStatus"].readOnly, true);
+  assert.equal(SDK_CLI_METHODS["rewards.getStatus"].write, undefined);
+  assert.deepEqual(SDK_CLI_METHODS["rewards.getStatus"].mapArgs({ junk: 1 }), {});
+  // start/claim mutate real XP/Coins state and stay behind --allow-write.
+  for (const [name, operation, args, body] of [
+    ["rewards.start", "start", { ruleId: "daily", extra: true }, { ruleId: "daily" }],
+    [
+      "rewards.claim",
+      "claim",
+      { challengeId: "c1", answers: [1, 2], extra: true },
+      { challengeId: "c1", answers: [1, 2] },
+    ],
+  ]) {
+    const entry = SDK_CLI_METHODS[name];
+    assert.equal(entry.path, `api/rewards/${operation}`);
+    assert.equal(entry.special, "rewards");
+    assert.equal(entry.operation, operation);
+    assert.deepEqual(entry.scopes, ["rewards:claim"]);
+    assert.equal(entry.write, true);
+    assert.deepEqual(entry.mapArgs(args), body);
+  }
+  // Raw --path cannot bypass the curated handling.
+  for (const operation of ["status", "start", "claim"]) {
+    assert.equal(
+      SDK_CLI_METHOD_NAMES_BY_PATH.get(`api/rewards/${operation}`).length,
+      1,
+    );
+  }
+  // rewards:claim is never part of the default read scope set, and an
+  // explicit --scopes override naming it counts as write-capable.
+  assert.equal(SDK_CLI_READ_SCOPES.includes("rewards:claim"), false);
+  assert.equal(isWriteCapableScope("rewards:claim"), true);
+  assert.equal(isWriteCapableScope("content:read"), false);
+
+  // The published-runtime grant comes from the canonical runtime payload and
+  // is never fabricated locally; without it nothing is called.
+  const options = { apiUrl: "https://api.example.test", timeoutMs: 1000 };
+  const auth = { token: "login" };
+  const calls = [];
+  const grant = await loadRewardRuntimeGrant({
+    options,
+    auth,
+    buildId: 884,
+    methodName: "rewards.getStatus",
+    request: async (args) => {
+      calls.push(args);
+      return { build: { id: 884, rewardRuntimeGrant: "grant.jwt" } };
+    },
+  });
+  assert.equal(grant, "grant.jwt");
+  assert.deepEqual(calls, [
+    {
+      url: "https://api.example.test/build/884/runtime?runtimeSource=published",
+      authToken: "login",
+      timeoutMs: 1000,
+    },
+  ]);
+  await assert.rejects(
+    loadRewardRuntimeGrant({
+      options,
+      auth,
+      buildId: 884,
+      methodName: "rewards.getStatus",
+      request: async () => ({ build: { id: 884, rewardRuntimeGrant: null } }),
+    }),
+    /no published-runtime reward grant for build 884/,
+  );
+});
