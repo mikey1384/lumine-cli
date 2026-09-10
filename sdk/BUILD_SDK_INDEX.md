@@ -2,7 +2,7 @@
 
 Version: 1.41.0
 Updated: 2026-09-08
-Generated: 2026-09-09T02:13:12.499Z
+Generated: 2026-09-10T23:18:30.881Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -31,7 +31,7 @@ Generated: 2026-09-09T02:13:12.499Z
 - Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active hosts, so app code cannot hide or replace the broadcaster's Stop path.
 - Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
 - Twinkle.rewards awards real XP and Coins only in the current approved published release. Drafts, local previews, private apps and superseded releases cannot earn. The server supplies a published-runtime grant; app code cannot choose a recipient or award amount.
-- Lumine agents prepare private numeric quiz rules and budgets with prepare_reward_rules (CLI: POST /build/:buildId/rewards/prepare with { config }). Creators are kids and teens: show a simple earning summary, approval status and Send for review; do not ask them to fill in technical forms. Every code or rule update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate and publishes without reward permission; adding it back requires a fresh approval. Other protected SDKs keep their own gates. Keep protected SDK calls explicit in project source. Existing approved live rewards continue while a draft waits; approvals never publish automatically.
+- Agents implement only the Twinkle.rewards calls with short stable rule IDs; they never write earning amounts, budgets, questions or answer keys. The administrator reads the saved code and sets the earning rules while approving (there is no prepare step or proposal). Creators are kids and teens: show approval status and one Send for review action (POST /build/:buildId/rewards/reviews); do not ask them to fill in technical forms. Every code update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate and publishes without reward permission; adding it back requires a fresh approval. Other protected SDKs keep their own gates. Keep protected SDK calls explicit in project source. Existing approved live rewards continue while a new version waits; approvals never publish automatically.
 - v1 verifies numeric quiz answers on the server; client scores, privateDb state, timers and completion booleans are not reward evidence. Daily limits reset at midnight in Korea. Each rule can be earned once per viewer per day, with three answer attempts per challenge. Challenge expiry is 30 minutes. Budgets apply across release changes.
 
 ## Token Scopes

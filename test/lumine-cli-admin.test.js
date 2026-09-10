@@ -5837,3 +5837,140 @@ test("sponsor administration commands preserve their audited targets and decisio
     note: "Artifact mismatch",
   });
 });
+
+test("reward-review commands are run-independent and carry the reviewer's rules on approve only", async (t) => {
+  const { readRewardConfigFile, writeRewardReviewSnapshot } = await import(
+    "../lib/admin.js"
+  );
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "reward-review", "list"])),
+    {
+      name: "reward-review.list",
+      method: "GET",
+      path: "/cli/admin/reward-reviews?status=pending",
+      body: undefined,
+      mutates: false,
+      requiresRun: false,
+    },
+  );
+  assert.equal(
+    parseAdminOperation(
+      parseArgs(["admin", "reward-review", "list", "--status", "all", "--cursor", "40"]),
+    ).path,
+    "/cli/admin/reward-reviews?status=all&beforeId=40",
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "list", "--status", "rejected"])),
+    /--status must be/,
+  );
+  // Without --dir the source is listed by size; with --dir the snapshot is fetched.
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2"])).path,
+    "/cli/admin/reward-reviews/2?files=0",
+  );
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2", "--dir", "/tmp/r2"])).path,
+    "/cli/admin/reward-reviews/2?files=1",
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2", "--dir", "  "])),
+    /--dir/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "list", "--cursor", "abc"])),
+    /--cursor/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "reject", "2"])),
+    /--reason/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "approve", "2"])),
+    /--config/,
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs(["admin", "reward-review", "revoke", "2", "--reason", "Farmable in two minutes."]),
+    ),
+    {
+      name: "reward-review.decide",
+      method: "POST",
+      path: "/cli/admin/reward-reviews/2",
+      body: { decision: "revoke", reason: "Farmable in two minutes." },
+      mutates: true,
+      requiresRun: false,
+      reviewId: 2,
+      decision: "revoke",
+    },
+  );
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-reward-review-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const rulesPath = path.join(dir, "rules.json");
+  const rules = {
+    dailyXP: 50, dailyCoins: 5, userDailyXP: 50, userDailyCoins: 5,
+    lifetimeXP: 2000, lifetimeCoins: 200,
+    rules: [{ id: "weekly-network", title: "Clear a week", xp: 20, coins: 2,
+      verifier: "numeric-quiz", questions: [{ prompt: "4 + 3?", answer: 7 }] }],
+  };
+  fs.writeFileSync(rulesPath, JSON.stringify(rules));
+  const approve = parseAdminOperation(
+    parseArgs(["admin", "reward-review", "approve", "2", "--config", rulesPath]),
+  );
+  assert.deepEqual(approve.body, { decision: "approve", reason: "", config: rules });
+  assert.equal(approve.requiresRun, false);
+  fs.writeFileSync(rulesPath, JSON.stringify({ ...rules, rules: [] }));
+  assert.throws(() => readRewardConfigFile(rulesPath), /at least one earning rule/);
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "reject", "2", "--reason", "x", "--config", rulesPath])),
+    /--config is only used with approve/,
+  );
+  // Snapshot files land inside --dir only; traversal is refused.
+  const snapshotDir = path.join(dir, "snapshot");
+  const written = writeRewardReviewSnapshot({
+    directory: snapshotDir,
+    files: [
+      { path: "/index.html", content: "<h1>Metro</h1>" },
+      { path: "/src/rewards.js", content: "api.start({ ruleId: 'weekly-network' })" },
+    ],
+  });
+  assert.equal(written.files.length, 2);
+  assert.equal(
+    fs.readFileSync(path.join(snapshotDir, "src", "rewards.js"), "utf8"),
+    "api.start({ ruleId: 'weekly-network' })",
+  );
+  assert.equal((fs.statSync(path.join(snapshotDir, "index.html")).mode & 0o777), 0o600);
+  // A populated directory is refused (no stale files from another review, no
+  // clobbering a real workspace), as are symlinked roots and traversal.
+  assert.throws(
+    () => writeRewardReviewSnapshot({ directory: snapshotDir, files: [{ path: "/a.js", content: "x" }] }),
+    /new or empty directory/,
+  );
+  const fresh = path.join(dir, "fresh");
+  assert.throws(
+    () => writeRewardReviewSnapshot({ directory: fresh, files: [{ path: "/../escape.js", content: "x" }] }),
+    /outside/,
+  );
+  const linkRoot = path.join(dir, "link-root");
+  fs.symlinkSync(snapshotDir, linkRoot);
+  assert.throws(
+    () => writeRewardReviewSnapshot({ directory: linkRoot, files: [{ path: "/a.js", content: "x" }] }),
+    /new or empty directory/,
+  );
+  assert.throws(
+    () => writeRewardReviewSnapshot({ directory: "   ", files: [] }),
+    /--dir/,
+  );
+  // A symlinked subdirectory planted inside an "empty" root cannot redirect a
+  // write: the root must be empty, so the link would have to be created after
+  // the check; writes use 'wx' and re-verify the real parent path.
+  const outside = path.join(dir, "outside");
+  fs.mkdirSync(outside);
+  const trap = path.join(dir, "trap");
+  fs.mkdirSync(trap);
+  fs.symlinkSync(outside, path.join(trap, "src"));
+  assert.throws(
+    () => writeRewardReviewSnapshot({ directory: trap, files: [{ path: "/src/x.js", content: "x" }] }),
+    /new or empty directory/,
+  );
+  assert.equal(fs.existsSync(path.join(outside, "x.js")), false);
+});

@@ -1045,6 +1045,68 @@ mutation when a caller needs the same retry identity across processes. The CLI
 generates a fresh key for every mutation invocation; if a mutation fails, its
 JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 
+### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
+
+Creators only press **Send for review** in their workspace; they never write
+earning rules, budgets or questions and Lumine does not prepare anything for
+them. Each request freezes the saved source and waits for the administrator.
+Approval is Mikey's decision. The agent's job is to read the frozen code with
+him, assess whether the app deserves to pay real XP/Coins, and draft the earning
+rules he approves. These commands need no daily run and can be used whenever a
+request arrives (the reviewer also receives a DM card per request).
+
+```bash
+lumine admin reward-review list --json                       # pending (default)
+lumine admin reward-review list --status approved --json
+lumine admin reward-review list --status all --cursor 40 --json
+lumine admin reward-review show 2 --json                     # summary + file sizes
+lumine admin reward-review show 2 --dir /private/tmp/reward-review-2 --json
+lumine admin reward-review approve 2 --config rules.json \
+  --reason "Small daily quiz; budgets capped" --json
+lumine admin reward-review reject 2 --reason "Rewards fire on game over; nothing is earned" --json
+lumine admin reward-review revoke 2 --reason "Farmable; pausing until redesigned" --json
+```
+
+`show --dir` writes the exact reviewed snapshot (private files) so the agent
+can read it like a pulled workspace. The result also carries
+`detectedRuleIds` (a heuristic scan of `start({ ruleId })` calls — the rules
+you write must use these IDs or the app cannot start a challenge),
+`isLatest`/`isLive`, the published version, lifetime totals and what this
+review has already paid out.
+
+Review questions to settle with Mikey before drafting rules:
+
+- Is the reward tied to real effort or learning, or does it fire on trivial or
+  losing moments (a timer, a game over, the first minute of play)?
+- Can a signed-in user farm it: fixed questions, once-per-day rules reachable in
+  seconds, scriptable `start`/`claim` calls? Budgets are the only backstop.
+- Do the rule IDs in the code match the rules being approved? Unknown IDs
+  simply never pay.
+- Are the amounts and the per-user, per-app and lifetime budgets conservative
+  for what the app actually asks of people?
+
+`rules.json` is the reviewer's earning policy (all fields required):
+
+```json
+{
+  "dailyXP": 50, "dailyCoins": 5,
+  "userDailyXP": 50, "userDailyCoins": 5,
+  "lifetimeXP": 2000, "lifetimeCoins": 200,
+  "rules": [
+    { "id": "weekly-network", "title": "Clear a network week", "xp": 20, "coins": 2,
+      "verifier": "numeric-quiz",
+      "questions": [{ "prompt": "A network has 4 stations and adds 3. How many?", "answer": 7 }] }
+  ]
+}
+```
+
+Approval freezes these rules with the reviewed snapshot; an approval without at
+least one rule is refused. Rejection and revocation require a `--reason` the
+creator reads verbatim in their workspace. Approval never publishes: the creator
+publishes the approved version themselves, and a later code save needs a new
+request. Never approve without reading the code; never approve a request whose
+`isLatest` is false.
+
 ## Private carry-over todos
 
 ```bash
