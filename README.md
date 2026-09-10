@@ -159,10 +159,14 @@ grants. A creator or app owner can remove one with
 `lumine sdk call live.deleteReplay '{"replayId":"..."}' --allow-write`.
 
 `Twinkle.rewards` is callable too, on the same server-verified endpoints the
-published app uses — the CLI holds no award logic. `lumine sdk call
-rewards.getStatus '{}' --build <id>` is read-only and works for the build owner
-without `--allow-write` (the endpoint accepts only the `rewards:claim` scope,
-which is minted for it, but only the status operation is sent).
+published app uses — the CLI holds no award logic. The server decides who may
+take part exactly as it does for the app in a browser: any signed-in account
+that can open a public app with an approved reward policy, the owner included,
+within the policy's attempt, daily and budget limits. `lumine sdk call
+rewards.getStatus '{}' --build <id>` is read-only and works without
+`--allow-write` (the endpoint accepts only the `rewards:claim` scope, which is
+minted for it as a deliberate exception to the read-only rule, but only the
+status operation is sent).
 `rewards.start '{"ruleId":"..."}'` and
 `rewards.claim '{"challengeId":"...","answers":[1,2]}'` mutate real XP/Coins
 state and require `--allow-write`. Every rewards call first reads the
