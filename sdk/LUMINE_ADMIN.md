@@ -3161,8 +3161,17 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   comments, recommendations, wordle, reflections, dailyTasks, aiChat,
   lumineBuildChat, buildsEdited, buildsPlayed) for the current window vs the
   equal-length previous window, each as `{ current, previous, delta }`.
-  Presence, build edits, and build plays come from durable action/version/view
-  events, not mutable `lastActive`/`updatedAt` snapshots. Zero/Ciel are excluded
+  `activeUsers` is the union of every timestamp-windowed surface: a member who
+  logged an action (search, logout, entering Chat), wrote or recommended a
+  Subject or comment, sent a chat message, shared a reflection, talked to
+  Lumine, or saved a Build in the window, counted once however many surfaces
+  they touched. It is therefore never smaller than subjects, comments,
+  recommendations, reflections, lumineBuildChat or buildsEdited, and a member
+  active in both windows counts in both. The calendar-bucket surfaces (wordle,
+  dailyTasks, aiChat) and buildsPlayed are NOT part of that union, so
+  `activeUsers` can be smaller than those. Presence, build edits, and build
+  plays come from durable action/version/view events, not mutable
+  `lastActive`/`updatedAt` snapshots. Zero/Ciel are excluded
   from authored surfaces. Wordle, daily tasks, and AI chat use the equal
   calendar-bucket ranges in `dayWindow`; those can begin before the exact
   timestamp window but always compare the same number of days. This is the
