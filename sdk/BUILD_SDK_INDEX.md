@@ -2,7 +2,7 @@
 
 Version: 1.41.0
 Updated: 2026-09-08
-Generated: 2026-09-12T04:46:21.225Z
+Generated: 2026-09-12T06:19:33.743Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -581,13 +581,15 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Each operation slice is { cooldownSeconds, availableAt, retryAfterSeconds }.
   - serverNow is unix seconds so progress bars ignore client clock skew.
   - Pass subjectId/commentId to include per-target edit cooldowns.
-- async create({ title, description }) | scopes: content:write
-  - Returns: { subject, writeStatus }
-  - Creates a normal site subject (title + description only in v1).
+- async create({ title, description, attachment }) | scopes: content:write
+  - Returns: { subject: { id, title, description, filePath, fileName, fileSize, thumbUrl, userId, username, ... }, writeStatus }
+  - Creates a normal site subject. title up to 200 characters, description up to 20,000.
+  - attachment: { runtimeFileId } names a file the viewer uploaded through Twinkle.files.uploadGenerated (its asset id); the server verifies it is this viewer’s upload for this app, copies it into the site’s attachment storage and stores it as the subject’s real attachment (cover). Images get a thumbUrl from the site optimizer shortly after.
   - Site-wide durable cooldown: 600s between creates. 429 includes writeStatus.
-- async edit({ subjectId, title, description }) | scopes: content:write
+- async edit({ subjectId, title, description, attachment }) | scopes: content:write
   - Returns: { subject, writeStatus }
   - Own subjects only (userId === uploader). Never uses moderator edit rights.
+  - attachment: { runtimeFileId } replaces the subject attachment with one of the viewer’s uploads; attachment: null removes it; omit to leave it unchanged.
   - Per-subject edit cooldown: 10s.
 
 ### Twinkle.aiCards
@@ -675,13 +677,14 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - For subject-poster books that include poster replies, use author: subjectPoster, includeReplies: true, and replyScope: ownThread so the poster's replies to other people do not become pages.
   - Supports cursor-based pagination. Pass cursor from the previous response to load more.
   - Example: const { subjects } = await Twinkle.subjects.search({ query: searchText, limit: 12 }); const subjectId = pickedSubject.id; const page = await Twinkle.subjectComments.list(subjectId, { sortBy: 'oldest', author: 'subjectPoster', includeReplies: true, replyScope: 'ownThread', limit: 50 });
-- async create({ subjectId, content }) | scopes: content:write
+- async create({ subjectId, content, attachment }) | scopes: content:write
   - Returns: { comment, writeStatus }
-  - Adds a top-level subject comment (book page). Own subject only.
+  - Adds a top-level subject comment (book page). Own subject only. content up to 10,000 characters (longer text is cut at 10,000, so split chapters yourself).
+  - attachment: { runtimeFileId } attaches one of the viewer’s Twinkle.files.uploadGenerated uploads to the comment as a real attachment.
   - Site-wide durable cooldown: 20s between comment creates. 429 includes writeStatus.
 - async edit({ commentId, content }) | scopes: content:write
   - Returns: { comment, writeStatus }
-  - Own comments only. Per-comment edit cooldown: 10s.
+  - Own comments only. content up to 10,000 characters. Per-comment edit cooldown: 10s.
 
 ### Twinkle.profileComments
 - async getProfileComments({ profileUserId, limit, offset, sortBy, includeReplies, range, since, until } = {}) | scopes: content:read
