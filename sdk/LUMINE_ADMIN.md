@@ -1047,66 +1047,85 @@ JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 
 ### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
 
-Creators only press **Send for review** in their workspace; they never write
-earning rules, budgets or questions and Lumine does not prepare anything for
-them. Each request freezes the saved source and waits for the administrator.
-Approval is Mikey's decision. The agent's job is to read the frozen code with
-him, assess whether the app deserves to pay real XP/Coins, and draft the earning
-rules he approves. These commands need no daily run and can be used whenever a
-request arrives (the reviewer also receives a DM card per request).
+The creator's Lumine designs the rewards and writes them into the app. The
+app declares its economy in `rewards.json` at the project root (rule ids,
+titles, XP, Coins, tries, retry share, budgets); quiz rules get their questions
+and answer keys from a private question sheet the creator's Lumine uploads with
+`lumine rewards sheet <file.json>` (never a project file: published source is
+readable by every player). **Send for review** freezes the code and proposes
+`rewards.json` merged with the sheet. Approval is Mikey's decision: read the
+frozen code, check that the amounts are right and that the app cannot be
+farmed, change anything that is wrong, approve. These commands need no daily
+run and can be used whenever a request arrives (the reviewer also receives a
+DM card per request).
 
 ```bash
 lumine admin reward-review list --json                       # pending (default)
 lumine admin reward-review list --status approved --json
 lumine admin reward-review list --status all --cursor 40 --json
-lumine admin reward-review show 2 --json                     # summary + file sizes
+lumine admin reward-review show 2 --json                     # summary + file sizes + proposed rules
 lumine admin reward-review show 2 --dir /private/tmp/reward-review-2 --json
+lumine admin reward-review approve 2 --json                  # approve exactly what the app proposed
 lumine admin reward-review approve 2 --config rules.json \
-  --reason "Small daily quiz; budgets capped" --json
+  --reason "Halved the stage amounts" --json                 # approve with changes
 lumine admin reward-review reject 2 --reason "Rewards fire on game over; nothing is earned" --json
 lumine admin reward-review revoke 2 --reason "Farmable; pausing until redesigned" --json
 ```
 
-`show --dir` writes the exact reviewed snapshot (private files) so the agent
-can read it like a pulled workspace. The result also carries
-`detectedRuleIds` (a heuristic scan of `start({ ruleId })` calls — the rules
-you write must use these IDs or the app cannot start a challenge),
-`isLatest`/`isLive`, the published version, lifetime totals and what this
-review has already paid out.
+`show --dir` writes the exact reviewed snapshot (private files, including the
+app's own `rewards.json`) so the agent can read it like a pulled workspace. The
+result's `config` is the proposal: the declared economy with the sheet's
+questions merged in. It also carries `detectedRuleIds` (a heuristic scan of
+`start({ ruleId })` calls), `isLatest`/`isLive`, the published version,
+lifetime totals and what this review has already paid out.
 
-Review questions to settle with Mikey before drafting rules:
+Review questions to settle with Mikey before approving:
 
-- Is the reward tied to real effort or learning, or does it fire on trivial or
+- Is the reward tied to real play or learning, or does it fire on trivial or
   losing moments (a timer, a game over, the first minute of play)?
-- Can a signed-in user farm it: fixed questions, once-per-day rules reachable in
-  seconds, scriptable `start`/`claim` calls? Budgets are the only backstop.
-- Do the rule IDs in the code match the rules being approved? Unknown IDs
+- Completion rules (`verifier: "completion"`) prove nothing but elapsed time:
+  the app calls `start` when an activity begins and `claim` when it ends, and
+  the server only checks `minSeconds`, once per learner per day, and the
+  budgets. Read the code for where those calls sit, and keep the amounts and
+  `userDailyXP` small enough that a player scripting the calls would not
+  matter. Arcade Typing's stage clears are the reference: up to 10,000 XP a
+  day across twelve stages.
+- Quiz rules: fixed questions reachable in seconds are farmable; dated sets
+  or `progression: "until-earned"` sets (a set stays up until somebody earns
+  it, then the next one comes up the following Korean day) keep them honest.
+- Do the rule IDs in `rewards.json` match what the code starts? Unknown IDs
   simply never pay.
 - Are the amounts and the per-user, per-app and lifetime budgets conservative
   for what the app actually asks of people?
 
-`rules.json` is the reviewer's earning policy (budgets and `rules[]` required):
+`rules.json` (what `--config` takes, and what the app's `rewards.json` plus
+sheet compose into):
 
 ```json
 {
-  "dailyXP": 50, "dailyCoins": 5,
-  "userDailyXP": 50, "userDailyCoins": 5,
-  "lifetimeXP": 2000, "lifetimeCoins": 200,
+  "dailyXP": 2000000, "dailyCoins": 0,
+  "userDailyXP": 10000, "userDailyCoins": 0,
+  "lifetimeXP": 200000000, "lifetimeCoins": 0,
   "rules": [
-    { "id": "weekly-network", "title": "Clear a network week", "xp": 20, "coins": 2,
-      "verifier": "numeric-quiz",
-      "questions": [{ "prompt": "A network has 4 stations and adds 3. How many?", "answer": 7 }] }
+    { "id": "stage-1", "title": "Clear Stage 1", "xp": 300, "coins": 0,
+      "verifier": "completion", "minSeconds": 20 },
+    { "id": "e1-daily", "title": "Elementary 1 · Daily bounty", "xp": 50000, "coins": 1000,
+      "verifier": "numeric-quiz", "maxAttempts": null, "retry": { "xpPercent": 50, "coinsPercent": 0 },
+      "progression": "until-earned",
+      "sets": [{ "key": "e1-01", "questions": [{ "prompt": "...", "answer": 4, "hint": "...", "guide": { "explanation": "..." } }] }] }
   ]
 }
 ```
 
-Optional rule fields (all server-enforced, none inferred from app code):
+Rule fields (all server-enforced, none inferred from app code):
 
-- `sets`: dated question sets, `[{ "from": "2026-09-14", "to": "2026-09-14", "questions": [...] }]`
-  on Korean calendar days (inclusive, non-overlapping, up to 62). The server
-  serves the set covering today, else the rule's standing `questions`, else the
-  rule is `available: false` that day. One approval can therefore carry a whole
-  week of daily bounties; the app changes nothing day to day.
+- `verifier`: `numeric-quiz` (server-checked numeric answers) or `completion`
+  (a finished activity; `minSeconds` is the only proof).
+- `sets`: question sets. Dated: `[{ "from": "2026-09-14", "to": "2026-09-14", "questions": [...] }]`
+  on Korean calendar days (inclusive, non-overlapping, up to 62). Until-earned
+  (`"progression": "until-earned"`): ordered sets with optional `key`; the
+  first set nobody earned before today is up, an unsolved set is never
+  replaced, and a set earned today stays up for the rest of that day.
 - `retry`: `{ "xpPercent": 50, "coinsPercent": 0 }` — what a correct answer pays
   after a wrong one, as a share of the rule's amounts (rounded down). Absent:
   every correct answer pays the full amounts.
@@ -1114,18 +1133,18 @@ Optional rule fields (all server-enforced, none inferred from app code):
   Korean midnight (wrong answers are paced two seconds apart). Absent: 3.
 - Per question `hint` (public from the start, ≤ 300 chars) and `guide` (a JSON
   object ≤ 6,000 chars the app renders as the after-answer lesson). The server
-  releases a guide only after the learner's first answer, so it is reviewed
-  here with the answer key instead of sitting in the app's source.
+  releases a guide only after the learner's first answer.
 - Top-level `userDailyClaims`: receipts one learner may earn per Korean day
   across all rules. `1` is "one bounty a day".
 
-Math Lab's 2026-09-12 economy (Mikey): twelve level rules, one per grade per
+Math Lab's economy (Mikey, 2026-09-12): twelve level rules, one per grade per
 day, elementary 50,000 XP + 1,000 Coins, middle 70,000 + 5,000, high
 100,000 + 10,000; `retry` 50 % XP / 0 % Coins; `maxAttempts` null;
-`userDailyClaims` 1; `userDailyXP` 100000 / `userDailyCoins` 10000. Platform
-ceilings: 100,000 XP / 10,000 Coins per rule and per learner per day,
-10,000,000 XP / 1,000,000 Coins per app per day, 1,000,000,000 XP /
-100,000,000 Coins per app lifetime.
+`userDailyClaims` 1; until-earned sets authored from the Korean curriculum.
+Arcade Typing (Mikey, 2026-09-12): XP for clearing campaign stages, up to
+10,000 XP per learner per day, no Coins. Platform ceilings: 100,000 XP /
+10,000 Coins per rule and per learner per day, 10,000,000 XP / 1,000,000 Coins
+per app per day, 1,000,000,000 XP / 100,000,000 Coins per app lifetime.
 
 Approval freezes these rules with the reviewed snapshot; an approval without at
 least one rule is refused. Rejection and revocation require a `--reason` the
@@ -1133,6 +1152,33 @@ creator reads verbatim in their workspace. Approval never publishes: the creator
 publishes the approved version themselves, and a later code save needs a new
 request. Never approve without reading the code; never approve a request whose
 `isLatest` is false.
+
+### Reward activity report (standing duty, every full daily review; added 2026-09-12)
+
+Completion rewards (Arcade Typing's stage clears) prove nothing but elapsed
+time, so the run reads the shape of the week's claims instead of trusting them:
+
+```bash
+lumine admin reward-activity --json                # last 7 Korean days, every app
+lumine admin reward-activity --days 14 --build 333 --json
+```
+
+Read-only, no run lease. The result lists every app that paid (claims,
+earners, XP, Coins) and the flagged player-days, worst first:
+
+- `fast`: a completion claim within 5 s of the rule's `minSeconds` — a human
+  who types the stage lands well above the minimum; a script lands on it;
+- `burst`: 3+ claims within 10 minutes;
+- `sweep`: 75 %+ of an app's completion rules earned within 30 minutes (3+ claims);
+- `cap` / `daily-max`: at the per-learner day cap; at it on 3+ days of the window;
+- `guessing`: a quiz challenge with 15+ wrong answers (unlimited-tries rules).
+
+Put the app totals and every flagged row in the daily report verbatim. A
+single `cap` day is a good player having a good day; `fast` + `sweep` +
+`burst` together on one player is the script signature. None of it is proof:
+open the player with `admin identity inspect` before proposing anything, and
+propose to Mikey (revoke the app's rule, or a bucket ban) rather than acting.
+Never revoke an approval from a daily run.
 
 ## Private carry-over todos
 
@@ -2462,6 +2508,43 @@ IDs before the anchor. `boundedLimitReached` means stop and report that bound,
 not that all channel history was reviewed. Deleted messages and hidden
 attachments remain hidden. Group-channel browsing, `--all`, and `--days` are
 not supported. Never start an entire daily run just to investigate one reply.
+
+### API worker memory report (same phase, every full daily review; added 2026-09-12)
+
+On 2026-09-12 both primary API workers hit their 256 MiB V8 old-space cap at
+the same moment after ~14.6 h and aborted; core dumps then pinned both vCPUs
+and the site was down about five minutes. Since then the cluster primary
+recycles one worker politely when its heap stays above 85 % of its limit
+(immediately above 95 %), never both at once, and the unit sets `LimitCORE=0`.
+The daily run reports on that behaviour so Mikey can decide the next step
+(heap cap, retention fix, host budget).
+
+Run on the primary over management SSH (standing permission covers it):
+
+```bash
+ssh api-primary.twinkle.network 'cd /home/ec2-user/server && bash scripts/twinkle-api-service.sh memory-daily'
+```
+
+Read every line, and put these in the daily report verbatim:
+
+- each `worker slot=… uptime=… core_limit=… heap_pct=… heap_high_water_pct=…`
+  line: worker age, current heap as a share of its cap, and the highest share
+  it reached; `core_limit` must read `0` on a post-2026-09-12 generation;
+- the `worker events (24h) heap_recycles=… heap_high_warnings=… pressure_recycles=…
+  operator_recycles=… service_restarts=… oom_aborts=… unexpected_worker_exits=…`
+  line;
+- the `day-over-day … worker_heap=…` delta.
+
+Escalate in the report (a todo, and a note for Mikey) when any of these hold:
+`oom_aborts` > 0, `service_restarts` > 0, `unexpected_worker_exits` > 0, any
+worker `heap_high_water_pct` ≥ 95, or `heap_recycles` ≥ 4 in a day (the
+recycler is masking growth faster than expected). A worker at 85–90 % with a
+few recycles a day is the designed steady state, not an incident; report the
+numbers and move on. Do not raise the cap, change guard thresholds, or take a
+heap snapshot as part of the run: a snapshot inflates the worker to ~6× its
+heap and the cgroup guard kills it (observed 2026-09-12); the facility now
+refuses without that headroom. The retention investigation uses the
+`[runtime-memory] allocation-profile` lines in `twinkle-api.out.log` instead.
 
 ### API runtime-log review (same phase, every full daily review)
 
