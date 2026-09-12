@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.41.0
-Updated: 2026-09-08
-Generated: 2026-09-12T06:19:33.743Z
+Version: 1.42.0
+Updated: 2026-09-12
+Generated: 2026-09-12T07:41:17.555Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -1026,6 +1026,11 @@ world.updatePresence({ x, y, z, facing });
   - Every claim response, wrong or right, returns the questions with their guides unlocked: show the teaching content right after the first answer. Answer keys are never returned.
   - A wrong answer within two seconds of the previous one is refused with build_reward_throttled (HTTP 429) and does not count; wait for the person to try again rather than retry-looping.
   - Completion rules take no answers: claim({ challengeId }) when the activity is finished. build_reward_too_fast (HTTP 409) means fewer than minSeconds passed since start; show nothing and let play continue. In preview mode the receipt carries preview: true and nothing is paid.
+- await Twinkle.rewards.getLeaderboard({ metric?: "xp" | "coins", period?: "day" | "week" | "all", limit? }) | scopes: rewards:claim
+  - Returns: { mode: "live", metric, period, limit, dayKey, from, available: { xp, coins }, entries: [{ rank, userId, username, profilePicUrl, xp, coins, claims, lastAt }], me: { rank, xp, coins, claims } | null } | { mode: "preview", metric, period, available, entries: [], me: null, message }
+  - Standings of who earned the most XP or Coins in THIS app, computed by Twinkle from its own receipts (never from anything the app submits). period 'day' is today in Korea, 'week' the last 7 Korean days, 'all' (default) every day since approval. limit defaults to 20, max 100.
+  - available says which boards this app's approved rules can pay: show a Coins board only when available.coins is true (an app whose rules pay XP only has no Coins standings). me is the signed-in viewer's own standing even when they fall outside the page, or null when they earned nothing in the period.
+  - Drafts and previews return mode 'preview' with no entries. Use Twinkle.leaderboards for app-defined scores; use this for real XP and Coins earned.
 
 ## Examples
 
