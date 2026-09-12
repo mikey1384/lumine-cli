@@ -1092,7 +1092,7 @@ Review questions to settle with Mikey before approving:
   day across twelve stages.
 - Quiz rules: fixed questions reachable in seconds are farmable; dated sets
   or `progression: "until-earned"` sets (a set stays up until somebody earns
-  it, then the next one comes up the following Korean day) keep them honest.
+  it, then the next one comes up the following site day (UTC midnight, 9:00 AM Korea)) keep them honest.
 - Do the rule IDs in `rewards.json` match what the code starts? Unknown IDs
   simply never pay.
 - Are the amounts and the per-user, per-app and lifetime budgets conservative
@@ -1122,7 +1122,7 @@ Rule fields (all server-enforced, none inferred from app code):
 - `verifier`: `numeric-quiz` (server-checked numeric answers) or `completion`
   (a finished activity; `minSeconds` is the only proof).
 - `sets`: question sets. Dated: `[{ "from": "2026-09-14", "to": "2026-09-14", "questions": [...] }]`
-  on Korean calendar days (inclusive, non-overlapping, up to 62). Until-earned
+  on site days (UTC) (inclusive, non-overlapping, up to 62). Until-earned
   (`"progression": "until-earned"`): ordered sets with optional `key`; the
   first set nobody earned before today is up, an unsolved set is never
   replaced, and a set earned today stays up for the rest of that day.
@@ -1130,11 +1130,11 @@ Rule fields (all server-enforced, none inferred from app code):
   after a wrong one, as a share of the rule's amounts (rounded down). Absent:
   every correct answer pays the full amounts.
 - `maxAttempts`: wrong answers allowed per challenge; `null` = unlimited until
-  Korean midnight (wrong answers are paced two seconds apart). Absent: 3.
+  the daily reset (UTC midnight, 9:00 AM Korea) (wrong answers are paced two seconds apart). Absent: 3.
 - Per question `hint` (public from the start, ≤ 300 chars) and `guide` (a JSON
   object ≤ 6,000 chars the app renders as the after-answer lesson). The server
   releases a guide only after the learner's first answer.
-- Top-level `userDailyClaims`: receipts one learner may earn per Korean day
+- Top-level `userDailyClaims`: receipts one learner may earn per site day
   across all rules. `1` is "one bounty a day".
 
 Math Lab's economy (Mikey, 2026-09-12): twelve level rules, one per grade per
@@ -1159,7 +1159,7 @@ Completion rewards (Arcade Typing's stage clears) prove nothing but elapsed
 time, so the run reads the shape of the week's claims instead of trusting them:
 
 ```bash
-lumine admin reward-activity --json                # last 7 Korean days, every app
+lumine admin reward-activity --json                # last 7 site days, every app
 lumine admin reward-activity --days 14 --build 333 --json
 ```
 
