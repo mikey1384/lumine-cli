@@ -5884,9 +5884,10 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
     () => parseAdminOperation(parseArgs(["admin", "reward-review", "reject", "2"])),
     /--reason/,
   );
-  assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "reward-review", "approve", "2"])),
-    /--config/,
+  // Approving without --config accepts the app's own proposal as frozen in the request.
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "reward-review", "approve", "2"])).body,
+    { decision: "approve", reason: "" },
   );
   assert.deepEqual(
     parseAdminOperation(
