@@ -1085,7 +1085,7 @@ Review questions to settle with Mikey before drafting rules:
 - Are the amounts and the per-user, per-app and lifetime budgets conservative
   for what the app actually asks of people?
 
-`rules.json` is the reviewer's earning policy (all fields required):
+`rules.json` is the reviewer's earning policy (budgets and `rules[]` required):
 
 ```json
 {
@@ -1099,6 +1099,33 @@ Review questions to settle with Mikey before drafting rules:
   ]
 }
 ```
+
+Optional rule fields (all server-enforced, none inferred from app code):
+
+- `sets`: dated question sets, `[{ "from": "2026-09-14", "to": "2026-09-14", "questions": [...] }]`
+  on Korean calendar days (inclusive, non-overlapping, up to 62). The server
+  serves the set covering today, else the rule's standing `questions`, else the
+  rule is `available: false` that day. One approval can therefore carry a whole
+  week of daily bounties; the app changes nothing day to day.
+- `retry`: `{ "xpPercent": 50, "coinsPercent": 0 }` — what a correct answer pays
+  after a wrong one, as a share of the rule's amounts (rounded down). Absent:
+  every correct answer pays the full amounts.
+- `maxAttempts`: wrong answers allowed per challenge; `null` = unlimited until
+  Korean midnight (wrong answers are paced two seconds apart). Absent: 3.
+- Per question `hint` (public from the start, ≤ 300 chars) and `guide` (a JSON
+  object ≤ 6,000 chars the app renders as the after-answer lesson). The server
+  releases a guide only after the learner's first answer, so it is reviewed
+  here with the answer key instead of sitting in the app's source.
+- Top-level `userDailyClaims`: receipts one learner may earn per Korean day
+  across all rules. `1` is "one bounty a day".
+
+Math Lab's 2026-09-12 economy (Mikey): twelve level rules, one per grade per
+day, elementary 50,000 XP + 1,000 Coins, middle 70,000 + 5,000, high
+100,000 + 10,000; `retry` 50 % XP / 0 % Coins; `maxAttempts` null;
+`userDailyClaims` 1; `userDailyXP` 100000 / `userDailyCoins` 10000. Platform
+ceilings: 100,000 XP / 10,000 Coins per rule and per learner per day,
+10,000,000 XP / 1,000,000 Coins per app per day, 1,000,000,000 XP /
+100,000,000 Coins per app lifetime.
 
 Approval freezes these rules with the reviewed snapshot; an approval without at
 least one rule is refused. Rejection and revocation require a `--reason` the

@@ -2,7 +2,7 @@
 
 Version: 1.41.0
 Updated: 2026-09-08
-Generated: 2026-09-10T23:18:30.881Z
+Generated: 2026-09-12T01:28:55.746Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -31,7 +31,7 @@ Generated: 2026-09-10T23:18:30.881Z
 - Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active hosts, so app code cannot hide or replace the broadcaster's Stop path.
 - Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
 - Twinkle.rewards awards real XP and Coins only in the current approved published release. Drafts, local previews, private apps and superseded releases cannot earn. The server supplies a published-runtime grant; app code cannot choose a recipient or award amount.
-- Agents implement only the Twinkle.rewards calls with short stable rule IDs; they never write earning amounts, budgets, questions or answer keys. The administrator reads the saved code and sets the earning rules while approving (there is no prepare step or proposal). Creators are kids and teens: show approval status and one Send for review action (POST /build/:buildId/rewards/reviews); do not ask them to fill in technical forms. Every code update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate and publishes without reward permission; adding it back requires a fresh approval. Other protected SDKs keep their own gates. Keep protected SDK calls explicit in project source. Existing approved live rewards continue while a new version waits; approvals never publish automatically.
+- Agents implement only the Twinkle.rewards calls with short stable rule IDs; they never write earning amounts, budgets, questions or answer keys. The administrator reads the saved code and sets the earning rules while approving (there is no prepare step or proposal). Creators are kids and teens: show approval status and one Send for review action (POST /build/:buildId/rewards/reviews); do not ask them to fill in technical forms. Every code update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate and publishes without reward permission; adding it back requires a fresh approval. Other protected SDKs keep their own gates. Keep protected SDK calls explicit in project source. Existing approved live rewards continue while a new version waits; approvals never publish automatically. Rules may carry dated question sets (one approval can schedule a week of daily bounties), a retry share for later tries, an attempt limit or unlimited attempts, and a per-learner daily claims cap; apps read these from getStatus instead of hard-coding amounts or tries.
 - v1 verifies numeric quiz answers on the server; client scores, privateDb state, timers and completion booleans are not reward evidence. Daily limits reset at midnight in Korea. Each rule can be earned once per viewer per day, with three answer attempts per challenge. Challenge expiry is 30 minutes. Budgets apply across release changes.
 
 ## Token Scopes
@@ -1006,14 +1006,19 @@ world.updatePresence({ x, y, z, facing });
 
 ### Twinkle.rewards
 - await Twinkle.rewards.getStatus() | scopes: rewards:claim
-  - Returns: { mode: "live", dayKey, rules, history, balances: { xp, coins } } | { mode: "preview", rules: [], history: [], message }
-  - Read canonical earning rules (without answer keys), today’s receipts and balances. Drafts return preview mode. Unapproved or revoked published releases return an error.
+  - Returns: { mode: "live", dayKey, userDailyClaims, claimsToday, rules: [{ id, title, xp, coins, retryReward: { xp, coins }, maxAttempts, available, setKey, questionCount }], challenges: [{ challengeId, ruleId, attempts, attemptsRemaining, state: "open" | "finished" | "earned", setKey, questions: [{ prompt, hint?, guide? }] }], history: [{ ruleId, xp, coins, attempt, createdAt }], balances: { xp, coins } } | { mode: "preview", rules: [], challenges: [], history: [], message }
+  - Read canonical earning rules (without answer keys), today’s started challenges, today’s receipts and balances. Drafts return preview mode. Unapproved or revoked published releases return an error.
+  - rules[].available is false on a Korean day the reviewer scheduled no questions for; show the rule as not available instead of starting it. xp/coins are the first-try amounts; retryReward is what a correct answer pays after a wrong one (equal to xp/coins unless the reviewer set a retry share). maxAttempts null means unlimited wrong answers until Korean midnight.
+  - challenges lists challenges this viewer already started today with their questions, so an app can resume after a reload without calling start. A question's guide (reviewer-approved JSON teaching content: explanation, interactive-model configuration) is present only once the viewer has answered at least once, right or wrong; render it as the after-attempt lesson. claimsToday against userDailyClaims (null = uncapped) tells whether another bounty can still pay today.
 - await Twinkle.rewards.start({ ruleId }) | scopes: rewards:claim
-  - Returns: { mode: "live", challengeId, questions: [{ prompt }], reward: { xp, coins }, attemptsRemaining, expiresAt }
-  - Creates or resumes a server-issued challenge for the signed-in viewer. Render its questions and collect numeric answers in the same order. One daily challenge per rule/review; repeat starts cannot reset attempts.
+  - Returns: { mode: "live", challengeId, questions: [{ prompt, hint?, guide? }], setKey, reward: { xp, coins }, retryReward: { xp, coins }, attempts, maxAttempts, attemptsRemaining, firstTryAvailable, expiresAt }
+  - Creates or resumes a server-issued challenge for the signed-in viewer. Render its questions (prompt and optional hint) and collect numeric answers in the same order. One daily challenge per rule/review; repeat starts cannot reset attempts. A challenge stays open until Korean midnight (expiresAt). Resuming after a wrong answer includes each question's guide.
+  - Errors: build_reward_not_scheduled when the rule has no questions for today; build_reward_daily_claims_reached when the viewer already earned today’s cap. attemptsRemaining is null for unlimited rules.
 - await Twinkle.rewards.claim({ challengeId, answers: [number] }) | scopes: rewards:claim
-  - Returns: { awarded: false, attemptsRemaining } | { awarded: true, duplicate, receipt, balances: { xp, coins } }
-  - Twinkle verifies every answer, approval, current published artifact and budget before atomically recording XP and Coins. Retry the same challengeId after a lost response; a confirmed claim returns its original receipt without another award. Never update balance UI optimistically.
+  - Returns: { awarded: false, attempts, attemptsRemaining, questions: [{ prompt, hint?, guide? }] } | { awarded: true, duplicate, receipt: { ruleId, xp, coins, attempt, firstTry }, questions: [{ prompt, hint?, guide? }], balances: { xp, coins } }
+  - Twinkle verifies every answer, approval, current published artifact and budget before atomically recording XP and Coins. The receipt’s xp/coins are what was actually paid: the full amounts on a first try, the retry share after a wrong answer (attempt > 1). Retry the same challengeId after a lost response; a confirmed claim returns its original receipt without another award. Never update balance UI optimistically.
+  - Every claim response, wrong or right, returns the questions with their guides unlocked: show the teaching content right after the first answer. Answer keys are never returned.
+  - A wrong answer within two seconds of the previous one is refused with build_reward_throttled (HTTP 429) and does not count; wait for the person to try again rather than retry-looping.
 
 ## Examples
 
