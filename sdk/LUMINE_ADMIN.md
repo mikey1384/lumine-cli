@@ -488,16 +488,24 @@ it never authorizes unrelated daily work or generic recommendation commands.
 
 Mikey added Math Lab question design and publishing to the full daily workflow
 on 2026-09-08. Follow [Math Lab daily question publishing](../../agent-guides/math-lab-daily.md)
-for the canonical Build 2460, owner account, 12-grade/36-question editorial
-process, verification, repeat-run recovery, release gates, and final reporting.
+for the canonical Build 2460, owner account, twelve grade queues of ordered
+until-earned puzzles, verification, repeat-run recovery, release gates, and
+final reporting. Every full daily run reports each grade's current question,
+whether it was cleared today, uncleared published questions remaining, and
+refill status. Count distinct cleared keys across all users and the app's full
+history against the live approved sheet; the recent usage window and draft
+additions are not the live inventory. At two or fewer remaining, prepare a
+refill to at least ten, with complete interactive guides, and track it until
+approved publication. Report one or zero remaining prominently. Details are
+in the linked guide's **Daily queue monitoring and refill** section.
 This is not part of Featured-only or newspaper-only work and is not a new
 scheduler, delegated API scope, or automatic extension of admin permissions.
 Use the expressly authorized owner Build workflow for Math Lab; retain the
 normal Zero/Ciel actor separation for other administration.
 
-The initial private draft must remain unpublished until Mikey authorizes its
-launch. After launch, routine content releases follow the standing duty but
-cannot bypass a reward-enabled app's exact-version approval gate. Local edits
+Mikey authorized Math Lab's initial launch, completed on 2026-09-12. Routine
+refills follow the standing duty but still need his exact-version approval
+and explicit publication authorization. Local edits
 and draft saves do not require release approval. Real XP/Coins may be changed
 only by the currently published, approved artifact through server-verified
 reward claims; private builds, previews, local tests, unpublished branches, and
@@ -506,6 +514,8 @@ required design contract, not a claim that a reward SDK or server enforcement
 has already been implemented. See the guide before adding reward capabilities.
 
 ## Escalation to Mikey
+
+Before closing a full run, reconcile three explicit handoffs: pending reward approvals (`rewardReviews` in intake/report), every carryover todo (with new evidence or a concrete blocker and next action), and earlier-day telemetry that meets a reopening condition. `carryoverWithoutProgressThisRun` in the report identifies surfaced todos without a progress update. A pending human decision can remain open; it must be named with its exact request/version, recommendation and next owner. Never equate reading a summary with inspecting frozen implementation, clearing a stuck flag with producing the intended image, or deploying code with verifying its live outcome. The September 14 omissions were execution failures under already explicit duties; these fields make them visible, not optional.
 
 A full daily management run is not finished when the mutations are done. Curation surfaces things only
 a human owner can decide, and a finding nobody reports is a finding that did not
@@ -1159,11 +1169,13 @@ Completion rewards (Arcade Typing's stage clears) prove nothing but elapsed
 time, so the run reads the shape of the week's claims instead of trusting them:
 
 ```bash
-lumine admin reward-activity --json                # last 7 site days, every app
+lumine admin reward-activity --json                # 7 UTC days INCLUDING today’s partial day
+lumine admin reward-activity --date 2026-09-13 --json # exactly this UTC day
+lumine admin reward-activity --date 2026-09-13 --days 7 --json # 7 days ending on this date
 lumine admin reward-activity --days 14 --build 333 --json
 ```
 
-Read-only, no run lease. The result lists every app that paid (claims,
+Read-only, no run lease. For yesterday, always pass its exact UTC `--date`; `--days 1` alone means the current partial day. `from`, `to`, `timezone`, and `includesCurrentDay` make the window explicit. Rules come from each claim’s frozen review, not the current app policy; `missingReviewIds` means rule-based flags lack context. The result lists every app that paid (claims,
 earners, XP, Coins) and the flagged player-days, worst first:
 
 - `fast`: a completion claim within 5 s of the rule's `minSeconds` — a human
@@ -3241,6 +3253,7 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   canonical writer and returns only the resolved public account identity,
   current membership, and the roster rationale/timestamps when present; it
   does not expose the private roster fields.
+  When Mikey authorizes removal, use `lumine admin notable remove <userId|username> --note "<why removed>" --json`. It is run-independent, transactionally audited as `notable.remove`, verifies canonical absence, and is idempotent. Never use SQL to work around a missing CLI verb. Mikey is the administrator, not a Notable candidate; do not include him in blanket roster additions.
   **Always pass `--note`** with a concrete one-or-two-sentence record of what
   made them notable — real numbers and specifics from the brief window, not
   "active user". It lands in the management page's reason column, which is

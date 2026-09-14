@@ -1819,7 +1819,9 @@ test("energy-budget maps to the run-independent report route with bounded --days
   );
   assert.throws(
     () =>
-      parseAdminOperation(parseArgs(["admin", "energy-budget", "--days", "32"])),
+      parseAdminOperation(
+        parseArgs(["admin", "energy-budget", "--days", "32"]),
+      ),
     /between 1 and 31/,
   );
   assert.throws(
@@ -1877,7 +1879,9 @@ test("runtime-log commands are run-independent and finishing requires review con
     assert.equal(hostStart.runtimeLogHost, host);
   }
   assert.throws(() =>
-    parseAdminOperation(parseArgs(["admin", "runtime-logs", "start", "arbitrary-host"])),
+    parseAdminOperation(
+      parseArgs(["admin", "runtime-logs", "start", "arbitrary-host"]),
+    ),
   );
 
   const read = parseAdminOperation(
@@ -2097,15 +2101,25 @@ test("runtime-log start persists its request key before sending so a rerun repla
   assert.equal(startKeys.length, 1);
   assert.ok(fs.existsSync(intentPath), "request key persisted before send");
   assert.equal(fs.statSync(intentPath).mode & 0o777, 0o600);
-  assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
+  assert.equal(
+    JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId,
+    startKeys[0],
+  );
 
   const targetArgs = [...startArgs];
   targetArgs.splice(targetArgs.indexOf("start") + 1, 0, "target");
   const wrongHost = await runCli(targetArgs);
   assert.notEqual(wrongHost.code, 0);
   assert.match(wrongHost.stdout + wrongHost.stderr, /unresolved outcome/);
-  assert.equal(startKeys.length, 1, "a different host never receives an ambiguous start replay");
-  assert.equal(JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId, startKeys[0]);
+  assert.equal(
+    startKeys.length,
+    1,
+    "a different host never receives an ambiguous start replay",
+  );
+  assert.equal(
+    JSON.parse(fs.readFileSync(intentPath, "utf8")).requestId,
+    startKeys[0],
+  );
 
   // The rerun replays the persisted key; the server says that key belongs to
   // a finished review, so the CLI clears it and starts over once, fresh.
@@ -2114,8 +2128,13 @@ test("runtime-log start persists its request key before sending so a rerun repla
   assert.deepEqual(startKeys.slice(0, 2), [startKeys[0], startKeys[0]]);
   assert.equal(startKeys.length, 3);
   assert.notEqual(startKeys[2], startKeys[0], "a dead key is replaced once");
-  assert.equal(fs.existsSync(intentPath), false, "intent cleared once the session holds the lease");
-  const sessionPath = JSON.parse(replayed.stdout).data.artifacts.reviewSessionPath;
+  assert.equal(
+    fs.existsSync(intentPath),
+    false,
+    "intent cleared once the session holds the lease",
+  );
+  const sessionPath = JSON.parse(replayed.stdout).data.artifacts
+    .reviewSessionPath;
   assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).reviewId, 91);
 
   const abandoned = await runCli([
@@ -2129,7 +2148,10 @@ test("runtime-log start persists its request key before sending so a rerun repla
   assert.equal(abandoned.code, 0, abandoned.stderr);
   assert.deepEqual(abandonBodies, [{ reviewId: 91 }]);
   assert.doesNotMatch(abandoned.stdout, new RegExp(leaseToken));
-  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).status, "abandoned");
+  assert.equal(
+    JSON.parse(fs.readFileSync(sessionPath, "utf8")).status,
+    "abandoned",
+  );
 
   // A session that did not see the abandon must not start downloading.
   fs.writeFileSync(
@@ -2153,13 +2175,20 @@ test("runtime-log start persists its request key before sending so a rerun repla
   assert.equal(readResult.status, "already_done");
   assert.equal(readResult.data.completionStatus, "abandoned");
   assert.deepEqual(captureCalls, []);
-  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).status, "abandoned");
+  assert.equal(
+    JSON.parse(fs.readFileSync(sessionPath, "utf8")).status,
+    "abandoned",
+  );
 
   // A definitive 4xx on start clears the persisted key instead of replaying it.
   const rejected = await runCli(startArgs);
   assert.notEqual(rejected.code, 0);
   assert.equal(startKeys.length, 4);
-  assert.equal(fs.existsSync(intentPath), false, "a 4xx never leaves a dead key behind");
+  assert.equal(
+    fs.existsSync(intentPath),
+    false,
+    "a 4xx never leaves a dead key behind",
+  );
 });
 
 test("monthly media costs map to the canonical feature-cost route", () => {
@@ -3428,7 +3457,9 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
     }
     assert.equal(
       req.headers["x-lumine-admin-runtime-log-token"] || null,
-      url.pathname === "/cli/admin/runtime-logs/hosts/target/reviews" ? null : leaseToken,
+      url.pathname === "/cli/admin/runtime-logs/hosts/target/reviews"
+        ? null
+        : leaseToken,
     );
     if (
       req.method === "POST" &&
@@ -3572,7 +3603,10 @@ test("runtime-log workflow downloads verified private snapshots and closes only 
   assert.doesNotMatch(started.stdout, new RegExp(leaseToken));
   const startResult = JSON.parse(started.stdout);
   const sessionPath = startResult.data.artifacts.reviewSessionPath;
-  assert.equal(JSON.parse(fs.readFileSync(sessionPath, "utf8")).ownerHostId, "i-00000000000000002");
+  assert.equal(
+    JSON.parse(fs.readFileSync(sessionPath, "utf8")).ownerHostId,
+    "i-00000000000000002",
+  );
   const sessionDirectory = path.dirname(sessionPath);
   assert.equal(path.dirname(sessionDirectory), path.resolve(outputBase));
   assert.equal(fs.statSync(sessionPath).mode & 0o777, 0o600);
@@ -4054,7 +4088,9 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   // Regression: the bare form once tripped "--days must be an integer"
   // because the empty default was validated as 0. It must send no days
   // parameter at all so the API applies its since-last-full-run window.
-  const bare = parseAdminOperation(parseArgs(["admin", "bot-output", "--json"]));
+  const bare = parseAdminOperation(
+    parseArgs(["admin", "bot-output", "--json"]),
+  );
   assert.equal(bare.path, "/cli/admin/bot-output");
   assert.doesNotMatch(bare.path, /[?&]days=/);
   assert.equal(parseArgs(["admin", "bot-output", "--json"]).adminDays, "");
@@ -5839,9 +5875,8 @@ test("sponsor administration commands preserve their audited targets and decisio
 });
 
 test("reward-review commands are run-independent and carry the reviewer's rules on approve only", async (t) => {
-  const { readRewardConfigFile, writeRewardReviewSnapshot } = await import(
-    "../lib/admin.js"
-  );
+  const { readRewardConfigFile, writeRewardReviewSnapshot } =
+    await import("../lib/admin.js");
   assert.deepEqual(
     parseAdminOperation(parseArgs(["admin", "reward-review", "list"])),
     {
@@ -5855,43 +5890,72 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
   );
   assert.equal(
     parseAdminOperation(
-      parseArgs(["admin", "reward-review", "list", "--status", "all", "--cursor", "40"]),
+      parseArgs([
+        "admin",
+        "reward-review",
+        "list",
+        "--status",
+        "all",
+        "--cursor",
+        "40",
+      ]),
     ).path,
     "/cli/admin/reward-reviews?status=all&beforeId=40",
   );
   assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "reward-review", "list", "--status", "rejected"])),
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "reward-review", "list", "--status", "rejected"]),
+      ),
     /--status must be/,
   );
   // Without --dir the source is listed by size; with --dir the snapshot is fetched.
   assert.equal(
-    parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2"])).path,
+    parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2"]))
+      .path,
     "/cli/admin/reward-reviews/2?files=0",
   );
   assert.equal(
-    parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2", "--dir", "/tmp/r2"])).path,
+    parseAdminOperation(
+      parseArgs(["admin", "reward-review", "show", "2", "--dir", "/tmp/r2"]),
+    ).path,
     "/cli/admin/reward-reviews/2?files=1",
   );
   assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2", "--dir", "  "])),
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "reward-review", "show", "2", "--dir", "  "]),
+      ),
     /--dir/,
   );
   assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "reward-review", "list", "--cursor", "abc"])),
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "reward-review", "list", "--cursor", "abc"]),
+      ),
     /--cursor/,
   );
   assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "reward-review", "reject", "2"])),
+    () =>
+      parseAdminOperation(parseArgs(["admin", "reward-review", "reject", "2"])),
     /--reason/,
   );
   // Approving without --config accepts the app's own proposal as frozen in the request.
   assert.deepEqual(
-    parseAdminOperation(parseArgs(["admin", "reward-review", "approve", "2"])).body,
+    parseAdminOperation(parseArgs(["admin", "reward-review", "approve", "2"]))
+      .body,
     { decision: "approve", reason: "" },
   );
   assert.deepEqual(
     parseAdminOperation(
-      parseArgs(["admin", "reward-review", "revoke", "2", "--reason", "Farmable in two minutes."]),
+      parseArgs([
+        "admin",
+        "reward-review",
+        "revoke",
+        "2",
+        "--reason",
+        "Farmable in two minutes.",
+      ]),
     ),
     {
       name: "reward-review.decide",
@@ -5908,21 +5972,59 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const rulesPath = path.join(dir, "rules.json");
   const rules = {
-    dailyXP: 50, dailyCoins: 5, userDailyXP: 50, userDailyCoins: 5,
-    lifetimeXP: 2000, lifetimeCoins: 200,
-    rules: [{ id: "weekly-network", title: "Clear a week", xp: 20, coins: 2,
-      verifier: "numeric-quiz", questions: [{ prompt: "4 + 3?", answer: 7 }] }],
+    dailyXP: 50,
+    dailyCoins: 5,
+    userDailyXP: 50,
+    userDailyCoins: 5,
+    lifetimeXP: 2000,
+    lifetimeCoins: 200,
+    rules: [
+      {
+        id: "weekly-network",
+        title: "Clear a week",
+        xp: 20,
+        coins: 2,
+        verifier: "numeric-quiz",
+        questions: [{ prompt: "4 + 3?", answer: 7 }],
+      },
+    ],
   };
   fs.writeFileSync(rulesPath, JSON.stringify(rules));
   const approve = parseAdminOperation(
-    parseArgs(["admin", "reward-review", "approve", "2", "--config", rulesPath]),
+    parseArgs([
+      "admin",
+      "reward-review",
+      "approve",
+      "2",
+      "--config",
+      rulesPath,
+    ]),
   );
-  assert.deepEqual(approve.body, { decision: "approve", reason: "", config: rules });
+  assert.deepEqual(approve.body, {
+    decision: "approve",
+    reason: "",
+    config: rules,
+  });
   assert.equal(approve.requiresRun, false);
   fs.writeFileSync(rulesPath, JSON.stringify({ ...rules, rules: [] }));
-  assert.throws(() => readRewardConfigFile(rulesPath), /at least one earning rule/);
   assert.throws(
-    () => parseAdminOperation(parseArgs(["admin", "reward-review", "reject", "2", "--reason", "x", "--config", rulesPath])),
+    () => readRewardConfigFile(rulesPath),
+    /at least one earning rule/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "reward-review",
+          "reject",
+          "2",
+          "--reason",
+          "x",
+          "--config",
+          rulesPath,
+        ]),
+      ),
     /--config is only used with approve/,
   );
   // Snapshot files land inside --dir only; traversal is refused.
@@ -5931,7 +6033,10 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
     directory: snapshotDir,
     files: [
       { path: "/index.html", content: "<h1>Metro</h1>" },
-      { path: "/src/rewards.js", content: "api.start({ ruleId: 'weekly-network' })" },
+      {
+        path: "/src/rewards.js",
+        content: "api.start({ ruleId: 'weekly-network' })",
+      },
     ],
   });
   assert.equal(written.files.length, 2);
@@ -5939,22 +6044,37 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
     fs.readFileSync(path.join(snapshotDir, "src", "rewards.js"), "utf8"),
     "api.start({ ruleId: 'weekly-network' })",
   );
-  assert.equal((fs.statSync(path.join(snapshotDir, "index.html")).mode & 0o777), 0o600);
+  assert.equal(
+    fs.statSync(path.join(snapshotDir, "index.html")).mode & 0o777,
+    0o600,
+  );
   // A populated directory is refused (no stale files from another review, no
   // clobbering a real workspace), as are symlinked roots and traversal.
   assert.throws(
-    () => writeRewardReviewSnapshot({ directory: snapshotDir, files: [{ path: "/a.js", content: "x" }] }),
+    () =>
+      writeRewardReviewSnapshot({
+        directory: snapshotDir,
+        files: [{ path: "/a.js", content: "x" }],
+      }),
     /new or empty directory/,
   );
   const fresh = path.join(dir, "fresh");
   assert.throws(
-    () => writeRewardReviewSnapshot({ directory: fresh, files: [{ path: "/../escape.js", content: "x" }] }),
+    () =>
+      writeRewardReviewSnapshot({
+        directory: fresh,
+        files: [{ path: "/../escape.js", content: "x" }],
+      }),
     /outside/,
   );
   const linkRoot = path.join(dir, "link-root");
   fs.symlinkSync(snapshotDir, linkRoot);
   assert.throws(
-    () => writeRewardReviewSnapshot({ directory: linkRoot, files: [{ path: "/a.js", content: "x" }] }),
+    () =>
+      writeRewardReviewSnapshot({
+        directory: linkRoot,
+        files: [{ path: "/a.js", content: "x" }],
+      }),
     /new or empty directory/,
   );
   assert.throws(
@@ -5970,8 +6090,52 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
   fs.mkdirSync(trap);
   fs.symlinkSync(outside, path.join(trap, "src"));
   assert.throws(
-    () => writeRewardReviewSnapshot({ directory: trap, files: [{ path: "/src/x.js", content: "x" }] }),
+    () =>
+      writeRewardReviewSnapshot({
+        directory: trap,
+        files: [{ path: "/src/x.js", content: "x" }],
+      }),
     /new or empty directory/,
   );
   assert.equal(fs.existsSync(path.join(outside, "x.js")), false);
+});
+
+test("notable removal is an audited run-independent mutation with a required rationale", () => {
+  const operation = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "notable",
+      "remove",
+      "mikey",
+      "--note",
+      "Mikey asked to stay off the roster.",
+    ]),
+  );
+  assert.equal(operation.name, "notable.remove");
+  assert.equal(operation.method, "DELETE");
+  assert.deepEqual(operation.body, {
+    username: "mikey",
+    note: "Mikey asked to stay off the roster.",
+  });
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "notable", "remove", "mikey"])),
+    /Explain/,
+  );
+});
+test("reward telemetry can select an exact UTC day without including today", () => {
+  const operation = parseAdminOperation(
+    parseArgs(["admin", "reward-activity", "--date", "2026-09-13"]),
+  );
+  const url = new URL(operation.path, "https://example.test");
+  assert.equal(url.searchParams.get("date"), "2026-09-13");
+  assert.equal(url.searchParams.get("days"), "1");
+  assert.equal(operation.requiresRun, false);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "reward-activity", "--date", "2026-02-30"]),
+      ),
+    /real UTC/,
+  );
 });
