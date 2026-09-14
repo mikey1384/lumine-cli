@@ -167,6 +167,10 @@ rewards.getStatus '{}' --build <id>` is read-only and works without
 `--allow-write` (the endpoint accepts only the `rewards:claim` scope, which is
 minted for it as a deliberate exception to the read-only rule, but only the
 status operation is sent).
+`rewards.getReceipt '{"challengeId":"..."}'` is also read-only: it checks
+the exact receipt after an interrupted claim, including earlier days or
+approved versions, without awarding again. It requires the current published
+runtime grant and returns canonical balances with the receipt status.
 `rewards.start '{"ruleId":"..."}'` and
 `rewards.claim '{"challengeId":"...","answers":[1,2]}'` mutate real XP/Coins
 state and require `--allow-write`. Every rewards call first reads the
