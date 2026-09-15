@@ -55,6 +55,8 @@ test("CLI receipt recovery is read-only and requires the current published runti
       return res.end(
         JSON.stringify({ token: "build-token", scopes: ["rewards:claim"] }),
       );
+    if (["/build/884/api/rewards/timeline", "/build/884/api/rewards/archived-problem"].includes(req.url))
+      return res.end(JSON.stringify({ mode: "live", entries: [], nextCursor: null }));
     if (req.url === "/build/884/api/rewards/receipt")
       return res.end(
         JSON.stringify({
@@ -110,6 +112,19 @@ test("CLI receipt recovery is read-only and requires the current published runti
       "published-grant",
     );
     assert.equal(calls.at(-1).headers["x-build-api-token"], "build-token");
+    for (const [method, operation, selectors] of [
+      ["getTimeline", "timeline", { ruleId: "e1-daily", cursor: "7", limit: 5 }],
+      ["getArchivedProblem", "archived-problem", { receiptId: 7 }],
+    ]) {
+      calls.length = 0;
+      const archiveArgs = [...args];
+      archiveArgs[3] = `rewards.${method}`;
+      archiveArgs[4] = JSON.stringify({ ...selectors, operation: "claim", dayKey: "2099-01-01", runtimeGrant: "fake", xp: 1000 });
+      await promisify(execFile)(process.execPath, archiveArgs, { timeout: 10000 });
+      assert.equal(calls.at(-1).url, `/build/884/api/rewards/${operation}`);
+      assert.deepEqual(calls.at(-1).body, selectors);
+      assert.equal(calls.at(-1).headers["x-build-reward-runtime"], "published-grant");
+    }
     calls.length = 0;
     grant = null;
     await assert.rejects(

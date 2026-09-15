@@ -2,7 +2,7 @@
 
 Version: 1.45.0
 Updated: 2026-09-14
-Generated: 2026-09-14T06:42:36.041Z
+Generated: 2026-09-15T02:06:06.654Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -1037,6 +1037,17 @@ world.updatePresence({ x, y, z, facing });
   - Standings of who earned the most XP or Coins in THIS app, computed by Twinkle from its own receipts (never from anything the app submits). period 'day' is today (site day, UTC), 'week' the last 7 site days, 'all' (default) every day since approval. limit defaults to 20, max 100.
   - available says which boards this app's approved rules can pay: show a Coins board only when available.coins is true (an app whose rules pay XP only has no Coins standings). me is the signed-in viewer's own standing even when they fall outside the page, or null when they earned nothing in the period.
   - Drafts and previews return mode 'preview' with no entries. Use Twinkle.leaderboards for app-defined scores; use this for real XP and Coins earned.
+- await Twinkle.rewards.getTimeline({ ruleId?, cursor?, limit? } = {}) | scopes: rewards:claim
+  - Returns: { mode: "live", dayKey, entries: [{ receiptId, ruleId, ruleTitle, setKey, title, promptPreview, dayKey, closedAt, solvedAt, solver: { userId, username }, firstSolver, xp, coins, attempt }], nextCursor } | { mode: "preview", entries: [], nextCursor: null, message }
+  - Browse confirmed solves of retired until-earned quiz bounties, newest first.
+  - A solve appears only after the next site reset (UTC midnight, 9 AM Korea). Today’s solves, unsolved sets, standing quizzes and dated quizzes are excluded. The server decides retirement; client dates cannot unlock content. Zero-reward correct solves are included.
+  - One entry per solve receipt, with firstSolver identifying the first receipt for that rule and set across approved versions. limit defaults to 20, max 50; pass nextCursor unchanged for older solves and omit it when changing ruleId. Pages may have fewer entries when old question sheets cannot be recovered; continue while nextCursor is present.
+  - No daily-claim limit applies to reading. Requires the current approved published runtime grant; previews return an empty timeline. Never awards or changes balances. Open a receipt with getArchivedProblem to load the original question and guide.
+- await Twinkle.rewards.getArchivedProblem({ receiptId }) | scopes: rewards:claim
+  - Returns: { mode: "live", entry: <same solve entry as getTimeline>, questions: [{ prompt, hint?, guide? }] } | { mode: "preview", entry: null, questions: [], message }
+  - Read a retired bounty’s original questions and guides from the approval attached to its solve receipt.
+  - Use a receiptId returned by getTimeline. Both reads independently check retirement and app ownership; guessing an active or other app’s receipt cannot reveal its questions or guides. Returns build_reward_archive_unavailable (404) if unavailable.
+  - Uses that receipt’s frozen approved sheet, never today’s edited question or the mutable draft. Answer keys and tolerances are never returned. Render the question first and offer Reveal guide for learning, without a reward-claim button.
 
 ## Examples
 
