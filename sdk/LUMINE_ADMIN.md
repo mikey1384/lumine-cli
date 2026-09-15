@@ -1018,6 +1018,34 @@ Mikey gives his go-ahead; a pending proposal is not a completed refresh. After
 approval, execute the entire approved plan and verify it without asking for
 each swap again. Never omit this section from a full-run report.
 
+### Full management report in Chrome
+
+Mikey's standing delivery preference (2026-09-15): after a full daily run, open
+the **complete management report as a browsable localhost page in Chrome**.
+Do this as part of finishing the authorized run; a Markdown path in chat alone
+is insufficient, and no additional confirmation is needed to open the report.
+
+1. Save the complete report as
+   `/private/tmp/twinkle-daily-YYYY-MM-DD/daily-management-report.md`, using the
+   run's Bangkok date. Include every required reporting section, coverage gap,
+   pending decision and carryover. Reflect later owner decisions accurately.
+2. Render the entire Markdown into a readable HTML page with section links,
+   usable tables and access to the original Markdown. Preserve complete
+   appendices and flagged rows; navigation or collapsible details must not
+   discard them. Use local assets so the report does not depend on a CDN.
+3. Serve the view on `127.0.0.1` using an available port. Expose only the HTML,
+   its required assets and the report Markdown through a dedicated directory
+   or explicit routes; do not serve the surrounding private evidence folder.
+   Keep the server available after the response so Mikey can browse it.
+4. Open the localhost URL in Mikey's Chrome. Verify that the page renders,
+   section navigation works, and the full report is accessible. Keep the
+   report tab open. Include both the localhost URL and Markdown file link in
+   the final response.
+
+For a follow-up that only opens or updates an existing report, reuse that
+report and its existing tab/server where available. This does not authorize
+starting another management run or repeating unrelated daily duties.
+
 Creating an escalation belongs to the active run; acknowledging, annotating,
 resolving, or reopening it does not. Use the run-independent `escalation`
 commands after Mikey responds instead of starting a follow-up delegated run.
@@ -1238,6 +1266,24 @@ single `cap` day is a good player having a good day; `fast` + `sweep` +
 open the player with `admin identity inspect` before proposing anything, and
 propose to Mikey (revoke the app's rule, or a bucket ban) rather than acting.
 Never revoke an approval from a daily run.
+
+The same report carries `reviewLifecycle` (added 2026-09-15): the reviews'
+audit trail counted per UTC day (`byDay`) and for the window (`totals`).
+`actions` counts every event: `request`, `approve`/`reject`/`revoke`,
+`publish` (the approved version went live), `propose`, `proposal_viewed` (the
+creator opened an offer's comparison; once per revision), `accept`/`decline`,
+`thumbnail` and `<decision>_refused`. `thumbnails` is the automatic thumbnail
+after a review publish: `captured`, `existing` (the app already had one),
+`superseded` (the creator's own thumbnail or a newer release won),
+`not_needed`, `owner_missing` or `failed`. `refusals` counts conflicts that
+rolled back, keyed `decision:code` (for example
+`approve:build_reward_review_stale`, `accept:build_reward_proposal_stale`).
+Report the totals. Each `failed` thumbnail and each `publish` without a
+`thumbnail` event on a completed day is a carry-over todo with the review
+ids (`reward-review show <id>` lists its events). An `accept` without a
+`proposal_viewed` for that revision means the creator accepted without opening
+the comparison; mention it, it is not a fault. Refusals are the concurrency
+guards working; report them, and escalate only a repeated pattern on one app.
 
 ## Private carry-over todos
 
@@ -2273,6 +2319,21 @@ type PostSkip = Success<{
 
 ## Twinkle Newspaper
 
+**Audience (Mikey, 2026-09-15): children and young Twinkle users aged 10–15.**
+Choose and write stories for what these readers would voluntarily spend time
+reading. Before selecting a story, identify its appeal to them: curiosity,
+humor, a relatable experience, a creative idea, something useful, or a chance
+to join in. Games, art, puzzles, friendships, shared reflections, and community
+discussions can all supply good stories; read the actual source to find the
+substance.
+
+Use clear, lively language that respects readers' intelligence. Give enough
+context for someone who missed the original post, and make the interesting
+part clear in the headline and opening. Avoid talking down to readers, forced
+slang, preachy lessons, administrative summaries, and blurbs that merely say
+someone uploaded or posted something. Keep the appeal grounded in the source;
+never invent excitement, reactions, popularity, or drama.
+
 ```bash
 lumine admin news --json
 lumine admin news claim --output claim.json --scaffold editorial.json --json
@@ -2311,6 +2372,7 @@ re-checked transactionally at commit.
 
 ```ts
 type GeneratedEditorial = {
+  excludedSubjectEventKeys?: string[]; // experiment-video Subjects omitted entirely
   mastheadHeadline: string;
   mastheadDeck: string;
   lead: {
@@ -2335,6 +2397,20 @@ type GeneratedEditorial = {
 nothing disappears silently: digest events the editorial does not account for
 are added back. Two mechanisms make real curation possible within that
 guarantee:
+
+**Exception — experiment videos (Mikey, 2026-09-15):** exclude these entirely,
+including school science-contest entries. The editor/model identifies them from
+the supplied context and lists their exact keys in `excludedSubjectEventKeys`.
+Do not cite, summarize, or group them into newspaper coverage. The API must have
+this exclusion support deployed before submitting such an editorial; older APIs
+ignore the field and restore the posts. The server accepts only canonical Subject
+keys and never lets this field remove official announcements. After excluding
+these posts, look for worthwhile replacement stories among the edition's eligible
+Subjects and shared Daily Reflections. A bounded digest dominated by experiment
+videos does not establish that the day has no other stories. Check the available
+canonical sources within the coverage window, and keep replacement stories within
+the claim and citation contract. Do not stop at deletion when suitable material
+is available, or invent filler to reach an article count.
 
 - **`coveredEventKeys`** — an arc story may list the other events it narrates
   (an app's release + its update stream + its open-sourcing; one member's
@@ -2368,17 +2444,17 @@ within the returned digest. On a typical day every front subject arrives with
 the same priority, so treat a tied score (or recency) as no signal at all and
 make the call by reading:
 
-- **Choose the lead by argument, not by score or recency.** The best lead is
-  the front event where something is actually _at stake_: a claim with
-  reasoning, a question with a position behind it — ideally while another
-  member is already responding. A claim plus a reply is a conversation in
-  motion; a drawing, a greeting, or a link is a share, and shares belong
-  further down the page, not in the lead.
+- **Choose the lead for readers aged 10–15.** Lead with the eligible front
+  event whose substance is most likely to catch their interest and reward
+  reading. A thoughtful conversation, a funny or relatable reflection, a
+  striking creation, or an inviting community challenge can all qualify.
+  Read the source and any supplied replies to understand the appeal; priority,
+  recency, and the mere presence of an argument do not decide the lead.
 - **Thread a theme through the paper.** Pick the strongest idea of the day
   and let the masthead, the lead, and the editor's note all carry it, with
-  the editor's note reprising a community value from one of the day's posts
-  rather than summarizing the edition. The paper should end on something a
-  child can take with them.
+  the editor's note leaving readers with an observation, question, or invitation
+  grounded in one of the day's posts. Let a theme emerge from the material;
+  keep each story's meaning intact and avoid forcing a moral lesson.
 - **Cross-reference events into arcs.** The same thing often appears in the
   digest several times (an app's release, its open-sourcing, and its maker's
   Daily Reflection about it). Write those as one story arc — the origin
@@ -2653,14 +2729,14 @@ The additive host-owner migration and compatible API must be live before this
 CLI capability is published.
 
 Review every participating host, including primary private-helper logs. A
-primary review does not cover the target. Finish the exclusive review before
-that host is held; a held/unavailable owner returns an explicit retryable failure,
-not another host's snapshots or an independent log service. Do not abandon its
-lease merely to bypass a deployment guard. After a planned hold, final shutdown
-deltas are reviewed via management SSH outside any active lease, recorded, and
-API stderr is cleared only with the existing guarded `npm run logs:clear-errors`
-plus post-clear re-read. This is the deployment runbook's final boundary, not
-permission to bypass an active Lumine lease. A stopped target whose final logs
+primary review does not cover the target. An open review does not block a
+deployment or host hold. Its files, lease and database boundaries persist;
+active requests use the normal drain. A held or unavailable owner returns a
+retryable failure, so keep the session and retry when that host is available
+again. Release operators can review final shutdown deltas via management SSH
+and record their own evidence. An active review keeps ownership of clearing;
+otherwise API stderr is cleared with the existing guarded
+`npm run logs:clear-errors` plus post-clear re-read. A stopped target whose final logs
 were reviewed does not need to be started for daily management; starting EC2
 requires separate authority. See `twinkle-api/DEPLOY_TIME_HANDOFF.md`.
 
@@ -3035,9 +3111,16 @@ energy ledger (`chargedUsd`, `overflowUsd`, `users`, `recharges`; 1,000,000
 units = $1), every telemetry counter (`busy_refusal`, `autofix_yielded`,
 `autofix_superseded`, `reservation_admitted` with `avgRunBudgetUsd`,
 `budget_stop_changed` / `budget_stop_unchanged` / `run_completed` with a
-per-model breakdown, `stop_settled`, `tool_limit_settled`) and per-model
-per-run usage stats (`runs`, `callsPerRun`, `usdPerRun`, each avg and
-nearest-rank p90). The current UTC day is returned with `inProgress: true`.
+per-model breakdown, `stop_settled`, `tool_limit_settled`, and since
+2026-09-15 the queued-request counters `queued_restored` (a workspace reload
+restored its owner's still-queued request, shown with Stop), `queued_stopped`
+(Stop cancelled a request while it was still queued) and
+`busy_resume_requested` (after a busy refusal the website resumed the
+existing request)) and per-model per-run usage stats (`runs`, `callsPerRun`,
+`usdPerRun`, each avg and nearest-rank p90). `busy_refusal` with no
+`busy_resume_requested` on a day with website traffic means clients are not
+resuming the refused request; `queued_restored` shows how often creators
+reload while waiting in the queue. The current UTC day is returned with `inProgress: true`.
 **Headline `lastCompletedDay` (its exact `dayKey`) — never the in-progress
 day**, exactly as the closed-day AI-cost duty does.
 
