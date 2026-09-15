@@ -1065,9 +1065,16 @@ and answer keys from a private question sheet the creator's Lumine uploads with
 readable by every player). **Send for review** freezes the code and proposes
 `rewards.json` merged with the sheet. Approval is Mikey's decision: read the
 frozen code, check that the amounts are right and that the app cannot be
-farmed, change anything that is wrong, approve. These commands need no daily
-run and can be used whenever a request arrives (the reviewer also receives a
-DM card per request).
+farmed, change anything that is wrong, approve. **Approval publishes** (since
+2026-09-15): the exact frozen snapshot goes live in the same transaction, with
+no Publish click by the creator; the app's previous release stays up until
+that commit lands. Instead of approving, the reviewer may **propose changes**:
+edit a copy of the frozen snapshot and offer it as the condition of approval.
+The creator sees every changed line and either accepts (the proposed version
+is approved and published) or declines (the request is rejected). Nothing in
+that flow joins the creator's team. These commands need no daily run and can
+be used whenever a request arrives (the reviewer also receives a DM card per
+request).
 
 ```bash
 lumine admin reward-review list --json                       # pending (default)
@@ -1077,7 +1084,10 @@ lumine admin reward-review show 2 --json                     # summary + file si
 lumine admin reward-review show 2 --dir /private/tmp/reward-review-2 --json
 lumine admin reward-review approve 2 --json                  # approve exactly what the app proposed
 lumine admin reward-review approve 2 --config rules.json \
-  --reason "Halved the stage amounts" --json                 # approve with changes
+  --reason "Halved the stage amounts" --json                 # approve with changes (publishes)
+lumine admin reward-review show 2 --dir /private/tmp/reward-review-2 --json   # then edit that directory…
+lumine admin reward-review propose 2 --dir /private/tmp/reward-review-2 \
+  --config rules.json --reason "Moved the claim after the stage clears" --json  # …and offer it
 lumine admin reward-review reject 2 --reason "Rewards fire on game over; nothing is earned" --json
 lumine admin reward-review revoke 2 --reason "Farmable; pausing until redesigned" --json
 ```
@@ -1156,12 +1166,49 @@ Arcade Typing (Mikey, 2026-09-12): XP for clearing campaign stages, up to
 10,000 Coins per rule and per learner per day, 10,000,000 XP / 1,000,000 Coins
 per app per day, 1,000,000,000 XP / 100,000,000 Coins per app lifetime.
 
-Approval freezes these rules with the reviewed snapshot; an approval without at
-least one rule is refused. Rejection and revocation require a `--reason` the
-creator reads verbatim in their workspace. Approval never publishes: the creator
-publishes the approved version themselves, and a later code save needs a new
-request. Never approve without reading the code; never approve a request whose
-`isLatest` is false.
+Approval freezes these rules with the reviewed snapshot and publishes that
+snapshot immediately (the result carries `published.version`); an approval
+without at least one rule is refused, and an approval whose creator has saved
+past the frozen version is refused as `build_reward_review_stale` (the request
+also closes itself on that save). Rejection and revocation require a
+`--reason` the creator reads verbatim in their workspace. A later code save
+needs a new request. Never approve without reading the code; never approve a
+request whose `isLatest` is false.
+
+`propose <id> --dir <edited> --config rules.json [--reason]` sends the edited
+directory (text files only; dotfiles and tool folders skipped) as the
+reviewer's proposal: the review moves to `changes_offered`, the creator's card
+and workspace show the note and every changed line, and the creator's
+**Accept & go live** publishes exactly those files with these rules (their
+workspace is replaced by the accepted version). **No thanks** rejects the
+request (`declinedByCreator: true`). A proposal must still use the rewards
+SDK, must differ from the submitted snapshot, and is refused once the creator
+saves past the submitted version. Offering again replaces the earlier offer;
+approving or rejecting while an offer is out decides the request as
+submitted. The website equivalent is the Management panel's "Edit a copy to
+propose changes" (a private workspace copy owned by the reviewer) followed by
+"Offer my copy with these rules".
+
+Each offer has a server-owned revision. Changing the files, rules or note
+creates a new revision; a creator looking at an older comparison or decline
+confirmation cannot answer the replacement offer. The creator sees its reward
+amounts as well as its file changes. Proposed rules stay separate from the
+submitted rules until acceptance, so `approve` without `--config` still uses
+the original submitted configuration. The CLI audits the offer atomically
+and includes file contents in its retry fingerprint.
+
+Approval also attempts a free preview thumbnail when the app has none. That
+capture uses the published version and cannot overwrite a later release or a
+thumbnail the creator chooses while it runs. It is best effort: a capture
+failure leaves publication successful and does not spend AI-image credits.
+
+The review copy carries independent copies of referenced uploaded media.
+Before freezing an offer, the server reuses the creator's original media and
+copies new reviewer media into the creator's library within their storage
+quota. Its final URLs are included in the comparison, so acceptance publishes
+those exact files and does not depend on keeping the review copy. Re-offers
+reuse the media; a failed transaction cleans up its copied objects. Declining
+leaves the offered media as unused uploads in the creator's library.
 
 ### Reward activity report (standing duty, every full daily review; added 2026-09-12)
 

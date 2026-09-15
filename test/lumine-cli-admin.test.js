@@ -6006,6 +6006,55 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
     config: rules,
   });
   assert.equal(approve.requiresRun, false);
+  // A proposal sends the edited snapshot directory plus the rules that the
+  // creator's acceptance will publish; dotfiles and tool folders stay home.
+  const editedDir = path.join(dir, "edited");
+  fs.mkdirSync(path.join(editedDir, "src"), { recursive: true });
+  fs.mkdirSync(path.join(editedDir, ".git"), { recursive: true });
+  fs.writeFileSync(path.join(editedDir, "index.html"), "<h1>Hi</h1>");
+  fs.writeFileSync(path.join(editedDir, "src", "app.js"), "run();");
+  fs.writeFileSync(path.join(editedDir, ".git", "HEAD"), "ref");
+  fs.writeFileSync(path.join(editedDir, ".DS_Store"), "junk");
+  const propose = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "reward-review",
+      "propose",
+      "2",
+      "--dir",
+      editedDir,
+      "--config",
+      rulesPath,
+      "--reason",
+      "Moved the claim after the stage clears.",
+    ]),
+  );
+  assert.equal(propose.name, "reward-review.propose");
+  assert.equal(propose.method, "POST");
+  assert.equal(propose.path, "/cli/admin/reward-reviews/2/propose");
+  assert.equal(propose.mutates, true);
+  assert.equal(propose.requiresRun, false);
+  assert.equal(propose.fileCount, 2);
+  assert.deepEqual(propose.body.files, [
+    { path: "/index.html", content: "<h1>Hi</h1>" },
+    { path: "/src/app.js", content: "run();" },
+  ]);
+  assert.deepEqual(propose.body.config, rules);
+  assert.equal(propose.body.reason, "Moved the claim after the stage clears.");
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "reward-review", "propose", "2", "--dir", editedDir]),
+      ),
+    /--config/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "reward-review", "propose", "2", "--config", rulesPath]),
+      ),
+    /--dir/,
+  );
   fs.writeFileSync(rulesPath, JSON.stringify({ ...rules, rules: [] }));
   assert.throws(
     () => readRewardConfigFile(rulesPath),
