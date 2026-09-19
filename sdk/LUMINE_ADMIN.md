@@ -1143,17 +1143,18 @@ Review questions to settle with Mikey before approving:
   it, then the next one comes up the following site day (UTC midnight, 9:00 AM Korea)) keep them honest.
 - Do the rule IDs in `rewards.json` match what the code starts? Unknown IDs
   simply never pay.
-- Are the amounts and the per-user, per-app and lifetime budgets conservative
-  for what the app actually asks of people?
+- Are the amounts and the per-learner daily budgets right for what the app
+  actually asks of people? There is no app-wide budget, per day or lifetime:
+  a good app keeps paying everyone who plays it. Older configs may still
+  carry `dailyXP`/`dailyCoins`/`lifetimeXP`/`lifetimeCoins`; the API accepts
+  and ignores them, so never add or tune them.
 
 `rules.json` (what `--config` takes, and what the app's `rewards.json` plus
 sheet compose into):
 
 ```json
 {
-  "dailyXP": 2000000, "dailyCoins": 0,
   "userDailyXP": 10000, "userDailyCoins": 0,
-  "lifetimeXP": 200000000, "lifetimeCoins": 0,
   "rules": [
     { "id": "stage-1", "title": "Clear Stage 1", "xp": 300, "coins": 0,
       "verifier": "completion", "minSeconds": 20 },
@@ -1191,8 +1192,8 @@ day, elementary 50,000 XP + 1,000 Coins, middle 70,000 + 5,000, high
 `userDailyClaims` 1; until-earned sets authored from the Korean curriculum.
 Arcade Typing (Mikey, 2026-09-12): XP for clearing campaign stages, up to
 10,000 XP per learner per day, no Coins. Platform ceilings: 100,000 XP /
-10,000 Coins per rule and per learner per day, 10,000,000 XP / 1,000,000 Coins
-per app per day, 1,000,000,000 XP / 100,000,000 Coins per app lifetime.
+10,000 Coins per rule and per learner per day. No app-wide ceiling exists,
+per day or lifetime.
 
 Approval freezes these rules with the reviewed snapshot and publishes that
 snapshot immediately (the result carries `published.version`); an approval
@@ -2669,6 +2670,24 @@ Read every line, and put these in the daily report verbatim:
   operator_recycles=… service_restarts=… oom_aborts=… unexpected_worker_exits=…`
   line;
 - the `day-over-day … worker_heap=…` delta.
+
+**The memory report looks back only 24 hours; the run's window is often longer.**
+On 2026-09-19 a four-day window hid two heap-OOM aborts (09-16 and 09-17) that
+`memory-daily` no longer showed. In every full review, also search the reviewed
+error log for `[cluster] worker exited` lines that are not planned or operator
+recycles, across the whole window since the last completed full run, and treat
+each one exactly like a non-zero `oom_aborts` / `unexpected_worker_exits`.
+
+Each unexpected exit is followed by a `[cluster] worker last work slot=… pid=…
+in_flight=[…] recent=[…]` line (added 2026-09-19). The worker writes that trail
+synchronously as each piece of work begins and ends, so it survives an abort
+inside a single synchronous burst. `in_flight` names the requests or socket
+events that were running when the process died; `recent` lists the last
+sixteen begin/label/end records with their age before exit. Quote both lists
+verbatim in the report and in the todo: they are the evidence that pinpoints
+the code path. `unavailable (no trail file)` means the worker died before its
+trail existed or an older generation is still running; say so rather than
+guessing.
 
 Escalate in the report (a todo, and a note for Mikey) when any of these hold:
 `oom_aborts` > 0, `service_restarts` > 0, `unexpected_worker_exits` > 0, any
