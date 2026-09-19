@@ -2995,6 +2995,33 @@ Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
 
+### Jev shadow pilot (standing duty, every full daily review; added 2026-09-19)
+
+Read `data.jevPilot` from `lumine admin brief --json` and carry it into
+the full report for Mikey. The active `daily-run report --json` also includes
+`data.report.brief.jevPilot`. This duty does not authorize a separate full run.
+If the deployed API lacks the field, say the telemetry is not deployed; do not
+treat a missing section as zero traffic or a healthy pilot.
+
+State the configuration and operating status even when off/blocked/awaiting
+samples. Headline the named last completed UTC day, compare with the trailing
+seven completed days, and keep the in-progress day separate. Include paired
+decision counts, disagreements (especially Jev react / baseline respond),
+p50/p95 latency for each model, provider errors/timeouts, pending observations,
+known incremental cost, unknown-cost requests, ledger gaps and cap status.
+The pilot's known recorded spend is already in application AI costs: never add
+it again. Shadow mode changes no user-visible decisions and has not established
+savings. Agreement is not accuracy; confidence is not a measured success rate.
+
+Privately inspect the bounded `reviewCandidates` when needed, name what was
+actually reviewed, and account for edited comments. Ordinary model disagreements
+are evaluation findings; outages, stuck telemetry or missing ledger entries are
+operational findings. Report a recommendation to continue, adjust or stop, without
+automatically enabling traffic, raising caps or promoting Jev to serving. Data
+handling for under-18 users and TypeSafe account access must be resolved before
+real conversations are sent. See `twinkle-api/JEV_PILOT.md` for configuration,
+the synthetic evaluation step and release checks.
+
 ### Application AI calendar-month cost (standing duty, every full daily review)
 
 Run `lumine admin ai-costs monthly --json` during every full daily management
