@@ -3170,6 +3170,34 @@ reload while waiting in the queue. The current UTC day is returned with `inProgr
 **Headline `lastCompletedDay` (its exact `dayKey`) — never the in-progress
 day**, exactly as the closed-day AI-cost duty does.
 
+Since Mikey's 2026-09-20 decision, keep current Energy policy and worker
+capacity while observing. During every full run, supplement these counters
+with the read-only per-request diagnostic report (from the local API checkout):
+
+```bash
+ssh api-primary.twinkle.network \
+  'cd /home/ec2-user/server && timeout 75s node --max-old-space-size=128 -' \
+  < scripts/build-energy-daily.cjs
+```
+
+This uses telemetry already recorded in queue jobs, canonical run sessions,
+provider-turn budget metadata and reservation usage; no new collection or API
+restart is needed. Save its JSON privately. Headline its last completed UTC
+day and compare the complete days in its seven-day window: queue wait p50/p90/
+maximum, starts waiting over 60 seconds, cancellations before start, unchanged
+budget stops, and the separate `handoff_only`, work-without-save and unknown
+patterns. Keep the two explicit denominators separate: unchanged stops / all
+budget stops, and unchanged stops / completed manual runs in the same cohort.
+Do not divide by usage reservations or assume busy-refusal counts measure waits.
+
+Inspect the stop cases' observed starting budget, recorded work/handoff turns,
+remaining Energy and final-reservation spend. Missing lineage is unknown, not
+zero work or zero cost; final-reservation cost can exclude earlier planning
+reservations. The oldest day may be partial under rolling seven-day retention.
+These observations do not by themselves establish a bug or authorize an
+admission floor, extra worker capacity, budget cuts or model changes. Update
+todo 52 with the latest completed-day observations and any concrete regression.
+
 `flags` lists every tripped check with its exact numbers: `overflow_usd`
 (overflow above $1 on a completed day), `budget_stop_unchanged_ratio` (more
 than 30% of at least 5 budget stops ended with nothing saved),
