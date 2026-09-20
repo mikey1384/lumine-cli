@@ -2752,8 +2752,10 @@ primary review does not cover the target. An open review does not block a
 deployment or host hold. Its files, lease and database boundaries persist;
 active requests use the normal drain. A held or unavailable owner returns a
 retryable failure, so keep the session and retry when that host is available
-again. Release operators can review final shutdown deltas via management SSH
-and record their own evidence. An active review keeps ownership of clearing;
+again. Release operators review final shutdown deltas through the deployment
+workflow's private SSM/S3 snapshots (or interactive management access during
+explicit recovery) and record their evidence. Raw logs never belong in GitHub
+output. An active review keeps ownership of clearing;
 otherwise API stderr is cleared with the existing guarded
 `npm run logs:clear-errors` plus post-clear re-read. A stopped target whose final logs
 were reviewed does not need to be started for daily management; starting EC2
@@ -2995,7 +2997,7 @@ Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
 
-### Jev shadow pilot (standing duty, every full daily review; added 2026-09-19)
+### Jev serving and audits (standing duty, every full daily review; updated 2026-09-20)
 
 Read `data.jevPilot` from `lumine admin brief --json` and carry it into
 the full report for Mikey. The active `daily-run report --json` also includes
@@ -3009,17 +3011,48 @@ seven completed days, and keep the in-progress day separate. Include paired
 decision counts, disagreements (especially Jev react / baseline respond),
 p50/p95 latency for each model, provider errors/timeouts, pending observations,
 known incremental cost, unknown-cost requests, ledger gaps and cap status.
-The pilot's known recorded spend is already in application AI costs: never add
-it again. Shadow mode changes no user-visible decisions and has not established
-savings. Agreement is not accuracy; confidence is not a measured success rate.
+Separate `bySurface.comment` from `bySurface.chat`. For chat, report
+`routingFieldDisagreements`, `candidateSkippedBaselineRequired`, and missing
+routing-comparison evidence. Equal reply actions do not prove equal tool/history
+routing. Chat's baseline also extracts structured plans, while Jev compares seven
+routing choices plus reaction emoji; these latencies do not establish an end-to-end speedup.
+Mikey authorized production serving on September 20 for the tested comment and
+text-chat routing decisions. Include `serving.jevDecisions`, baseline and
+unreserved fallbacks with reasons, audit coverage, served disagreements,
+`serving.decisionLatencyMs`, chat added wait, and comment baseline calls avoided.
+Chat retains the existing full planner for outputs outside Jev's tested scope;
+comments run a 5% independent background baseline audit. Distinguish actual
+selected routes from unused comparisons and identify Turtle's deployment tests.
+Chat's `baseline_requires_reply` fallback preserves the planner's written reply
+when Jev would only react; report its frequency and review those disagreements.
+Reaction-only chat responses require both models to agree.
+Jev chooses the emoji from all 18 supported reactions in `chat-routing-v2`.
+Report `reactionChoices` usage by source, paired emoji disagreements, and missing
+legacy evidence; review whether the chosen tone fits the canonical conversation.
+Candidate and served emoji are in `reviewCandidates` routing objects. Earlier
+`chat-routing-v1` rows have no emoji comparison and must not count as agreement.
+Mikey explicitly requested all eligible requests with no daily request cap
+(`dailyLimit: 0`) and a cost report during every full website-management run.
+Run `lumine admin ai-costs day YYYY-MM-DD --json` for the last completed UTC day.
+Report the canonical `data.dailyAiCosts.byOperation` USD totals for `jev_reply_gate_serve`,
+`jev_chat_routing_serve`, any `_shadow` operations, and `jev_reply_gate_audit`.
+Separate comment/chat provider spend from background baseline-audit spend.
+Report unfinished selection/baseline-audit telemetry; synthetic probes are
+excluded from performance metrics but included in daily request and cost counts.
+If `telemetryStatus: partial` or `telemetryComplete: false`, detail metrics are a
+bounded recent sample, not full-day performance or cost; use the canonical daily
+AI-cost report for complete cost totals and record the coverage gap.
+Known Jev spend and `jev_reply_gate_audit` calls are already in application AI
+costs: never add them again or infer net savings from Jev cost alone. Agreement
+is not accuracy; confidence is not a measured success rate.
 
 Privately inspect the bounded `reviewCandidates` when needed, name what was
-actually reviewed, and account for edited comments. Ordinary model disagreements
+actually reviewed, and account for edited comments or chat messages. Use the
+candidate's surface and target ID to find the correct canonical record. Ordinary model disagreements
 are evaluation findings; outages, stuck telemetry or missing ledger entries are
 operational findings. Report a recommendation to continue, adjust or stop, without
-automatically enabling traffic, raising caps or promoting Jev to serving. Data
-handling for under-18 users and TypeSafe account access must be resolved before
-real conversations are sent. See `twinkle-api/JEV_PILOT.md` for configuration,
+automatically changing mode, scope or caps.
+See `twinkle-api/JEV_PILOT.md` for configuration,
 the synthetic evaluation step and release checks.
 
 ### Application AI calendar-month cost (standing duty, every full daily review)
