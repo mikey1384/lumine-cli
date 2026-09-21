@@ -4404,3 +4404,12 @@ observed task outcome. Report `jev_lumine_model_serve` and the additional
 `jev_lumine_model_audit` spend separately, using canonical AI-cost totals without
 double-counting. JEV choice confidence and LLM agreement are not correctness
 scores. The other eight families still require review before promotion.
+
+
+### September 21 verified reward follow-up
+
+After the Study review migration is deployed, the full daily website run also reads the API-host report `node scripts/build-study-reviews-daily.cjs --days 1`. It is indexed, read-only and bounded; it reports decisions, known measured cost, unknown-usage requests, p50/p95 latency, settled checks, claims, pending rows older than 60 seconds and graded-but-unsettled rows. `--examples` includes at most 30 private full study records and their exact prompt version for administrator quality review; keep that output private. No traffic is not a quality pass. The 12 synthetic pre-release records are a small initial check, not measured real-user accuracy.
+
+Study's registered `study-record-v1` checks use learner AI Energy for accepted, revise and uncertain results. Preview checks use real AI Energy but cannot award XP/Coins. The agreed proposal pays 2,000 XP + 500 Coins at most once per learner per UTC day. Breadface's `breadface-v1` uses deterministic server physics, not a model. Both creator proposals must be accepted to publish; inspect the canonical review state and acceptance/rejection events during follow-up.
+
+For total JEV cost, include `dailyAiCosts.byProviderModel` for TypeSafe/JEV across both AI Energy and system-covered ledgers. Report serving/shadow/audit operations separately as above; the Build SDK's system-covered/failed calls use `jev_decision`, while ordinary viewer SDK checks are already counted by the AI Energy ledger. Do not add the Study report's known-cost sum on top of the canonical overall AI-cost total: it is a diagnostic breakdown of those same calls.
