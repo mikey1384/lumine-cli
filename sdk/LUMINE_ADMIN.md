@@ -3052,6 +3052,22 @@ candidate's surface and target ID to find the correct canonical record. Ordinary
 are evaluation findings; outages, stuck telemetry or missing ledger entries are
 operational findings. Report a recommendation to continue, adjust or stop, without
 automatically changing mode, scope or caps.
+
+Mikey's September 21 reporting requirement: include a private case-by-case
+comparison for the reviewed disagreements. For each event give the minimum
+relevant excerpt/context, field name and plain-language meaning, exact baseline
+and JEV values, selected value/source and fallback, observed outcome, and your
+assessment with evidence. Explicitly allow “both defensible” or “insufficient
+evidence”; the existing LLM is not ground truth. State reviewed/total coverage and
+rubric version. A bad delivered answer does not establish which routing choice
+caused it, and the alternative model's answer was not necessarily generated.
+`requiresPreviousMessages` means additional retrieval beyond supplied recent
+context; `requiresMathVerification` also covers answer/tutoring verification in
+non-math subjects. Historical v1/v2 telemetry records both decisions and source
+IDs, not original conversation text, model explanations or human verdicts. Read
+canonical context privately and qualify historical reconstruction when edited,
+deleted or missing. The September 21 expansion adds bounded, expiring private
+input snapshots as described below.
 See `twinkle-api/JEV_PILOT.md` for configuration,
 the synthetic evaluation step and release checks.
 
@@ -4362,3 +4378,29 @@ contracts.
 Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
 `comments get`, and `recommend` remain accepted, but the singular command forms
 shown above are the canonical interface.
+
+September 21 routing expansion: read `jevRoutingShadow` alongside `jevPilot` in
+both the admin brief and full daily report. The reviewed `chat-routing-v3` path
+is primary; report actual selection latency, chat baseline calls avoided, audit
+coverage and `jev_chat_routing_audit` cost separately from v1/v2. New routing
+families remain comparison-only until Mikey reviews each one and explicitly
+promotes it. Report every registered family, including zero-sample and skipped
+families; no traffic is not a pass. Show paired counts, exact differing fields,
+both values, private input snapshots when available, baseline-controlled outcome,
+provider/LLM timing, failure/skip reasons, stale comparisons, and USD spend from
+canonical `jev_<family>_shadow` cost operations. Context snapshots are bounded,
+private and expire after eight days; do not copy unrelated private content into
+public output. Raw model choices precede existing application guards and are not
+proof an action was performed. Do not call agreement accuracy or infer speedups
+from shadow timings. Full daily costs must include these operations once only.
+
+September 21 Auto exception: Mikey approved JEV as Lumine Auto's primary model
+selector immediately, with an independent LLM comparison for every choice.
+Auto is the new default; stored manual preferences remain manual. Review
+`jevRoutingShadow` / `byRoute.lumine_model` separately from the eight
+comparison-only families: selected model/effort, both decisions, exact selection
+context, confidence, fallback, actual selection latency, missing evidence and
+observed task outcome. Report `jev_lumine_model_serve` and the additional
+`jev_lumine_model_audit` spend separately, using canonical AI-cost totals without
+double-counting. JEV choice confidence and LLM agreement are not correctness
+scores. The other eight families still require review before promotion.
