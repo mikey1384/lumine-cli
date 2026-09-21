@@ -3259,6 +3259,55 @@ carry-over todo with the exact figures and day. **Never auto-enforce** —
 escalate to Mikey; this duty observes, it does not change budgets, caps, or
 user state.
 
+#### Energy pacing calibration (JEV; since 2026-09-21)
+
+Lumine asks JEV two questions inside every budgeted run, and acts on confident
+answers (`JEV_LUMINE_PACING_MODE`: `serve` by default, `shadow` records without
+acting, `off` disables):
+
+- **fit**, once before a fresh request's first paid round: `fits` / `too_big`.
+  `too_big` at or above `pacingThresholds.tooBigConfidence`, with a lighter
+  model that fits, keeps the run from starting and shows the switch-model card.
+- **pace**, before each tool round: `continue` / `apply_next` / `hand_off`.
+  `apply_next` at or above `applyNextConfidence` asks the agent to edit in its
+  next round; `hand_off` at or above `handOffConfidence` ends the run before
+  its pending reads, keeping the unspent Energy.
+
+Separately from JEV, a run that reaches its round cap with nothing saved while
+Energy remains gets one extra apply-only round (`applyOnlyRound`).
+
+Every UTC day in `lumine admin energy-budget --json` now carries `pacing`.
+Report in **"Insights for Mikey"** in every full run, for the last completed
+day and the in-progress day while the feature is new:
+
+- `paceCalibration` and `fitCalibration`: verdict → confidence bucket (`low`
+  below the apply-next bar, `mid` up to the hand-off bar, `high` above it) →
+  passes that ended `saved` / `unsaved`. The verdict is the most severe one of
+  the pass. Counts are agent passes, not requests (a repair pass is judged
+  again). Served stops are excluded because nothing shows what would have
+  happened.
+- `served`: early hand-offs with the Energy they kept (`energyKeptUsd`),
+  apply-next nudges with how those passes ended, and `tooBigNotStarted`.
+- `applyOnlyRound`: extra rounds granted and whether they saved anything.
+- `passesWithUnavailableRounds`: passes where JEV gave no verdict for at least
+  one round (timeout, outage); those rounds ran on the arithmetic alone.
+
+How to read it, with the exact counts: `hand_off` in `low`/`mid` that mostly
+ended `unsaved` means the hand-off bar is too high (runs JEV doubted went on to
+waste Energy); `hand_off` that mostly ended `saved` means JEV is too
+pessimistic and the bar must not drop. `continue` in `high` ending `unsaved`
+are misses: inspect those requests. `fits` ending `unsaved` on heavy models
+are fit-check misses; `too_big` below the bar ending `saved` means the bar is
+right to be high. `applyOnlyRound.saved` shows the extra round rescuing runs.
+Compare `budget_stop_unchanged` and its ratio with the days before 2026-09-21.
+The host script's stop cases add per-request `fitVerdict`, `pacingVerdicts` and
+`stopReason` (`pacing_hand_off`, `pacing_too_big`, `tool_round_limit`,
+`unaffordable_work_turn`). JEV spend for these calls appears under surface
+`jev_routing`, operations `jev_lumine_pacing_*` and `jev_lumine_fit_*`.
+Recommend threshold changes to Mikey with the figures; **never change them or
+the mode yourself**. Fewer than about 20 judged passes is too little to
+calibrate on: report the counts and say so.
+
 ### Lumine media feature cost and cleanup watch (standing duty, every full daily review)
 
 Run `lumine admin media-costs monthly --json` during every full daily management
