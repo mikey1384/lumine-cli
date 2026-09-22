@@ -2,7 +2,7 @@
 
 Version: 1.47.0
 Updated: 2026-09-21
-Generated: 2026-09-21T17:57:41.862Z
+Generated: 2026-09-22T02:47:26.393Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -463,7 +463,7 @@ renderBattery(policy?.energyPercent, policy?.energySegmentsRemaining);
   - Returns: { text, response, model, webSearch, aiUsagePolicy }
   - Generate text with the default Lumine text model, optionally using live web search and streaming text updates through onText.
   - Signed-in viewers only.
-  - Uses Grok 4.6 by default.
+  - Uses GPT-5.6 Luna by default.
   - Each successful text generation consumes AI Energy from the signed-in viewer.
   - history must be an array of { role: 'user' | 'assistant', content: string }. Twinkle.ai.chat does not read a text field.
   - The server keeps the latest 12 valid history entries.
