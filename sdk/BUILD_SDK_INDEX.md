@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.48.0
+Version: 1.49.0
 Updated: 2026-09-23
-Generated: 2026-09-23T14:17:02.749Z
+Generated: 2026-09-23T16:01:40.924Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -786,6 +786,21 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Zero's recent builds, newest first: builds for players (helper) and his own workshop projects (workshop).
   - limit is 1-50 (default 10). kind filters to helper or workshop builds.
   - Example: const { builds } = await Twinkle.minecraft.getZeroBuilds({ limit: 10, kind: 'workshop' });
+- async getPeople() | scopes: content:read
+  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', groups, op, online, banned, protected, firstSeenAt, lastSeenAt, isZero }], roles }
+  - Everyone who has joined the server with their in-game role, for the server owner's role management screen.
+  - Only the server owner, in an app they own, gets the list; everyone else gets { canManage: false, people: [] } without an error, so hide the feature when canManage is false.
+  - Roles: visitor (play and chat), member (/tpa, /home, /back, may ask Zero to build), builder (member + /fly and creative/survival), moderator (builder + teleport others, CoreProtect rollback, /kick). op: true players are server operators and have every power regardless of role.
+  - protected: true players (the owner and Zero's account) can't be changed from the app. Sorted online first, then most recently seen.
+  - Not cached; call on screen open or after a change, not on a timer.
+  - Example: const { canManage, people } = await Twinkle.minecraft.getPeople(); if (!canManage) hidePeopleTab();
+- async setPlayerRole({ uuid, role }) | scopes: content:write
+  - Returns: { player: { uuid, name, role, op } }
+  - Change a player's in-game role; it applies immediately, even while they are online.
+  - Server owner only, in an app they own; others get 403 with code minecraft_roles_forbidden.
+  - role is visitor, member, builder or moderator. 400 codes: minecraft_bad_uuid, minecraft_bad_role, minecraft_protected_player, minecraft_unknown_player. 503 minecraft_unavailable while the server restarts.
+  - Every change is logged on the server and emailed to the owner; the player is told in game.
+  - Example: await Twinkle.minecraft.setPlayerRole({ uuid: person.uuid, role: 'builder' });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
