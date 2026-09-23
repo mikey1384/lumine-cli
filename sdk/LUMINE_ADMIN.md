@@ -2997,7 +2997,18 @@ Mikey"** section carrying only
 the deltas and anomalies worth his time, next to the escalation list. Never
 dump raw sections at him.
 
-### Jev serving and audits (standing duty, every full daily review; updated 2026-09-20)
+### Jev serving and audits (standing duty, every full daily review; updated 2026-09-23)
+
+**September 23, 2026: LLM audits retired.** Mikey judged the Jev experiment a
+success and asked to drop the LLM comparison on served routes. Comments, chat
+routing and Lumine Auto no longer run any background LLM audit; the LLM runs
+only when Jev cannot decide. From that day, audit coverage, paired/served
+disagreements and the `jev_reply_gate_audit`, `jev_chat_routing_audit` and
+`jev_lumine_model_audit` operations read zero by design; do not report that as
+missing evidence. Report fallback rates and reasons instead. Auto rows served
+without a comparison carry `baselineStatus: not_run`; its fallback LLM spend is
+`lumine_model_fallback`. The eight comparison-only routing families below are
+unchanged. The rest of this section describes the pre-September-23 pilot.
 
 Read `data.jevPilot` from `lumine admin brief --json` and carry it into
 the full report for Mikey. The active `daily-run report --json` also includes
@@ -4430,8 +4441,8 @@ shown above are the canonical interface.
 
 September 21 routing expansion: read `jevRoutingShadow` alongside `jevPilot` in
 both the admin brief and full daily report. The reviewed `chat-routing-v3` path
-is primary; report actual selection latency, chat baseline calls avoided, audit
-coverage and `jev_chat_routing_audit` cost separately from v1/v2. New routing
+is primary; report actual selection latency, chat baseline calls avoided and
+fallback reasons (no audits since September 23). New routing
 families remain comparison-only until Mikey reviews each one and explicitly
 promotes it. Report every registered family, including zero-sample and skipped
 families; no traffic is not a pass. Show paired counts, exact differing fields,
@@ -4444,15 +4455,16 @@ proof an action was performed. Do not call agreement accuracy or infer speedups
 from shadow timings. Full daily costs must include these operations once only.
 
 September 21 Auto exception: Mikey approved JEV as Lumine Auto's primary model
-selector immediately, with an independent LLM comparison for every choice.
+selector immediately. Its per-choice LLM comparison was retired September 23;
+the LLM runs only as the fallback when JEV cannot decide.
 Auto is the new default; stored manual preferences remain manual. Review
 `jevRoutingShadow` / `byRoute.lumine_model` separately from the eight
 comparison-only families: selected model/effort, both decisions, exact selection
 context, confidence, fallback, actual selection latency, missing evidence and
-observed task outcome. Report `jev_lumine_model_serve` and the additional
-`jev_lumine_model_audit` spend separately, using canonical AI-cost totals without
-double-counting. JEV choice confidence and LLM agreement are not correctness
-scores. The other eight families still require review before promotion.
+observed task outcome. Report `jev_lumine_model_serve` and the fallback
+`lumine_model_fallback` spend separately, using canonical AI-cost totals without
+double-counting. JEV choice confidence is not a correctness score. The other
+eight families still require review before promotion.
 
 
 ### September 21 verified reward follow-up
