@@ -3008,7 +3008,10 @@ disagreements and the `jev_reply_gate_audit`, `jev_chat_routing_audit` and
 missing evidence. Report fallback rates and reasons instead. Auto rows served
 without a comparison carry `baselineStatus: not_run`; its fallback LLM spend is
 `lumine_model_fallback`. The eight comparison-only routing families below are
-unchanged. The rest of this section describes the pre-September-23 pilot.
+unchanged. Chat routing is also off since September 23
+(`JEV_CHAT_ROUTING_ENABLED`, default off; Jev served ~1% of chats and could not
+judge when a reply needs older history), so zero chat serving rows is expected.
+The rest of this section describes the pre-September-23 pilot.
 
 Read `data.jevPilot` from `lumine admin brief --json` and carry it into
 the full report for Mikey. The active `daily-run report --json` also includes
