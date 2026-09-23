@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.49.0
-Updated: 2026-09-23
-Generated: 2026-09-23T16:01:40.924Z
+Version: 1.50.0
+Updated: 2026-09-24
+Generated: 2026-09-23T23:21:55.717Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -801,6 +801,32 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - role is visitor, member, builder or moderator. 400 codes: minecraft_bad_uuid, minecraft_bad_role, minecraft_protected_player, minecraft_unknown_player. 503 minecraft_unavailable while the server restarts.
   - Every change is logged on the server and emailed to the owner; the player is told in game.
   - Example: await Twinkle.minecraft.setPlayerRole({ uuid: person.uuid, role: 'builder' });
+- async getChat({ since } = {}) | scopes: content:read
+  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death', name, text, userId, archived }], latestSeq, online, archiveReady, viewer: { canSend, muted, canModerate }, mutedUserIds }
+  - Live server chat after a sequence number: player chat, Zero, messages sent from the web, joins, leaves and deaths.
+  - Without since (or 0) it returns the newest 50 events, oldest first. Pass since = latestSeq from the previous response to get only new events. Poll every 2-3 seconds while the chat is visible; stop when hidden.
+  - kind: chat (a player), zero (Zero, the AI builder), web (someone chatting from the Twinkle app; userId is their Twinkle user id), join, leave, death. Private messages are never included.
+  - name is a Minecraft username for chat/join/leave/death, and a Twinkle username for web.
+  - viewer.canModerate is true only for the server owner; mutedUserIds is filled only for them.
+  - Example: let since = 0; async function poll() { const { events, latestSeq } = await Twinkle.minecraft.getChat({ since }); since = latestSeq; render(events); } setInterval(poll, 2500);
+- async getChatHistory({ before, limit, query, includeArchived } = {}) | scopes: content:read
+  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death', name, text, userId, archived }], hasMore, nextBefore: { at, seq } | null, includesArchived }
+  - Older server chat, newest first, for scrolling back or searching past days.
+  - before is the nextBefore cursor from the previous page; omit it to start from the newest. limit 1-100 (default 50). query searches message text and names (60 chars).
+  - Chat from before the web chat bridge existed (imported from server logs) is archived: only the server owner can include it with includeArchived: true; others never receive it.
+  - Example: const page = await Twinkle.minecraft.getChatHistory({ limit: 50 }); const older = await Twinkle.minecraft.getChatHistory({ before: page.nextBefore });
+- async sendChat({ text }) | scopes: content:write
+  - Returns: { event: { seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death', name, text, userId, archived } }
+  - Send a chat message from the app into the Minecraft server; players see it as [Web] <your Twinkle username>.
+  - Signed-in viewers only. text is trimmed to 200 characters. About one message per 2.5 seconds and 10 per minute per person: 429 with code minecraft_chat_rate_limited and retryAfterMs.
+  - 403 minecraft_chat_forbidden for accounts banned from chat; 400 minecraft_muted when the server owner muted them from web chat.
+  - Send only on a user action (Enter or Send); never automatically.
+  - Example: await Twinkle.minecraft.sendChat({ text: 'Hi from the website!' });
+- async muteChatUser({ userId, muted }) | scopes: content:write
+  - Returns: { userId, muted }
+  - Server owner only: stop (or allow again) a Twinkle user sending web chat into the server.
+  - Server owner only, in an app they own; others get 403 with code minecraft_roles_forbidden. muted defaults to true.
+  - Example: await Twinkle.minecraft.muteChatUser({ userId: event.userId, muted: true });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
