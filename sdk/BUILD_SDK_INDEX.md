@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.47.0
-Updated: 2026-09-21
-Generated: 2026-09-23T02:44:06.901Z
+Version: 1.48.0
+Updated: 2026-09-23
+Generated: 2026-09-23T13:54:45.943Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -760,6 +760,32 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - When this request creates, retries, or refreshes a model-backed edition, confirmed provider usage consumes AI Energy from this requesting viewer. Concurrent or later callers that deduplicate onto the same pending or ready edition are not charged.
   - A quiet edition with no editorial events does not call an AI provider and does not consume AI Energy.
   - A failed attempt may be queued again on the same day. A ready edition is immutable for ordinary viewers.
+
+### Twinkle.minecraft
+- async getWorlds() | scopes: content:read
+  - Returns: { worlds: [{ id, name, dimension, spawn: { x, z } | null, map: { tileUrlTemplate, minZoom, maxZoom, tileSize, scale, origin, renderedAt } | null }], stale }
+  - List the server's worlds (world, world1, world2, world_nether, world_the_end) with squaremap tile info for drawing a top-down map.
+  - Tile URLs are HTTPS PNGs from www.twinklemc.site; fill {z}, {x} and {y}. map.renderedAt tells how fresh the tiles are.
+  - Limited rollout: apps not enabled yet get 403 with code minecraft_sdk_not_enabled.
+  - stale: true means the Minecraft server was briefly unreachable and the data is a recent cached copy.
+  - Example: const { worlds } = await Twinkle.minecraft.getWorlds(); const overworld = worlds.find((w) => w.id === 'world'); const url = overworld.map.tileUrlTemplate.replace('{z}', 3).replace('{x}', 0).replace('{y}', 0);
+- async getOnlinePlayers() | scopes: content:read
+  - Returns: { players: [{ name, world, x, y, z, isZero }], count, stale }
+  - List players currently online with their world and block coordinates. Zero appears with isZero: true and is not counted in count.
+  - Cached for about 5 seconds; poll no faster than every 5 seconds.
+  - Names are Minecraft usernames, not Twinkle usernames.
+  - Example: const { players, count } = await Twinkle.minecraft.getOnlinePlayers();
+- async getZero() | scopes: content:read
+  - Returns: { zero: { online, world, position: { x, y, z } | null, activity: 'idle'|'thinking'|'building'|'workshop', currentBuild: { id, title, status, placed, total, requester, world, bounds } | null, queue: [build], workshop: { world, min, max } | null, updatedAt }, stale }
+  - Where Zero is and what he is doing right now, including the build in progress and its progress.
+  - Cached for about 3 seconds.
+  - bounds are { min: [x, y, z], max: [x, y, z] } in world block coordinates.
+  - Example: const { zero } = await Twinkle.minecraft.getZero(); if (zero.currentBuild) console.log(zero.currentBuild.title, zero.currentBuild.placed + '/' + zero.currentBuild.total);
+- async getZeroBuilds({ limit, kind } = {}) | scopes: content:read
+  - Returns: { builds: [{ id, kind: 'helper'|'workshop', title, status, placed, total, requester, world, bounds, createdAt }], stale }
+  - Zero's recent builds, newest first: builds for players (helper) and his own workshop projects (workshop).
+  - limit is 1-50 (default 10). kind filters to helper or workshop builds.
+  - Example: const { builds } = await Twinkle.minecraft.getZeroBuilds({ limit: 10, kind: 'workshop' });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
