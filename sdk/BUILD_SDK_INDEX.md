@@ -2,7 +2,7 @@
 
 Version: 1.48.0
 Updated: 2026-09-23
-Generated: 2026-09-23T13:54:45.943Z
+Generated: 2026-09-23T14:17:02.749Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -763,12 +763,12 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 
 ### Twinkle.minecraft
 - async getWorlds() | scopes: content:read
-  - Returns: { worlds: [{ id, name, dimension, spawn: { x, z } | null, map: { tileUrlTemplate, minZoom, maxZoom, tileSize, scale, origin, renderedAt } | null }], stale }
+  - Returns: { worlds: [{ id, name, dimension, spawn: { x, z } | null, map: { tileUrlTemplate, minZoom, maxZoom, tilePixels, blocksPerTileAtMaxZoom, renderedAt } | null }], stale }
   - List the server's worlds (world, world1, world2, world_nether, world_the_end) with squaremap tile info for drawing a top-down map.
-  - Tile URLs are HTTPS PNGs from www.twinklemc.site; fill {z}, {x} and {y}. map.renderedAt tells how fresh the tiles are.
+  - Tiles are 512x512 PNGs over HTTPS from www.twinklemc.site. At maxZoom one pixel is one block; blocksPerTile = blocksPerTileAtMaxZoom * 2 ** (maxZoom - z); tile x/y = floor(block x/z / blocksPerTile). Fill {z}, {x}, {y}. map.renderedAt tells how fresh the tiles are.
   - Limited rollout: apps not enabled yet get 403 with code minecraft_sdk_not_enabled.
   - stale: true means the Minecraft server was briefly unreachable and the data is a recent cached copy.
-  - Example: const { worlds } = await Twinkle.minecraft.getWorlds(); const overworld = worlds.find((w) => w.id === 'world'); const url = overworld.map.tileUrlTemplate.replace('{z}', 3).replace('{x}', 0).replace('{y}', 0);
+  - Example: const { worlds } = await Twinkle.minecraft.getWorlds(); const w = worlds.find((x) => x.id === 'world'); const z = w.map.maxZoom; const blocksPerTile = w.map.blocksPerTileAtMaxZoom * 2 ** (w.map.maxZoom - z); const tx = Math.floor(blockX / blocksPerTile), ty = Math.floor(blockZ / blocksPerTile); const url = w.map.tileUrlTemplate.replace('{z}', z).replace('{x}', tx).replace('{y}', ty);
 - async getOnlinePlayers() | scopes: content:read
   - Returns: { players: [{ name, world, x, y, z, isZero }], count, stale }
   - List players currently online with their world and block coordinates. Zero appears with isZero: true and is not counted in count.
