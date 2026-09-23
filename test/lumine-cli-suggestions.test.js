@@ -182,6 +182,68 @@ test("owners list and act on exact open suggestions", async (t) => {
   });
 });
 
+test("teammates suggest a name and owners adopt it by suggestion id", async (t) => {
+  const teammate = await createFixtureServer(t, {
+    build: {
+      id: 901,
+      title: "Edit branch",
+      contributionRootBuildId: 884,
+      contributionBranchNumber: 4,
+      contributionStatus: "draft",
+      canWrite: true,
+      canPublish: false,
+    },
+  });
+  const parsed = parseArgs(["suggest", "title", "Beat", "Buddies", "--note", "Shorter"]);
+  assert.equal(parsed.suggestionAction, "title");
+  assert.equal(parsed.note, "Shorter");
+  const missing = await runCli(["suggest", "title", "--target", "901", ...teammate.cliArgs]);
+  assert.notEqual(missing.code, 0);
+  assert.match(missing.stderr, /Pass the name/);
+  const sent = await runCli([
+    "suggest", "title", "Beat", "Buddies", "--note", "Shorter",
+    "--target", "901", ...teammate.cliArgs,
+  ]);
+  assert.equal(sent.code, 0, sent.stderr);
+  assert.match(sent.stdout, /Suggested the name "Beat Buddies"/);
+  const sendRequest = teammate.requests.find(
+    (request) => request.method === "POST" && request.url === "/build/884/contributions/901/suggest-title",
+  );
+  assert.deepEqual(sendRequest?.body, { title: "Beat Buddies", note: "Shorter" });
+
+  const owner = await createFixtureServer(t, {
+    build: { id: 884, title: "Groove Lab", contributionStatus: "none", canWrite: true, canPublish: true },
+    suggestions: [
+      {
+        id: 46,
+        type: "title",
+        rootBuildId: 884,
+        branchBuildId: 901,
+        branchNumber: 4,
+        contributorUsername: "Cloudstar",
+        note: "Shorter",
+        suggestedTitle: "Beat Buddies",
+        currentTitle: "Groove Lab",
+        createdAt: 120,
+      },
+    ],
+  });
+  const list = await runCli(["suggestions", "884", ...owner.cliArgs]);
+  assert.equal(list.code, 0, list.stderr);
+  assert.match(list.stdout, /\[#46\] Cloudstar suggested a new name/);
+  assert.match(list.stdout, /"Groove Lab" → "Beat Buddies"/);
+  assert.match(list.stdout, /lumine suggestions adopt-title 46 --build 884/);
+  const adopted = await runCli([
+    "suggestions", "adopt-title", "46", "--build", "884", "--yes", ...owner.cliArgs,
+  ]);
+  assert.equal(adopted.code, 0, adopted.stderr);
+  assert.match(adopted.stdout, /Renamed Build #884 to "Beat Buddies"/);
+  const adoptRequest = owner.requests.find(
+    (request) => request.method === "POST" && request.url === "/build/884/contributions/901/adopt-title",
+  );
+  assert.deepEqual(adoptRequest?.body, { suggestionMessageId: 46 });
+});
+
 async function createFixtureServer(t, { build, suggestions = [] }) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-suggestions-"));
   const authFile = path.join(tmpDir, "auth.json");
@@ -235,6 +297,19 @@ async function createFixtureServer(t, { build, suggestions = [] }) {
     }
     if (req.method === "POST" && req.url.endsWith("/suggest-thumbnail")) {
       res.end(JSON.stringify({ message: { id: 52 } }));
+      return;
+    }
+    if (req.method === "POST" && req.url.endsWith("/suggest-title")) {
+      res.end(JSON.stringify({ message: { id: 53 } }));
+      return;
+    }
+    if (req.method === "POST" && req.url.endsWith("/adopt-title")) {
+      res.end(
+        JSON.stringify({
+          success: true,
+          build: { id: 884, title: "Beat Buddies" },
+        }),
+      );
       return;
     }
     if (req.method === "POST" && req.url.endsWith("/merge")) {
