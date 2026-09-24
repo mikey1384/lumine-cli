@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.52.0
+Version: 1.55.0
 Updated: 2026-09-24
-Generated: 2026-09-24T01:24:12.836Z
+Generated: 2026-09-24T11:41:42.326Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -787,14 +787,14 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - limit is 1-50 (default 10). kind filters to helper or workshop builds.
   - Example: const { builds } = await Twinkle.minecraft.getZeroBuilds({ limit: 10, kind: 'workshop' });
 - async getPeople() | scopes: content:read
-  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', groups, op, online, banned, protected, firstSeenAt, lastSeenAt, isZero, twinkle: { userId, username } | null }], roles }
-  - Everyone who has joined the server with their in-game role, for the server owner's role management screen.
-  - Only the server owner, in an app they own, gets the list; everyone else gets { canManage: false, people: [] } without an error, so hide the feature when canManage is false.
+  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', op, online, isZero, twinkle: { userId, username } | null, ...owner: groups, banned, protected, firstSeenAt, lastSeenAt | ...others: seen: 'online'|'today'|'week'|'month'|'older'|null }], roles }
+  - Everyone who has joined the server with their in-game rank, for a player directory; the server owner also gets the full records for role management.
+  - Every viewer gets the list. Only the server owner, in an app they own, gets canManage: true with full records (groups, bans, exact first/last seen); everyone else gets canManage: false and the public view: banned players left out, and seen is a rough bucket instead of exact times. Show role controls only when canManage is true.
   - Roles: visitor (play and chat), member (/tpa, /home, /back, may ask Zero to build), builder (member + /fly and creative/survival), moderator (builder + teleport others, CoreProtect rollback, /kick). op: true players are server operators and have every power regardless of role.
   - protected: true players (the owner and Zero's account) can't be changed from the app. Sorted online first, then most recently seen.
   - Not cached; call on screen open or after a change, not on a timer.
   - twinkle is the Twinkle account linked to that player with /link, or null.
-  - Example: const { canManage, people } = await Twinkle.minecraft.getPeople(); if (!canManage) hidePeopleTab();
+  - Example: const { canManage, people } = await Twinkle.minecraft.getPeople(); renderDirectory(people, { editable: canManage });
 - async setPlayerRole({ uuid, role }) | scopes: content:write
   - Returns: { player: { uuid, name, role, op } }
   - Change a player's in-game role; it applies immediately, even while they are online.
@@ -846,10 +846,11 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Only the viewer's own links; removed is false when there was nothing to remove.
   - Example: await Twinkle.minecraft.unlinkMinecraft({ uuid: link.uuid });
 - async getDesigns({ query } = {}) | scopes: content:read
-  - Returns: { designs: [{ id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }] }
+  - Returns: { designs: [{ id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }], access: { rank, linked, canOrder, canModerate, isOwner } | null }
   - Zero's design library: published designs plus the viewer's own private ones.
   - Built-in designs (redstone devices and so on) have no author and are public.
   - previewUrl is an image set with updateDesign, or null.
+  - access says what this viewer may do: canOrder shows placement tools (builders, moderators, the owner).
   - Example: const { designs } = await Twinkle.minecraft.getDesigns({ query: 'castle' });
 - async getDesign({ id }) | scopes: content:read
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }, size: [w, h, d], palette: [blockState], cells: number[] }
@@ -860,43 +861,91 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 - async saveDesign({ id, name, summary, category, tags, visibility, parts }) | scopes: content:write
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
   - Save a design (or a new version of your design) from blueprint parts.
-  - Server owner only for now: others get 403 minecraft_roles_forbidden.
   - parts use Zero's blueprint shapes: box, hollow_box, walls, floor, line, block, cylinder, sphere, gable_roof, pyramid_roof; offsets x = east, y = up, z = south; later parts override earlier ones (carve doors/windows with "air"). Up to 60,000 blocks and 96 blocks in each direction.
   - category is building, decor, farm or path. visibility private (default) or public. Saving the same id again adds a version; only its designer can do that. Rejections come back as 400 minecraft_studio_rejected with a readable message.
+  - Who may: the server owner, and any signed-in viewer with a linked Minecraft account (Twinkle.minecraft.createLinkCode + /link); others get 403 minecraft_not_linked. Designs are private unless visibility is 'public'. Players have a limit on how many designs they keep.
   - Example: await Twinkle.minecraft.saveDesign({ id: 'harbor_house', name: 'Harbor house', category: 'building', visibility: 'private', parts: [{ shape: 'floor', from: [0, 0, 0], to: [8, 0, 6], block: 'stone_bricks' }, { shape: 'walls', from: [0, 1, 0], to: [8, 4, 6], block: 'spruce_planks' }] });
 - async updateDesign({ id, visibility, previewUrl, name, summary }) | scopes: content:write
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
   - Publish or unpublish a design, set its preview image, or rename it.
-  - Server owner only for now. previewUrl is typically a Twinkle.files upload of a rendered preview.
+  - previewUrl is typically a Twinkle.files upload of a rendered preview.
+  - Who may: a design's own designer; moderators (by linked account) and the server owner may change or delete anyone's.
   - Example: await Twinkle.minecraft.updateDesign({ id: 'harbor_house', visibility: 'public' });
 - async deleteDesign({ id }) | scopes: content:write
   - Returns: { deleted }
   - Remove one of your designs from the library.
-  - Server owner only for now. Built-in designs can't be deleted.
+  - Built-in designs can't be deleted.
+  - Who may: a design's own designer; moderators (by linked account) and the server owner may change or delete anyone's.
   - Example: await Twinkle.minecraft.deleteDesign({ id: 'old_test' });
 - async checkPlacement({ designId, world, x, z, y?, facing?: 'north'|'east'|'south'|'west' }) | scopes: content:read
   - Returns: { check: { clear, reasons, world, facing, anchor, bounds: { min, max }, ground: { y, min, max, water }, builtBlocks, builtSamples, placedBy: [{ name, blocks }], design } }
   - Check a building site for a design: where it would sit and whether it would touch anyone's builds.
-  - Server owner only for now.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
   - The footprint is centred on x/z and turned to face facing; without y it sits on the ground. clear is false when built (non-natural) blocks stand in the footprint or 3 blocks around it, the ground is very uneven, or it would leave the world; reasons explains. placedBy lists players CoreProtect recorded placing blocks there.
   - Call on a user action (drop or rotate), not while dragging.
   - Example: const { check } = await Twinkle.minecraft.checkPlacement({ designId: 'harbor_house', world: 'world', x: 1200, z: 700, facing: 'south' }); outline.color = check.clear ? 'green' : 'red';
 - async buildDesign({ ...placement, force }) | scopes: content:write
-  - Returns: { jobId, check }
+  - Returns: { jobId, check, priority }
   - Order Zero to build a design at a site; he switches to creative and builds it before other work.
-  - Server owner only for now. The site is checked again; a site that isn't clear is refused (400 minecraft_studio_rejected) unless force is true.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
   - Follow progress with getZero() (currentBuild) and getZeroBuilds().
+  - Builders: one order waiting or building at a time, published designs or their own, and orders wait in the normal queue (priority false). Moderators: up to 3 orders, ahead of other work. The owner: no limit. force (build on a site that isn't clear) is owner-only.
   - Example: const { jobId } = await Twinkle.minecraft.buildDesign({ designId: 'harbor_house', world: 'world', x: 1200, z: 700, facing: 'south' });
 - async stopZero() | scopes: content:write
   - Returns: { stopped, message }
   - Stop the build Zero is doing right now (placed blocks stay).
-  - Server owner only for now.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
+  - Anyone may stop or undo their own builds; moderators also builders' and members' builds and Zero's own projects; the owner anything.
   - Example: await Twinkle.minecraft.stopZero();
 - async undoBuild({ jobId }) | scopes: content:write
   - Returns: { undone, title, message }
   - Undo one of Zero's builds, putting back what was there before.
-  - Server owner only for now.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
+  - Anyone may stop or undo their own builds; moderators also builders' and members' builds and Zero's own projects; the owner anything.
   - Example: await Twinkle.minecraft.undoBuild({ jobId });
+- async getSnaps({ before, limit, uuid } = {}) | scopes: content:read
+  - Returns: { snaps: [{ id, takenAt, name, uuid, world, x, y, z, caption, blocks, players, twinkleUserId }] }
+  - The /snap Gallery: 3D scenes players took in game with /snap, newest first.
+  - Every viewer gets the list. before is a time in ms (the takenAt of the last snap you have) for paging; limit 1-60 (default 30); uuid filters to one player's snaps.
+  - Example: const { snaps } = await Twinkle.minecraft.getSnaps({ limit: 30 });
+- async getSnap({ id }) | scopes: content:read
+  - Returns: { scene: { version, id, at, by, caption, origin: [x, y, z], size: [w, h, d], palette, count, blocks, light, biomes: { palette, grid }, camera: { x, y, z, yaw, pitch, fov }, world: { name, environment, time, moonPhase, storm, thunder }, players: [{ name, uuid, x, y, z, yaw, pitch, bodyYaw, pose, sneaking, self, zero, slim, skin }] } }
+  - One snap's scene, to render in 3D from where it was taken.
+  - blocks is base64 of 5 bytes per visible block: x, y, z (relative to origin) and the palette index as a big-endian uint16. palette entries are block states like oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false].
+  - light is base64 of 7 bytes per block, in the same order: the light each face receives (+x, -x, +y, -y, +z, -z) and the block's own cell, each sky << 4 | block (0-15).
+  - biomes.grid is base64 of one byte per column (x-major: index = x * depth + z) into biomes.palette (biome ids like plains, cherry_grove).
+  - camera is in world coordinates (subtract origin for scene space); yaw 0 looks toward +z (south), 90 toward -x; pitch is positive looking down. world.time is the tick of day (0 sunrise, 6000 noon, 18000 midnight).
+  - players[].skin is a data: URL of the 64x64 skin PNG when known; slim means the thin-armed model.
+  - Scenes are large (up to a few MB); fetch one at a time.
+  - Example: const { scene } = await Twinkle.minecraft.getSnap({ id });
+- async deleteSnap({ id }) | scopes: content:write
+  - Returns: { deleted }
+  - Delete a snap from the Gallery.
+  - Who may: the player who took it (by a linked Minecraft account), moderators, and the server owner. Others get 403 minecraft_snap_forbidden.
+  - Example: await Twinkle.minecraft.deleteSnap({ id });
+- async getArrivalPoints() | scopes: content:read
+  - Returns: { accounts: [{ uuid, name, online, world, worldLabel, points: [{ world, label, x, y, z, savedAt }] }] }
+  - The viewer's private arrival points: where the Twinkle Gate portals drop their linked Minecraft account in each world.
+  - Only the caller's own linked accounts; 400 minecraft_not_linked when none is linked.
+  - online/world tell whether setArrivalPoint can use the player's current spot right now.
+  - Example: const { accounts } = await Twinkle.minecraft.getArrivalPoints();
+- async setArrivalPoint({ uuid } = {}) | scopes: content:write
+  - Returns: { uuid, name, world, worldLabel, points }
+  - Save where the viewer's Minecraft player is standing right now as their arrival point in that world (the Twinkle Gate portal to that world lands them there).
+  - The player must be online; the spot is their current position, never typed coordinates (so nobody can land inside places they could not walk to).
+  - 400 minecraft_arrival_rejected when not online or the spot is unsafe (no floor, no room, lava); uuid picks one of several linked accounts.
+  - Example: const { worldLabel } = await Twinkle.minecraft.setArrivalPoint();
+- async clearArrivalPoint({ world, uuid }) | scopes: content:write
+  - Returns: { cleared, points }
+  - Remove the viewer's arrival point in a world (back to the shared arrival).
+  - world is a world id such as world, world1, world3, world_nether.
+  - Example: await Twinkle.minecraft.clearArrivalPoint({ world: 'world3' });
+- async getServerLogs({ days, kinds, query, limit } = {}) | scopes: content:read
+  - Returns: { total, lines: [{ at, kind: 'join'|'leave'|'kick'|'command'|'warn'|'error'|'zero'|'server', level, text }] }
+  - The Minecraft server log for the server owner: joins, kicks, commands, warnings, errors and Zero's lines, newest first, IP addresses removed.
+  - Server owner only, in an app they own; everyone else gets 403 minecraft_roles_forbidden.
+  - days 1-7 (default 1); kinds any of join, leave, kick, command, warn, error, zero, server (default all); query filters by text; limit 1-1000 (default 300). Chat is not included (getChat and getChatHistory have it).
+  - Example: const { lines } = await Twinkle.minecraft.getServerLogs({ days: 2, kinds: ['kick', 'error'] });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
