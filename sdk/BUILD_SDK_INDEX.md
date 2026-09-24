@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.51.0
+Version: 1.52.0
 Updated: 2026-09-24
-Generated: 2026-09-24T00:08:02.260Z
+Generated: 2026-09-24T01:24:12.836Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -845,6 +845,58 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Remove one of the viewer's own linked Minecraft accounts.
   - Only the viewer's own links; removed is false when there was nothing to remove.
   - Example: await Twinkle.minecraft.unlinkMinecraft({ uuid: link.uuid });
+- async getDesigns({ query } = {}) | scopes: content:read
+  - Returns: { designs: [{ id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }] }
+  - Zero's design library: published designs plus the viewer's own private ones.
+  - Built-in designs (redstone devices and so on) have no author and are public.
+  - previewUrl is an image set with updateDesign, or null.
+  - Example: const { designs } = await Twinkle.minecraft.getDesigns({ query: 'castle' });
+- async getDesign({ id }) | scopes: content:read
+  - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }, size: [w, h, d], palette: [blockState], cells: number[] }
+  - A design's blocks for a 3D preview.
+  - cells is a flat list of [x, y, z, paletteIndex] numbers; air is left out. palette entries are block states like "oak_stairs[facing=north,half=bottom]".
+  - Private designs are only returned to their designer.
+  - Example: const { size, palette, cells } = await Twinkle.minecraft.getDesign({ id: 'harbor_house' }); for (let i = 0; i < cells.length; i += 4) addCube(cells[i], cells[i + 1], cells[i + 2], palette[cells[i + 3]]);
+- async saveDesign({ id, name, summary, category, tags, visibility, parts }) | scopes: content:write
+  - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
+  - Save a design (or a new version of your design) from blueprint parts.
+  - Server owner only for now: others get 403 minecraft_roles_forbidden.
+  - parts use Zero's blueprint shapes: box, hollow_box, walls, floor, line, block, cylinder, sphere, gable_roof, pyramid_roof; offsets x = east, y = up, z = south; later parts override earlier ones (carve doors/windows with "air"). Up to 60,000 blocks and 96 blocks in each direction.
+  - category is building, decor, farm or path. visibility private (default) or public. Saving the same id again adds a version; only its designer can do that. Rejections come back as 400 minecraft_studio_rejected with a readable message.
+  - Example: await Twinkle.minecraft.saveDesign({ id: 'harbor_house', name: 'Harbor house', category: 'building', visibility: 'private', parts: [{ shape: 'floor', from: [0, 0, 0], to: [8, 0, 6], block: 'stone_bricks' }, { shape: 'walls', from: [0, 1, 0], to: [8, 4, 6], block: 'spruce_planks' }] });
+- async updateDesign({ id, visibility, previewUrl, name, summary }) | scopes: content:write
+  - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
+  - Publish or unpublish a design, set its preview image, or rename it.
+  - Server owner only for now. previewUrl is typically a Twinkle.files upload of a rendered preview.
+  - Example: await Twinkle.minecraft.updateDesign({ id: 'harbor_house', visibility: 'public' });
+- async deleteDesign({ id }) | scopes: content:write
+  - Returns: { deleted }
+  - Remove one of your designs from the library.
+  - Server owner only for now. Built-in designs can't be deleted.
+  - Example: await Twinkle.minecraft.deleteDesign({ id: 'old_test' });
+- async checkPlacement({ designId, world, x, z, y?, facing?: 'north'|'east'|'south'|'west' }) | scopes: content:read
+  - Returns: { check: { clear, reasons, world, facing, anchor, bounds: { min, max }, ground: { y, min, max, water }, builtBlocks, builtSamples, placedBy: [{ name, blocks }], design } }
+  - Check a building site for a design: where it would sit and whether it would touch anyone's builds.
+  - Server owner only for now.
+  - The footprint is centred on x/z and turned to face facing; without y it sits on the ground. clear is false when built (non-natural) blocks stand in the footprint or 3 blocks around it, the ground is very uneven, or it would leave the world; reasons explains. placedBy lists players CoreProtect recorded placing blocks there.
+  - Call on a user action (drop or rotate), not while dragging.
+  - Example: const { check } = await Twinkle.minecraft.checkPlacement({ designId: 'harbor_house', world: 'world', x: 1200, z: 700, facing: 'south' }); outline.color = check.clear ? 'green' : 'red';
+- async buildDesign({ ...placement, force }) | scopes: content:write
+  - Returns: { jobId, check }
+  - Order Zero to build a design at a site; he switches to creative and builds it before other work.
+  - Server owner only for now. The site is checked again; a site that isn't clear is refused (400 minecraft_studio_rejected) unless force is true.
+  - Follow progress with getZero() (currentBuild) and getZeroBuilds().
+  - Example: const { jobId } = await Twinkle.minecraft.buildDesign({ designId: 'harbor_house', world: 'world', x: 1200, z: 700, facing: 'south' });
+- async stopZero() | scopes: content:write
+  - Returns: { stopped, message }
+  - Stop the build Zero is doing right now (placed blocks stay).
+  - Server owner only for now.
+  - Example: await Twinkle.minecraft.stopZero();
+- async undoBuild({ jobId }) | scopes: content:write
+  - Returns: { undone, title, message }
+  - Undo one of Zero's builds, putting back what was there before.
+  - Server owner only for now.
+  - Example: await Twinkle.minecraft.undoBuild({ jobId });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
