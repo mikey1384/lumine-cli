@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.50.0
+Version: 1.51.0
 Updated: 2026-09-24
-Generated: 2026-09-23T23:21:55.717Z
+Generated: 2026-09-24T00:08:02.260Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -787,12 +787,13 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - limit is 1-50 (default 10). kind filters to helper or workshop builds.
   - Example: const { builds } = await Twinkle.minecraft.getZeroBuilds({ limit: 10, kind: 'workshop' });
 - async getPeople() | scopes: content:read
-  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', groups, op, online, banned, protected, firstSeenAt, lastSeenAt, isZero }], roles }
+  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', groups, op, online, banned, protected, firstSeenAt, lastSeenAt, isZero, twinkle: { userId, username } | null }], roles }
   - Everyone who has joined the server with their in-game role, for the server owner's role management screen.
   - Only the server owner, in an app they own, gets the list; everyone else gets { canManage: false, people: [] } without an error, so hide the feature when canManage is false.
   - Roles: visitor (play and chat), member (/tpa, /home, /back, may ask Zero to build), builder (member + /fly and creative/survival), moderator (builder + teleport others, CoreProtect rollback, /kick). op: true players are server operators and have every power regardless of role.
   - protected: true players (the owner and Zero's account) can't be changed from the app. Sorted online first, then most recently seen.
   - Not cached; call on screen open or after a change, not on a timer.
+  - twinkle is the Twinkle account linked to that player with /link, or null.
   - Example: const { canManage, people } = await Twinkle.minecraft.getPeople(); if (!canManage) hidePeopleTab();
 - async setPlayerRole({ uuid, role }) | scopes: content:write
   - Returns: { player: { uuid, name, role, op } }
@@ -827,6 +828,23 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Server owner only: stop (or allow again) a Twinkle user sending web chat into the server.
   - Server owner only, in an app they own; others get 403 with code minecraft_roles_forbidden. muted defaults to true.
   - Example: await Twinkle.minecraft.muteChatUser({ userId: event.userId, muted: true });
+- async getMyLink() | scopes: content:read
+  - Returns: { links: [{ uuid, name, linkedAt }], pending: { code, expiresAt } | null }
+  - The Minecraft accounts linked to the signed-in viewer's Twinkle account, and any unused link code.
+  - Always the caller's own account. A viewer may link several Minecraft accounts (e.g. Java and Bedrock); each Minecraft account belongs to one Twinkle user.
+  - Poll every few seconds only while showing a code and waiting for the player to type /link in game.
+  - Example: const { links } = await Twinkle.minecraft.getMyLink(); const myMinecraftName = links[0]?.name;
+- async createLinkCode() | scopes: content:write
+  - Returns: { code, expiresAt, command }
+  - Get a one-time code the viewer types in game as /link CODE to connect that Minecraft account to their Twinkle account.
+  - Signed-in viewers only. Codes last 10 minutes, work once, and a new code replaces the old one. About 5 codes per 10 minutes: 429 minecraft_link_rate_limited.
+  - The player sees a confirmation in game; getMyLink() then lists the account.
+  - Example: const { command } = await Twinkle.minecraft.createLinkCode(); showText(`Type ${command} in Minecraft`);
+- async unlinkMinecraft({ uuid }) | scopes: content:write
+  - Returns: { removed }
+  - Remove one of the viewer's own linked Minecraft accounts.
+  - Only the viewer's own links; removed is false when there was nothing to remove.
+  - Example: await Twinkle.minecraft.unlinkMinecraft({ uuid: link.uuid });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
