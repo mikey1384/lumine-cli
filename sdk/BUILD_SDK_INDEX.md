@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.55.0
-Updated: 2026-09-24
-Generated: 2026-09-24T11:41:42.326Z
+Version: 1.56.0
+Updated: 2026-09-25
+Generated: 2026-09-25T02:09:47.275Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -940,6 +940,59 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Remove the viewer's arrival point in a world (back to the shared arrival).
   - world is a world id such as world, world1, world3, world_nether.
   - Example: await Twinkle.minecraft.clearArrivalPoint({ world: 'world3' });
+- async getPlayAreas() | scopes: content:read
+  - Returns: { levels: [{ id, name, world, box: [x0,y0,z0,x1,y1,z1], spawn: [x,y,z], by, createdAt, status: 'capturing'|'ready'|'failed', chunkCount, done, blocks }] }
+  - Play areas: captured Minecraft builds (a castle, a cathedral) that apps turn into first-person games, newest first.
+  - Anyone can read. box is inclusive world coordinates; status 'capturing' areas are still being saved (done of chunkCount).
+  - Example: const { levels } = await Twinkle.minecraft.getPlayAreas();
+- async getPlayArea({ id }) | scopes: content:read
+  - Returns: { level: { ...getPlayAreas fields, chunks: [[cx, cz, visibleBlocks]] } }
+  - One play area with its list of captured chunk columns, to stream with getPlayAreaChunk.
+  - Chunk columns are 16x16 blocks (cx = floor(x / 16)); load the ones near the player first.
+  - Example: const { level } = await Twinkle.minecraft.getPlayArea({ id: 'twinkle-keep' });
+- async getPlayAreaChunks({ id, chunks: [[cx, cz], ...] }) | scopes: content:read
+  - Returns: { scenes: [{ cx, cz, scene: { origin: [x,y,z], size: [w,h,d], palette, blocks, light, biomes, count, ... } | null }] }
+  - Up to 9 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
+  - Same scene format as getSnap; only blocks with a visible face inside the area are included. scene is null for a chunk that is not part of the area.
+  - At most 9 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
+  - Example: const { scenes } = await Twinkle.minecraft.getPlayAreaChunks({ id: level.id, chunks: [[64, 29], [65, 29]] });
+- async createPlayArea({ name, world, box, spawn, id }) | scopes: content:write
+  - Returns: { level }
+  - Capture a box of a Minecraft world as a new play area (or re-capture an existing id). Runs in the background: poll getPlayArea until status is 'ready'.
+  - Moderators and the server owner only; others get 403 minecraft_level_forbidden.
+  - At most 320 blocks across each way and 255 tall. spawn [x,y,z] is where players start (default: top centre of the box).
+  - Example: await Twinkle.minecraft.createPlayArea({ name: 'Sand Castle', world: 'world', box: [900, 60, 400, 980, 130, 470] });
+- async getBuildQueue() | scopes: content:read
+  - Returns: { active: job | null, queue: [{ id, title, kind, status, requester, world, bounds: { min, max }, designId, position, priority, mine, placed, total }], campaign: { id, title, active, steps, done, skipped, percent, current, resumeAt, world, steps: [{ index, title, status, designId, anchor, bounds, blocks }] } | null, noBuildWorlds, access: { rank, linked, canOrder, canModerate, isOwner } | null }
+  - Zero's build queue: the build he is on, the orders waiting (in the order he will take them) and the campaign steps he works through when no order waits. For an RTS-style build panel and for drawing queued footprints on a map.
+  - Everyone can read it; mine marks the viewer's own orders (linked account). Orders always run before campaign steps.
+  - noBuildWorlds lists worlds Zero never builds in (World 3, World 4): don't offer placement there.
+  - Example: const { active, queue, campaign, access } = await Twinkle.minecraft.getBuildQueue();
+- async moveQueuedBuild({ jobId, to }) | scopes: content:write
+  - Returns: same as getBuildQueue
+  - Server owner: move a waiting order to position `to` (0 = next).
+  - Owner only (403 minecraft_queue_owner_only).
+  - Example: await Twinkle.minecraft.moveQueuedBuild({ jobId: 142, to: 0 });
+- async removeQueuedBuild({ jobId }) | scopes: content:write
+  - Returns: same as getBuildQueue
+  - Take an order out of the queue (stops it if Zero is already building it). Your own orders; moderators also lower ranks'; the owner any.
+  - Builders and up with a linked account; the rank rule is the same as stopZero.
+  - Example: await Twinkle.minecraft.removeQueuedBuild({ jobId: 142 });
+- async moveCampaignStep({ index, before }) | scopes: content:write
+  - Returns: same as getBuildQueue
+  - Server owner: move a campaign step that has not started to just before the step at index `before` (null = last). Indexes are the step.index values from getBuildQueue.
+  - Owner only.
+  - Example: await Twinkle.minecraft.moveCampaignStep({ index: 17, before: 15 });
+- async skipCampaignStep({ index, skip = true }) | scopes: content:write
+  - Returns: same as getBuildQueue
+  - Server owner: skip a campaign step, or bring a skipped or failed one back (skip: false).
+  - Owner only. A step Zero is building has to be stopped first.
+  - Example: await Twinkle.minecraft.skipCampaignStep({ index: 18 });
+- async setCampaignActive({ active }) | scopes: content:write
+  - Returns: same as getBuildQueue
+  - Server owner: pause or resume Zero's campaign (a paused campaign waits; orders still run).
+  - Owner only.
+  - Example: await Twinkle.minecraft.setCampaignActive({ active: false });
 - async getServerLogs({ days, kinds, query, limit } = {}) | scopes: content:read
   - Returns: { total, lines: [{ at, kind: 'join'|'leave'|'kick'|'command'|'warn'|'error'|'zero'|'server', level, text }] }
   - The Minecraft server log for the server owner: joins, kicks, commands, warnings, errors and Zero's lines, newest first, IP addresses removed.
