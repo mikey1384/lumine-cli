@@ -2,7 +2,7 @@
 
 Version: 1.56.0
 Updated: 2026-09-25
-Generated: 2026-09-25T02:09:47.275Z
+Generated: 2026-09-26T00:29:35.317Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -846,7 +846,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Only the viewer's own links; removed is false when there was nothing to remove.
   - Example: await Twinkle.minecraft.unlinkMinecraft({ uuid: link.uuid });
 - async getDesigns({ query } = {}) | scopes: content:read
-  - Returns: { designs: [{ id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }], access: { rank, linked, canOrder, canModerate, isOwner } | null }
+  - Returns: { designs: [{ id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }], access: { rank, linked, canOrder, canModerate, isOwner, canKeepPrivate } | null }
   - Zero's design library: published designs plus the viewer's own private ones.
   - Built-in designs (redstone devices and so on) have no author and are public.
   - previewUrl is an image set with updateDesign, or null.
@@ -863,13 +863,13 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Save a design (or a new version of your design) from blueprint parts.
   - parts use Zero's blueprint shapes: box, hollow_box, walls, floor, line, block, cylinder, sphere, gable_roof, pyramid_roof; offsets x = east, y = up, z = south; later parts override earlier ones (carve doors/windows with "air"). Up to 60,000 blocks and 96 blocks in each direction.
   - category is building, decor, farm or path. visibility private (default) or public. Saving the same id again adds a version; only its designer can do that. Rejections come back as 400 minecraft_studio_rejected with a readable message.
-  - Who may: the server owner, and any signed-in viewer with a linked Minecraft account (Twinkle.minecraft.createLinkCode + /link); others get 403 minecraft_not_linked. Designs are private unless visibility is 'public'. Players have a limit on how many designs they keep.
+  - Who may: any signed-in viewer; they own what they save (they can change or delete it). Only builders and above (access.canKeepPrivate from getDesigns) may keep a design private; for anyone else visibility must be 'public' (omitted means public) or the call fails with 403 minecraft_private_needs_builder. Builders and above save private designs when visibility is omitted. Players have a limit on how many designs they keep.
   - Example: await Twinkle.minecraft.saveDesign({ id: 'harbor_house', name: 'Harbor house', category: 'building', visibility: 'private', parts: [{ shape: 'floor', from: [0, 0, 0], to: [8, 0, 6], block: 'stone_bricks' }, { shape: 'walls', from: [0, 1, 0], to: [8, 4, 6], block: 'spruce_planks' }] });
 - async updateDesign({ id, visibility, previewUrl, name, summary }) | scopes: content:write
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
   - Publish or unpublish a design, set its preview image, or rename it.
   - previewUrl is typically a Twinkle.files upload of a rendered preview.
-  - Who may: a design's own designer; moderators (by linked account) and the server owner may change or delete anyone's.
+  - Who may: a design's own designer; moderators (by linked account) and the server owner may change or delete anyone's. Only builders and above may set visibility 'private' (403 minecraft_private_needs_builder otherwise).
   - Example: await Twinkle.minecraft.updateDesign({ id: 'harbor_house', visibility: 'public' });
 - async deleteDesign({ id }) | scopes: content:write
   - Returns: { deleted }
