@@ -25,7 +25,8 @@ test("new and refreshed CLI workspaces teach agents to evaluate JEV adoption wit
       assert.match(reference, /Choice:.*type: 'choice'/);
       assert.match(reference, /Score:.*type: 'score'/);
       assert.match(reference, /Yes\/no probability:.*type: 'noul'/);
-      assert.match(reference, /latency plus AI Energy/);
+      assert.match(reference, /why the added latency is worthwhile/);
+      assert.match(reference, /never use the viewer's AI Energy/);
       assert.match(reference, /ordinary code/);
       assert.doesNotMatch(reference, /Old reference/);
     }

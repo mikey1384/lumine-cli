@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.56.0
-Updated: 2026-09-25
-Generated: 2026-09-26T00:29:35.317Z
+Version: 1.59.0
+Updated: 2026-09-26
+Generated: 2026-09-26T05:55:48.545Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -488,9 +488,10 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Errors include invalid_ai_decision (bad input), ai_decision_unavailable, ai_decision_timeout, ai_decision_rate_limited, ai_decision_invalid_response, and ai_usage_unavailable, plus the existing auth, access, Energy, and rate-limit errors. Invalid answers are rejected. An answer that fails validation is retried once on the server within the same deadline; there is no other provider retry, fabricated answer, or paid LLM fallback. Do not automatically retry a rejected request.
   - Call on meaningful app events with bounded frequency, batch questions, and keep rendering and deterministic game rules in local code. Ignore a result if the app state or turn changed while it was pending. Test uncertain inputs and choose a fallback appropriate to the experience; confidence is not a correctness guarantee.
   - Example: const { answers } = await Twinkle.ai.decide({ state: { playerRequest, availableActions }, questions: { action: { type: 'choice', instructions: 'Which available companion action best fits playerRequest? Use wait when unclear.', criteria: { follow: 'Follow the player', guard: 'Stay and keep watch', wait: 'Do nothing until clarified' } }, needsClarification: { type: 'noul', instructions: 'Is playerRequest too ambiguous to act on?' } } }); const action = answers.needsClarification.noul > 0.5 ? 'wait' : answers.action.choice;
-- async generateObject({ prompt, expectedStructure, thinkingMode, mode, model, instructions, systemPrompt, webSearch, requestId, onText, onStatus, onReasoning } = {}) | scopes: none
+- async generateObject({ prompt, expectedStructure, images, thinkingMode, mode, model, instructions, systemPrompt, webSearch, requestId, onText, onStatus, onReasoning } = {}) | scopes: none
   - Returns: { object, result, model, provider, thinkingMode, requestedThinkingMode, requestedModel, webSearch, aiUsagePolicy }
   - Generate a validated structured JSON object for app decisions, routing, grading, and game-state logic, with optional live output/status callbacks and web search.
+  - images: up to 3 reference image URLs the model looks at along with the prompt (a sketch, a photo, a screenshot). They must be Twinkle-hosted uploads (Twinkle.files.pickAndUpload / uploadGenerated asset URLs; PNG, JPEG, WebP or GIF); anything else is refused with 400 before any model call. Image input counts toward the AI Energy of the call like any other input.
   - Signed-in viewers only.
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
@@ -532,6 +533,20 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - GPT Image 2.5 battery spending uses actual image-model input and output token usage. The confirmation shows an image-output estimate; prompts and reference images use additional energy.
   - responseId and imageId are opaque continuation handles. Pass them back unchanged to edit a prior result; do not assume an OpenAI ID format. Existing GPT Image 2 continuations remain usable.
   - Example: const result = await Twinkle.ai.generateImage({ prompt: 'Create a fashion guide portrait for this face with flattering colors and outfit ideas', referenceImageB64, quality: 'high', onStatus: (status) => console.log(status.stage) });
+- async generateMusic({ prompt, length, instrumental, requestId, timeoutMs } = {}) | scopes: none
+  - Returns: { success, asset, url, mimeType, structure, length, instrumental, model, requestId, replayed?, aiUsagePolicy }
+  - Generate a finished piece of music (rendered audio, not notes) from a text description with Google Lyria. The audio is saved to the viewer's own Twinkle.files and returned as an asset URL.
+  - Signed-in viewers only. Call it directly from an explicit viewer action such as a button click; calls from page load, timers or programmatic retries are rejected (USER_ACTIVATION_REQUIRED).
+  - Twinkle shows a host-owned confirmation with the battery cost for every generation. One approval authorizes exactly one request.
+  - length: 'full' (default) is a complete song of about two to three minutes (Lyria 3.5); 'clip' is a 30-second piece (Lyria 3 Clip) at half the cost.
+  - Describe genre, mood, instruments, tempo and structure in the prompt; ask for vocals or pass instrumental: true for no vocals. Duration and vocals have no other controls.
+  - Prompts naming artists, bands, songs or copyrighted lyrics are refused with code music_prompt_blocked and cost nothing: show the viewer the error message so they can reword it.
+  - The result is a normal Twinkle.files asset (asset.id, asset.url, audio/mpeg) owned by the viewer and counted against their file storage; it also appears in Twinkle.files lists. Store asset.url (e.g. in privateDb/sharedDb) to play it later.
+  - structure is the model's song-structure text (section markers, and lyrics when there are vocals).
+  - AI Energy is charged only after the music is saved. Failures, timeouts and refusals are not charged.
+  - Only one music generation per viewer may run at a time (code ai_music_generation_in_progress). A retry with the same requestId returns the finished result without paying again (replayed: true), or code music_in_progress while it is still being made.
+  - Generation usually takes one to three minutes; the SDK timeout defaults to 600000ms. Show progress UI while waiting.
+  - Example: const song = await Twinkle.ai.generateMusic({ prompt: 'Warm lo-fi hip hop with dusty drums, a mellow Rhodes and rain in the background', instrumental: true }); audio.src = song.url;
 - onImageGenerationStatus(listener) | scopes: none
   - Returns: unsubscribe function
   - Subscribe to real-time image generation status events forwarded into the build iframe.
@@ -999,6 +1014,21 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Server owner only, in an app they own; everyone else gets 403 minecraft_roles_forbidden.
   - days 1-7 (default 1); kinds any of join, leave, kick, command, warn, error, zero, server (default all); query filters by text; limit 1-1000 (default 300). Chat is not included (getChat and getChatHistory have it).
   - Example: const { lines } = await Twinkle.minecraft.getServerLogs({ days: 2, kinds: ['kick', 'error'] });
+- async getNews({ limit } = {}) | scopes: content:read
+  - Returns: { posts: [{ id, title, body, author, at }], canPost }
+  - Server news: short posts about what's new on Twinkle Minecraft, newest first (players see the newest on join and all of it with /news in game).
+  - Every viewer reads the news. at is the post time in ms; limit 1-50 (default 20). canPost is true for moderators and the server owner (they can call addNews and deleteNews).
+  - Example: const { posts, canPost } = await Twinkle.minecraft.getNews({ limit: 10 });
+- async addNews({ title, body }) | scopes: content:write
+  - Returns: { post: { id, title, body, author, at } }
+  - Post server news (moderators and the server owner). Players in game see the headline right away.
+  - title up to 120 characters (required), body up to 2000. Others get 403 minecraft_news_forbidden. The author is the signed-in viewer's Twinkle username.
+  - Example: await Twinkle.minecraft.addNews({ title: 'World 3 reopens', body: 'Come build!' });
+- async deleteNews({ id }) | scopes: content:write
+  - Returns: { deleted }
+  - Remove a news post (moderators and the server owner).
+  - Others get 403 minecraft_news_forbidden.
+  - Example: await Twinkle.minecraft.deleteNews({ id: post.id });
 
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
