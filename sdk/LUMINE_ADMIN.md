@@ -1218,6 +1218,19 @@ submitted. The website equivalent is the Management panel's "Edit a copy to
 propose changes" (a private workspace copy owned by the reviewer) followed by
 "Offer my copy with these rules".
 
+**Try this version (since 2026-09-26, API 3c08af5d / vite 2.2.86).** While an
+offer is `changes_offered`, the creator and the reviewer (and nobody else) get
+a **Try this version** button on the chat card, in the creator's reward
+settings and in the Management approvals panel. It plays the offered
+`proposalSnapshot` as a normal app preview through
+`GET /build/preview/build/:buildId/reward-proposal/:reviewId`, with a token of
+its own scope (`reward-proposal:preview`, bound to viewer, build, review and
+revision; re-checked on every file request). XP and Coins inside it are
+simulated against the offered rules and never pay. The app's own SDK data
+calls (privateDb, sharedDb…) still reach the build's real data as the viewer,
+like a draft preview, and the modal says so. A newer revision or an answered
+offer closes the preview (409).
+
 Each offer has a server-owned revision. Changing the files, rules or note
 creates a new revision; a creator looking at an older comparison or decline
 confirmation cannot answer the replacement offer. The creator sees its reward
@@ -3289,6 +3302,16 @@ acting, `off` disables):
 
 Separately from JEV, a run that reaches its round cap with nothing saved while
 Energy remains gets one extra apply-only round (`applyOnlyRound`).
+
+Before any JEV question (since 2026-09-26, API ea257c0a): when the remaining
+Energy, after the model's hand-off reserve, cannot cover two typical rounds
+(one read and one edit, `LUMINE_MIN_ROUNDS_FOR_PROJECT_EDIT`) on the chosen
+model but can on a lighter one, the run does not start and shows the
+switch-model card; nothing is spent. Lineage metadata records
+`tooTightForAnEdit`, `roundsOnThisModel` and `lighterModelRounds`. The
+composer checks the same arithmetic up front (model options carry
+`handoffReserveEnergyUnits`): it offers a one-tap switch, and it disables
+sending with an explanation when no model can afford even one step.
 
 Every UTC day in `lumine admin energy-budget --json` now carries `pacing`.
 Report in **"Insights for Mikey"** in every full run, for the last completed
