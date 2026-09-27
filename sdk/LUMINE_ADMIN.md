@@ -1299,6 +1299,109 @@ ids (`reward-review show <id>` lists its events). An `accept` without a
 the comparison; mention it, it is not a fault. Refusals are the concurrency
 guards working; report them, and escalate only a repeated pattern on one app.
 
+### Members' chat reports (any time; also a full-daily-review duty, added 2026-09-27)
+
+Any member can report another member's chat message from the message's "…"
+menu (reasons: bullying or harassment, sexual content, asking for personal
+info, spam or scam, something else; optional note). The API snapshots the
+message and a few messages around it, so a later edit or delete does not
+erase the evidence, and Zero DMs Mikey on the first report of each message.
+The reporter only sees "Thanks. Our team will look at this."; the reported
+member is never told. The full-run intake and report carry `chatReports`
+(pending = `open` + `reviewing`), like `rewardReviews`. These commands need no
+daily run:
+
+```bash
+lumine admin chat-reports list --json                    # pending (default)
+lumine admin chat-reports list --status all --cursor 40 --json
+lumine admin chat-reports show 12 --json                 # snapshot + context
+lumine admin chat-reports set 12 --status resolved --note "What was decided or done" --json
+```
+
+Read every pending report's snapshot and context in each full run. A report
+about a child's safety or wellbeing (sexual content, requests for personal
+information or photos, threats, targeted bullying) belongs at the top of the
+escalation list for Mikey with the report id, both usernames and a one-line
+summary; set it to `reviewing` with a note saying so. Spam, obvious
+misclicks and ordinary disagreements can be `dismissed` with a note.
+Recording a status only annotates the report: never message, ban or
+otherwise act against either member without Mikey's explicit go-ahead.
+
+### Child-safety holds, evidence export and incident runbook (Mikey only, added 2026-09-27)
+
+> Not legal advice. Have a Korean lawyer review this procedure.
+
+Mikey, 2026-09-27: "if someone did something wrong - especially if for
+example a teacher was being inappropriate to a kid - shouldnt we be able to
+help police investigate?"
+
+**Automatic holds.** A report for sexual content or asking for personal
+info, or any report between a minor and an adult where both ages are known
+(an admin-approved birthdate, otherwise the birthdate on the profile), places
+a safety hold on the whole conversation and on both accounts. A second such
+report in the same conversation joins the existing hold. Zero, Ciel and the
+site-wide General channel are never held (a General report holds the two
+accounts). Zero's alert DM to Mikey says when a hold was placed, and
+`chat-reports show <id>` lists `safetyHoldIds`.
+
+**What a hold does**, silently, until it is released: a member's delete or
+edit still works for everyone, but the message row stays and the text before
+an edit (or the row at deletion) is copied to the hold; topic edits, removed
+archived profile pictures and removed previous usernames are copied too.
+Permanent deletion of a held message or of a held member's post or comment is
+refused with a neutral "can't be permanently deleted right now". Twinkle has
+no account deletion, so accounts are never erased. Nothing about a hold is
+shown to members.
+
+These commands are for Mikey. A daily run may read `list-holds` and report
+it, but never places, releases or exports a hold or suspends anyone without
+Mikey's explicit instruction for that case:
+
+```bash
+lumine admin chat-reports hold 12 --note "Why this case is held" --json
+lumine admin chat-reports hold --user 7,9 --channel 40 --note "Parent phoned" --json
+lumine admin chat-reports list-holds [--status active|released|all] --json
+lumine admin chat-reports suspend --user 7 --note "Adult under investigation" --json
+lumine admin chat-reports export 12 --out ~/twinkle-case-12 --json   # or --hold <id>
+lumine admin chat-reports release 3 --note "Police closed the case" --json
+```
+
+Every hold, release, export and suspension is recorded with who and when
+(`chat_safety_actions`), and released holds keep their copies.
+
+**Incident runbook** (for example, an adult or a teacher being inappropriate
+to a child):
+
+1. **Suspend the adult's access**: `chat-reports suspend --user <id> --note
+   <why>`. This is the website's full ban: it signs them out and blocks the
+   site. Lift it later from the website's Management ban editor.
+2. **Place or confirm the hold**: `chat-reports hold <report-id> --note <why>`
+   (or `--user`/`--channel` when there is no report yet, for example after a
+   parent's call), then `list-holds` to check that it covers the conversation
+   and both accounts.
+3. **Export the evidence**: `chat-reports export <report-id> --out <new
+   folder>`. The folder holds the whole conversation with UTC and KST times,
+   deletions and held edits; both accounts (username, id, join date, verified
+   email, birthdates, username history, linked Minecraft players, and the IP
+   addresses the site stores for logouts, searches and page visits); the
+   report(s); the actions taken; and `manifest.json` with each file's
+   SHA-256. Write down the printed manifest hash, keep the folder private,
+   and never edit it. Attachments are listed by storage key, not included.
+4. **Contact the police**: 112 for an emergency or ongoing danger, or the
+   cyber crime report system at https://ecrm.police.go.kr. Give them the
+   export when they ask for it.
+5. **Contact child protection**: report suspected child abuse to 112 (the
+   national child-abuse report line), which connects to the local
+   아동보호전문기관 (child protection agency).
+6. **Teachers and academy staff are mandatory reporters**: under Korea's Act
+   on Special Cases Concerning the Punishment of Child Abuse Crimes, teachers
+   and academy (hagwon) staff must report suspected child abuse. If the adult
+   is a teacher, their employer may also need to be told; ask the lawyer.
+7. **Do not** confront or warn the adult, delete anything, or share the
+   evidence with anyone but the police or child-protection staff.
+8. **Release the hold** only after the case is closed: `chat-reports release
+   <hold-id> --note <why>`.
+
 ## Private carry-over todos
 
 ```bash

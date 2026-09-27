@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.59.0
-Updated: 2026-09-26
-Generated: 2026-09-26T05:55:48.545Z
+Version: 1.60.0
+Updated: 2026-09-27
+Generated: 2026-09-27T07:17:40.033Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -36,7 +36,7 @@ Generated: 2026-09-26T05:55:48.545Z
 - The creator's agent designs the rewards. Declare the economy in a project file `rewards.json` at the root: budgets (userDailyXP, userDailyCoins, optional userDailyClaims; there is no app-wide daily or lifetime budget, only what one learner can earn per day) and rules [{ id, title, xp, coins, verifier: 'numeric-quiz' | 'completion', maxAttempts?, retry?: { xpPercent, coinsPercent, paidAttempts? }, minSeconds? (completion), progression?: 'dated' | 'until-earned' (quiz) }]. Wire the matching Twinkle.rewards calls with those literal rule ids. Questions and answer keys NEVER go in project files (published source is readable by every player): quiz rules get them from the private question sheet uploaded with `lumine rewards sheet <file.json>` ({ rules: { <ruleId>: { questions?, sets? } } }); `lumine rewards check` validates both together. A review request freezes the code and proposes rewards.json merged with the sheet; the administrator reads the code, checks the amounts and whether the app is exploitable, may change any amount, and approves. Creators are kids and teens: show approval status and one Send for review action; do not ask them to fill in technical forms. Every code update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate. Apps read amounts, tries and sets from getStatus, never from their own file.
 - Verifiers: 'numeric-quiz' pays for server-checked numeric answers (retry share, attempt limits, dated sets or until-earned sets that stay up until somebody earns them, after-answer guides). 'completion' pays when the app reports an activity finished — a cleared stage, a finished round — at least minSeconds after start({ ruleId }); the server checks only the elapsed time, once per learner per site day (UTC midnight), and the budgets. Call start when the activity begins and claim({ challengeId }) with no answers when it ends; keep completion amounts and userDailyXP small enough that a player scripting the calls would not matter, because nothing else is verified.
 - Numeric quiz answers are verified on the server; client scores, privateDb state, timers and completion booleans are not verified reward evidence. Limits reset at UTC midnight. Rules are earned once per viewer per UTC day; attempt limits and retry payouts come from the approved rule. Challenges expire at the UTC day boundary. Budgets apply across release changes.
-- Optional reward rule controls: maxLifetimeClaims caps one learner’s receipts for that rule across every day and release; completionProof: classic-tower-v1 requires a server-simulated Classic Tower finish in addition to minSeconds. These are server-enforced controls. Existing completion rules without completionProof still verify elapsed time only. Registered proof profiles also include breadface-v1, breadface-v2 and breadface-v3 (server-simulated Breadface inputs; each is one reviewed release's exact physics, chosen by the reviewer) study-record-v1 (a private study record reviewed by JEV, billed to the learner’s AI Energy), and Groove Lab's groove-lab-song-v1 (a song the learner published today, checked on the server for length, notes and originality) and groove-lab-heard-v1 (three established accounts finished the learner's songs today). Profiles are platform-owned; an app cannot invent a verifier or authorize its own reward.
+- Optional reward rule controls: maxLifetimeClaims caps one learner’s receipts for that rule across every day and release; completionProof: classic-tower-v1 requires a server-simulated Classic Tower finish in addition to minSeconds. These are server-enforced controls. Existing completion rules without completionProof still verify elapsed time only. Registered proof profiles also include breadface-v1, breadface-v2 and breadface-v3 (server-simulated Breadface inputs; each is one reviewed release's exact physics, chosen by the reviewer) study-record-v1 (a private study record reviewed by JEV, billed to the learner’s AI Energy), and Groove Lab's groove-lab-song-v1 (a song the learner published today, checked on the server for length, notes and originality) and groove-lab-heard-v1 (three established accounts finished the learner's songs today), Ashen Vigil's vigil-guest-coplay-v1 (a new guest spent 10 minutes with the learner in a private world room, measured by the world relay; each guest pays once) and minecraft-first-link-v1 (the learner is the first Twinkle account ever linked to that Minecraft player; each player pays once). Profiles are platform-owned; an app cannot invent a verifier or authorize its own reward.
 
 ## AI decision design
 - When planning a new app or an improvement, consider whether model-based judgments would materially improve the requested experience. Twinkle.ai.decide runs JEV, a model for narrow decisions over supplied text or structured state. Potential uses include interpreting a player's request to an NPC, choosing among legal game actions, classifying user content, ranking supplied candidates, and adapting an activity to evidence about the learner. These are examples to reason from, not a keyword checklist or a requirement to add AI to every app.
@@ -608,9 +608,10 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Returns subject ids plus rootType/rootId metadata for picker UIs. Empty queries return an empty result set.
   - Example: const { subjects } = await Twinkle.subjects.search({ query: searchText, limit: 12 });
 - async getSubject(subjectId) | scopes: content:read
-  - Returns: { subject: { id, title, description, filePath, fileName, fileSize, thumbUrl, secretAnswer, secretAttachment, timeStamp, userId, username, profilePicUrl, rootType, rootId, rewardLevel } }
+  - Returns: { subject: { id, title, description, filePath, fileName, fileSize, thumbUrl, secretAnswer, secretAttachment, hasSecretAnswer, hasSecretAttachment, secretShown, timeStamp, userId, username, profilePicUrl, rootType, rootId, rewardLevel } }
   - Returns full detail for a single subject, including uploader info and attachments.
   - Any subject can be fetched (not limited to viewer's own).
+  - secretAnswer and secretAttachment follow the site's rule: they are filled only when the viewer posted the subject or has responded to it (secretShown true). Otherwise they are null and hasSecretAnswer / hasSecretAttachment say a secret exists.
 - async getSubjectComments(subjectId, { limit, cursor } = {}) | scopes: content:read
   - Returns: { comments: [{ id, content, filePath, fileName, fileSize, thumbUrl, timeStamp }], cursor? }
   - Returns only the current viewer's own comments on the given subject.
@@ -661,6 +662,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Lists completed existing AI Stories newest first by default; order:'oldest' is allowed only with difficulty, type, and topicKey for chronological book pages.
   - Use difficulty with type and topicKey to load one exact AI Story book without scanning the full corpus in the iframe.
   - Filter with hasImage or hasQuestions when building visual galleries or quiz apps.
+  - A story the signed-in viewer is still playing (an AI Story attempt they have not submitted) comes back without answerIndex on its questions; the site reveals that key only after the viewer submits.
   - Example: const { stories } = await Twinkle.aiStories.list({ difficulty: 1, type: 'science', topicKey: 'Astronomy', order: 'oldest', limit: 20 });
 - async chapters({ limit, cursor, groupBy, difficulty, type, topicKey, storyBy, isListening, userId, hasImage, hasQuestions } = {}) | scopes: content:read
   - Returns: Default (groupBy:'topicKey'): { chapters: [{ difficulty, type, topicKey, title, sampleTopic, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], cursor?, pagination, filters }. groupBy:'type': { books: [{ difficulty, type, title, sampleTopic, chapterCount, storyCount, readingCount, listeningCount, imageCount, questionCount, latestStoryId, latestTimeStamp }], ... } — one row per (level, topic) book. groupBy:'author': { authors: [{ storyBy, title, bookCount, chapterCount, storyCount, minDifficulty, maxDifficulty, latestStoryId }], ... } — one row per generating model (the story's author); an index-only landing, so it omits media counts (use a scoped books/chapters call for those).
@@ -676,29 +678,41 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Searches completed existing AI Stories by topic/story text.
   - Use difficulty, type, and topicKey to search within one book of the AI Story corpus; order:'oldest' is rejected without all three filters.
   - Returned questions are normalized to an array even when stored as JSON text.
+  - A story the signed-in viewer is still playing (an AI Story attempt they have not submitted) comes back without answerIndex on its questions; the site reveals that key only after the viewer submits.
   - Example: const { stories } = await Twinkle.aiStories.search({ query: searchText, difficulty: 2, type: 'history', topicKey: 'Ancient Rome', order: 'oldest', limit: 12 });
 - async get(storyId) | scopes: content:read
   - Returns: { story: { id, contentType, contentId, topic, topicKey, type, story, explanation, difficulty, isListening, imagePath, imageUrl, audioPath, audioUrl, questions, questionsBy, hasImage, hasQuestions, userId, username, profilePicUrl, timeStamp } }
   - Fetch one completed existing AI Story by id, including story text for passage typing, media URLs, and normalized questions when available.
   - Fetches one completed existing AI Story by id.
+  - A story the signed-in viewer is still playing (an AI Story attempt they have not submitted) comes back without answerIndex on its questions; the site reveals that key only after the viewer submits.
   - This namespace is read-only and does not generate new AI Stories.
   - Example: const { story } = await Twinkle.aiStories.get(storyId);
 
 ### Twinkle.grammarbles
 - async listQuestions({ level, limit, cursor } = {}) | scopes: content:read
-  - Returns: { questions: [{ id, level, rating, question, choices, answerIndex, correctChoice, correctChoiceKey, isChecked, explanation }], cursor?, pagination: { level, limit, hasMore, nextCursor } }
-  - Read public Grammarbles questions and answers by level with rating/id cursor pagination.
-  - Questions are public Grammarbles training data and include the canonical answer.
+  - Returns: { questions: [{ id, level, rating, question, choices, isChecked }], cursor?, pagination: { level, limit, hasMore, nextCursor } }
+  - Read Grammarbles questions and choices by level with rating/id cursor pagination; answers stay on the server.
+  - Questions do not include the answer, answerIndex or explanation: Grammarbles is a rewarded game, so its key stays on the server. Check a pick with Twinkle.grammarbles.checkAnswer.
+  - Each question's choices come in a fixed order; pass the index of the picked choice in that order to checkAnswer.
   - level is clamped from 1 through 5.
   - Pagination is stable by rating then id. Pass cursor from the previous response to load more questions in the same level.
   - This method does not expose daily attempt state, XP, coins, or daily-task progression.
   - Example: const page = await Twinkle.grammarbles.listQuestions({ level: 3, limit: 100 }); const question = page.questions[Math.floor(Math.random() * page.questions.length)];
+- async checkAnswer({ questionId, choiceIndex }) | scopes: content:read
+  - Returns: { questionId, choiceIndex, isCorrect, explanation }
+  - Check one Grammarbles pick on the server: right or wrong, plus the review explanation on a right pick.
+  - choiceIndex is 0-3 in the order listQuestions returned the choices.
+  - The right position is never returned. Let the learner try again until the pick is right, as Grammarbles itself does.
+  - explanation is null unless the pick is right and the question has a reviewed explanation.
+  - Each viewer has a daily allowance of answer checks (500 per UTC day); past it the call fails with code grammarbles_check_limit.
+  - Checking pays nothing and does not touch daily Grammarbles attempts, XP, coins, or daily tasks.
+  - Example: const { isCorrect, explanation } = await Twinkle.grammarbles.checkAnswer({ questionId: question.id, choiceIndex: pickedIndex }); if (!isCorrect) showTryAgain(); else showCorrect(explanation);
 - async getMyQuestionHistory({ level, limit, cursor } = {}) | scopes: content:read
   - Returns: { attempts: [{ id, questionId, level, grade, gradeRank, isCorrect, attemptNumber, timeStamp }], cursor?, pagination: { level, limit, hasMore, nextCursor } }
   - Read the signed-in viewer's real Grammarbles attempt rows for trainer filtering.
   - Returns real Grammarbles attempt outcome rows for the signed-in viewer, newest first.
   - History rows intentionally omit choice indexes because real Grammarbles choices are shuffled per run and the per-run shuffle order is not persisted.
-  - Use Twinkle.grammarbles.listQuestions for canonical question text, choices, and answers.
+  - Use Twinkle.grammarbles.listQuestions for question text and choices, and Twinkle.grammarbles.checkAnswer to check a pick.
   - Use app-private history in Twinkle.privateDb for trainer-only results, and combine it with this method only when the viewer chooses to include real Grammarbles history.
   - This method is read-only and does not submit, cancel, or mutate daily Grammarbles attempts.
   - Example: const history = await Twinkle.grammarbles.getMyQuestionHistory({ level: selectedLevel, limit: 500 }); const answeredIds = new Set(history.attempts.map((attempt) => attempt.questionId));
@@ -802,19 +816,20 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - limit is 1-50 (default 10). kind filters to helper or workshop builds.
   - Example: const { builds } = await Twinkle.minecraft.getZeroBuilds({ limit: 10, kind: 'workshop' });
 - async getPeople() | scopes: content:read
-  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', op, online, isZero, twinkle: { userId, username } | null, ...owner: groups, banned, protected, firstSeenAt, lastSeenAt | ...others: seen: 'online'|'today'|'week'|'month'|'older'|null }], roles }
+  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', op, online, isZero, twinkle: { userId, username } | null, ...owner: groups, banned, protected, firstSeenAt, lastSeenAt, endorsements: [{ voucherName, voucherUuid, endorsedAt }] | ...others: seen: 'online'|'today'|'week'|'month'|'older'|null }], roles }
   - Everyone who has joined the server with their in-game rank, for a player directory; the server owner also gets the full records for role management.
   - Every viewer gets the list. Only the server owner, in an app they own, gets canManage: true with full records (groups, bans, exact first/last seen); everyone else gets canManage: false and the public view: banned players left out, and seen is a rough bucket instead of exact times. Show role controls only when canManage is true.
   - Roles: visitor (play and chat), member (/tpa, /home, /back, may ask Zero to build), builder (member + /fly and creative/survival), moderator (builder + teleport others, CoreProtect rollback, /kick). op: true players are server operators and have every power regardless of role.
   - protected: true players (the owner and Zero's account) can't be changed from the app. Sorted online first, then most recently seen.
   - Not cached; call on screen open or after a change, not on a timer.
   - twinkle is the Twinkle account linked to that player with /link, or null.
+  - endorsements (owner view only) lists who backed this player's Builder application: a moderator or anyone above typed /vouch for a player already on Twinkle. voucherUuid is the voucher's Minecraft uuid (null when endorsed from the app or console); endorsedAt is an ISO time. Empty when there are none, or when the server's vouch list could not be read.
   - Example: const { canManage, people } = await Twinkle.minecraft.getPeople(); renderDirectory(people, { editable: canManage });
 - async setPlayerRole({ uuid, role }) | scopes: content:write
   - Returns: { player: { uuid, name, role, op } }
   - Change a player's in-game role; it applies immediately, even while they are online.
   - Server owner only, in an app they own; others get 403 with code minecraft_roles_forbidden.
-  - role is visitor, member, builder or moderator. 400 codes: minecraft_bad_uuid, minecraft_bad_role, minecraft_protected_player, minecraft_unknown_player. 503 minecraft_unavailable while the server restarts.
+  - role is visitor, member, builder, moderator, or a Partner rank above moderator: associate, senior_associate, partner, senior_partner (each keeps every moderator power). A promotion also sends the player's linked Twinkle account a DM, and the player gets a title and perks list in game. 400 codes: minecraft_bad_uuid, minecraft_bad_role, minecraft_protected_player, minecraft_unknown_player. 503 minecraft_unavailable while the server restarts.
   - Every change is logged on the server and emailed to the owner; the player is told in game.
   - Example: await Twinkle.minecraft.setPlayerRole({ uuid: person.uuid, role: 'builder' });
 - async getChat({ since } = {}) | scopes: content:read
@@ -938,6 +953,23 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Delete a snap from the Gallery.
   - Who may: the player who took it (by a linked Minecraft account), moderators, and the server owner. Others get 403 minecraft_snap_forbidden.
   - Example: await Twinkle.minecraft.deleteSnap({ id });
+- async getRecruitTours() | scopes: content:read
+  - Returns: { enabled, title, landmarks: [{ id, name, world, x, z, radius }], requirements: { playHours, days }, tours: [{ uuid, name, introducerUuid, introducerName, startedAt, completedAt, visited: [landmarkId], playSeconds, days }] }
+  - Recruit tours: each player someone brought to the server, who brought them, and their progress (landmarks visited, hours and days played). A completed tour is one recruiter point for the introducer.
+  - Everyone can read it; one shared copy refreshes every 15 seconds.
+  - The landmark list and requirements come from the server's config, so show them from here rather than hard-coding them.
+  - Example: const { landmarks, tours } = await Twinkle.minecraft.getRecruitTours();
+- async startRecruitTour({ uuid, introducerUuid }) | scopes: content:write
+  - Returns: { uuid, introducerUuid }
+  - Server owner only: record that introducerUuid brought player uuid to the server and start that player's landmark tour (a quest list in game).
+  - 403 minecraft_roles_forbidden for anyone but the server owner.
+  - 400 minecraft_already_credited when someone else was already credited; minecraft_self_introduced for the same player; minecraft_unknown_player when either never joined.
+  - Example: await Twinkle.minecraft.startRecruitTour({ uuid: recruit.uuid, introducerUuid: friend.uuid });
+- async cancelRecruitTour({ uuid }) | scopes: content:write
+  - Returns: { removed }
+  - Server owner only: remove a player's recruit tour (a mistaken credit).
+  - 403 minecraft_roles_forbidden for anyone but the server owner.
+  - Example: await Twinkle.minecraft.cancelRecruitTour({ uuid });
 - async getArrivalPoints() | scopes: content:read
   - Returns: { accounts: [{ uuid, name, online, world, worldLabel, points: [{ world, label, x, y, z, savedAt }] }] }
   - The viewer's private arrival points: where the Twinkle Gate portals drop their linked Minecraft account in each world.
@@ -1303,12 +1335,13 @@ world.updatePresence({ x, y, z, facing });
 
 ### Twinkle.rewards
 - await Twinkle.rewards.getStatus() | scopes: rewards:claim
-  - Returns: { mode: "live", dayKey, userDailyClaims, claimsToday, budgets: { userDailyXP, userDailyCoins }, rules: [{ id, title, xp, coins, verifier: "numeric-quiz" | "completion", minSeconds?, progression?, retryReward: { xp, coins }, maxAttempts, available, setKey, questionCount }], challenges: [{ challengeId, ruleId, attempts, attemptsRemaining, state: "open" | "finished" | "earned", setKey, questions: [{ prompt, hint?, guide? }] }], history: [{ ruleId, xp, coins, attempt, createdAt }], balances: { xp, coins } } | { mode: "preview", dayKey?, rules, challenges: [], history: [], balances?, problems?: string[], message }
+  - Returns: { mode: "live", dayKey, userDailyClaims, claimsToday, budgets: { userDailyXP, userDailyCoins }, rules: [{ id, title, howTo?, xp, coins, verifier: "numeric-quiz" | "completion", minSeconds?, progression?, retryReward: { xp, coins }, maxAttempts, available, setKey, questionCount }], challenges: [{ challengeId, ruleId, attempts, attemptsRemaining, state: "open" | "finished" | "earned", setKey, questions: [{ prompt, hint?, guide? }] }], history: [{ ruleId, xp, coins, attempt, createdAt }], balances: { xp, coins } } | { mode: "preview", dayKey?, rules, challenges: [], history: [], balances?, problems?: string[], message }
   - Read canonical earning rules (without answer keys), today’s started challenges, today’s receipts and balances. Drafts return preview mode: for the app's owner the rules come from the draft's own rewards.json and question sheet (problems lists what is still wrong with them); anyone else sees no rules. Unapproved or revoked published releases return an error.
   - rules[].available is false on a site day (UTC) the reviewer scheduled no questions for; show the rule as not available instead of starting it. xp/coins are the first-try amounts; retryReward is what a correct answer pays after a wrong one (equal to xp/coins unless the reviewer set a retry share). maxAttempts null means unlimited wrong answers until the site's daily reset (UTC midnight, 9:00 AM in Korea). retry.paidAttempts, when set, is the last attempt number a correct answer is still paid on: a later correct answer is recorded as solved (receipt xp 0, coins 0) and pays nothing — tell the learner before they pass it.
   - challenges lists challenges this viewer already started today with their questions, so an app can resume after a reload without calling start. A question's guide (reviewer-approved JSON teaching content: explanation, interactive-model configuration) is present only once the viewer has answered at least once, right or wrong; render it as the after-attempt lesson. claimsToday against userDailyClaims (null = uncapped) tells whether another bounty can still pay today.
   - Under progression 'until-earned' the same set stays up day after day until somebody earns it; setKey names the set currently up. Completion rules are always available and have questionCount 0.
   - Rules may set maxLifetimeClaims, a per-learner limit for that rule across days and releases. rules[].lifetime contains the server-confirmed limit and remaining claims. App storage never enforces this limit.
+  - howTo is the rule's optional plain-words steps from rewards.json (up to 300 characters, e.g. "Save a new design of at least 64 blocks in Designs"). The Earn page shows it under the title; show it in the app's own rewards list too so players always know exactly what earns each reward.
 - await Twinkle.rewards.getReceipt({ challengeId }) | scopes: rewards:claim
   - Returns: { mode: "live", status: "awarded" | "pending" | "expired" | "not_found", receipt: { id, challengeId, ruleId, reviewId, artifactVersionId, dayKey, xp, coins, attempt, createdAt } | null, balances: { xp, coins } } | { mode: "preview", status: "not_found", receipt: null, message }
   - Read an existing receipt for this app and signed-in viewer by server-issued challengeId, including previous UTC days and previous approved versions. Requires the current approved published release and runtime grant; a stale frame must reload first. Never awards, retries a claim, returns answer keys, or restores removed rewards permission.
@@ -1319,7 +1352,7 @@ world.updatePresence({ x, y, z, facing });
   - Errors: build_reward_not_scheduled when the rule has no questions for today; build_reward_daily_claims_reached when the viewer already earned today’s cap. attemptsRemaining is null for unlimited rules.
   - For a completion rule call start when the activity begins (the moment the stage starts); the challenge's age is what the claim is measured against. In preview mode start also works for the owner (a stateless simulation).
   - For completionProof: classic-tower-v1, start also returns completion { profile, token, maxFrames, completed, failed }. A new start resets only the simulated climb to its canonical spawn; it cannot reset daily or lifetime rewards. Record inputs from the first physics frame. The completion token is bound to the viewer, challenge, rule and published release.
-  - For breadface-v1, breadface-v2 and breadface-v3, pass the zero-based canonical levelIndex. Record [dt, inputBits] from the first physics frame; start returns its server token and maxFrames. For study-record-v1, start returns completion { profile, usesAiEnergy: true }; there is no client-authored proof token. For groove-lab-song-v1 and groove-lab-heard-v1, start returns completion { profile }; there is no progress step.
+  - For breadface-v1, breadface-v2 and breadface-v3, pass the zero-based canonical levelIndex. Record [dt, inputBits] from the first physics frame; start returns its server token and maxFrames. For study-record-v1, start returns completion { profile, usesAiEnergy: true }; there is no client-authored proof token. For groove-lab-song-v1, groove-lab-heard-v1, vigil-guest-coplay-v1 and minecraft-first-link-v1, start returns completion { profile }; there is no progress step.
 - await Twinkle.rewards.progress({ challengeId, completionToken?, frames?, record?, requestId? }) | scopes: rewards:claim
   - Returns: { mode: "live" | "preview", completion: { profile, token?, completed, failed?, decision?, message?, maxFrames? }, aiUsagePolicy? }
   - Verify a bounded batch of inputs for an approved server-simulated climb.
@@ -1335,7 +1368,7 @@ world.updatePresence({ x, y, z, facing });
   - A wrong answer within two seconds of the previous one is refused with build_reward_throttled (HTTP 429) and does not count; wait for the person to try again rather than retry-looping.
   - Completion rules take no answers: claim({ challengeId }) when the activity is finished. build_reward_too_fast (HTTP 409) means fewer than minSeconds passed since start; show nothing and let play continue. In preview mode the receipt carries preview: true and nothing is paid.
   - A completionProof rule also requires the signed completionToken from a successful rewards.progress response. The server simulates the registered game physics and must reach the goal. A timer, forged position, client win flag, altered inventory or token from another viewer, challenge or release cannot authorize payment. maxLifetimeClaims is enforced from receipts in the same award transaction. build_reward_lifetime_claims_reached means all rewards for this rule have been collected; do not retry it.
-  - For study-record-v1, the server verifies the settled private review row and its viewer, app, exact release, challenge and day binding. It never trusts the client’s decision, requested award amount or AI answer. Each successful daily study record is claimable once; display only canonical receipt/balances. For groove-lab-song-v1, pass completionToken as the published song's sharedDb entry id; for groove-lab-heard-v1, pass none. The server reads the app's own groove-lab-songs, groove-lab-song-parts and groove-lab-listens rows and refuses with build_reward_completion_proof_required and a plain reason when the song or listeners do not qualify.
+  - For study-record-v1, the server verifies the settled private review row and its viewer, app, exact release, challenge and day binding. It never trusts the client’s decision, requested award amount or AI answer. Each successful daily study record is claimable once; display only canonical receipt/balances. For groove-lab-song-v1, pass completionToken as the published song's sharedDb entry id; for groove-lab-heard-v1, pass none; for vigil-guest-coplay-v1, pass the guest's world guestId (from world events) or the co-play record id; for minecraft-first-link-v1, pass nothing or the Minecraft UUID to use. The server reads the app's own groove-lab-songs, groove-lab-song-parts and groove-lab-listens rows and refuses with build_reward_completion_proof_required and a plain reason when the song or listeners do not qualify.
 - await Twinkle.rewards.getLeaderboard({ metric?: "xp" | "coins", period?: "day" | "week" | "all", limit? }) | scopes: rewards:claim
   - Returns: { mode: "live", metric, period, limit, dayKey, from, available: { xp, coins }, entries: [{ rank, userId, username, profilePicUrl, xp, coins, claims, lastAt }], me: { rank, xp, coins, claims } | null } | { mode: "preview", metric, period, available, entries: [], me: null, message }
   - Standings of who earned the most XP or Coins in THIS app, computed by Twinkle from its own receipts (never from anything the app submits). period 'day' is today (site day, UTC), 'week' the last 7 site days, 'all' (default) every day since approval. limit defaults to 20, max 100.
