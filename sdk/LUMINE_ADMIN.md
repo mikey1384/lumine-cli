@@ -1083,6 +1083,34 @@ mutation when a caller needs the same retry identity across processes. The CLI
 generates a fresh key for every mutation invocation; if a mutation fails, its
 JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 
+### Build review requests: one queue for every unlock (any time; added 2026-09-28)
+
+Everything a creator asks Mikey to unlock is one review request with a type:
+`rewards` (XP & Coin rewards, below), `project-limit` (more project room),
+`storage-limit` (more Lumine file storage, per creator) and `cardcraft` (an AI
+Card crafting recipe). Mikey sees them in one list (Management → **Build
+approvals**, or the CLI below), gets the same DM card for each, and decides
+them the same way. Each type keeps its own rules: reward approvals carry the
+earning rules and publish the frozen version; storage approvals take a size
+(500 MB / 1 GB / 2 GB tiers, any size up to the 2 GB cap, never lowering an
+existing approval); project room approvals raise Main to the fixed bounds;
+card crafting approvals make the recipe live in the published app without a
+new release. Only rewards and card crafting approvals can be revoked. The
+older per-type commands (`reward-review`, `cardcraft-review`, `storage
+approve|reject|list`) are aliases of these routes and keep working.
+
+```bash
+lumine admin review list --json                       # waiting on a decision (default)
+lumine admin review list --status queue --type storage,project --json
+lumine admin review show storage:12 --json             # <type>:<id>, or <id> --type storage
+lumine admin review approve storage:12 --size 1GB --json
+lumine admin review reject project:4 --reason "Split the big file first" --json
+lumine admin review approve cardcraft:3 --json
+lumine admin review revoke cardcraft:3 --reason "Too strong for level 1 cards" --json
+lumine admin review approve rewards:70 --config rules.json --json
+lumine admin review propose rewards:70 --dir /private/tmp/reward-review-70 --config rules.json --json
+```
+
 ### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
 
 The creator's Lumine designs the rewards and writes them into the app. The

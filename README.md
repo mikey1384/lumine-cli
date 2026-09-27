@@ -138,6 +138,27 @@ Discovery is static and fail-closed: runtime code cannot add tools that were
 not declared in the pinned manifest, and a session refuses to connect if any
 declared handler is missing.
 
+### Connecting to a tab you already have open
+
+In an app that offers tools, a signed-in viewer can click **Connect AI helper**
+in the app toolbar (or the workspace preview toolbar). Twinkle shows a
+six-character code for that open tab, valid for 10 minutes and usable once.
+Then run:
+
+```bash
+lumine app-mcp <app-url-or-id> --code ABC123
+```
+
+The bridge attaches to that tab instead of opening a new one. The CLI must be
+logged in as the same Twinkle account as the tab. The tab shows an
+"AI helper connected" badge with a **Disconnect** button and an **Allow edits**
+switch, which starts off: until the viewer switches it on, only tools declared
+read-only in `/app-tools.json` (`"readOnly": true`, or
+`"readOnlyWhen": { "action": ["list"] }` for one action argument) work.
+Undeclared tools count as edits. Disconnecting, or leaving the app, ends the
+session and resets the switch. `--helper-name <name>` overrides the label the
+viewer sees (by default the MCP client's own name).
+
 ## Inspecting Build SDK data
 
 `lumine sdk call <namespace.method> '<jsonArgs>'` calls a build's data SDK

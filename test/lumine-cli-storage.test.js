@@ -64,7 +64,8 @@ test("admin storage operations map to the Mikey-only admin routes", () => {
   const approve = parseAdminOperation(
     parseArgs(["admin", "storage", "approve", "12", "--size", "500MB"]),
   );
-  assert.equal(approve.path, "/cli/admin/storage-limits/requests/12");
+  // Alias of `lumine admin review approve storage:12`.
+  assert.equal(approve.path, "/cli/admin/reviews/storage-limit/12");
   assert.deepEqual(approve.body, {
     decision: "approve",
     reason: "",
@@ -74,7 +75,7 @@ test("admin storage operations map to the Mikey-only admin routes", () => {
   const list = parseAdminOperation(
     parseArgs(["admin", "storage", "list", "--status", "all"]),
   );
-  assert.equal(list.path, "/cli/admin/storage-limits/requests?status=all");
+  assert.equal(list.path, "/cli/admin/reviews?status=all&type=storage-limit");
   assert.equal(list.requiresRun, false);
 
   const show = parseAdminOperation(
@@ -195,6 +196,41 @@ test("creators request storage and admins grant it through the CLI", async (t) =
   );
 });
 
+test("Mikey sees every request type in one queue and the old storage command still decides", async (t) => {
+  const fixture = await createFixtureServer(t);
+  const listed = await runCli(["admin", "review", "list", ...fixture.cliArgs]);
+  assert.equal(listed.code, 0, listed.stderr);
+  assert.match(listed.stdout, /2 Build request\(s\) \(pending\):/);
+  assert.match(
+    listed.stdout,
+    /storage-limit:12 · pending · Lumine file storage · all their Builds · by builder \(44\) · 1 GB of Lumine file storage[^\n]*"rendered soundtrack"/,
+  );
+  assert.match(listed.stdout, /cardcraft:3 · pending · AI Card crafting · Pet Village/);
+
+  const approved = await runCli([
+    "admin",
+    "storage",
+    "approve",
+    "12",
+    "--size",
+    "1GB",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(approved.code, 0, approved.stderr);
+  assert.match(
+    approved.stdout,
+    /Storage request #12 approved\. builder's Lumine file storage limit is now 1\.0 GB\./,
+  );
+  const decideCall = fixture.requests.find(
+    (request) => request.url === "/cli/admin/reviews/storage-limit/12",
+  );
+  assert.deepEqual(decideCall?.body, {
+    decision: "approve",
+    reason: "",
+    sizeBytes: GB,
+  });
+});
+
 async function createFixtureServer(t) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-storage-"));
   const authFile = path.join(tmpDir, "auth.json");
@@ -268,6 +304,74 @@ async function createFixtureServer(t) {
             user: { id: 5, username: "mikey" },
             request: null,
             maxRuntimeFileStorageBytes: 2 * GB,
+          },
+        }),
+      );
+      return;
+    }
+    const storageItem = {
+      ref: "storage-limit:12",
+      type: "storage-limit",
+      typeLabel: "Lumine file storage",
+      id: 12,
+      status: "pending",
+      buildId: null,
+      appTitle: null,
+      requesterId: 44,
+      requesterUsername: "builder",
+      summary:
+        "1 GB of Lumine file storage for all their Builds (using 149 MB when asked)",
+      reason: "rendered soundtrack",
+      reviewReason: "",
+      createdAt: Math.floor(Date.now() / 1000) - 120,
+      decidedAt: 0,
+      publishesOnApproval: false,
+      decisions: ["approve", "reject"],
+      details: { requestedBytes: GB, tiers: [500 * MB, GB, 2 * GB] },
+    };
+    if (req.method === "GET" && req.url === "/cli/admin/reviews?status=pending") {
+      res.end(
+        JSON.stringify({
+          ok: true,
+          status: "ok",
+          data: {
+            filter: "pending",
+            items: [
+              storageItem,
+              {
+                ...storageItem,
+                ref: "cardcraft:3",
+                type: "cardcraft",
+                id: 3,
+                appTitle: "Pet Village",
+                summary: "Crafting recipe: Pet · card levels 1, 2",
+                reason: "",
+              },
+            ],
+            nextCursor: null,
+          },
+        }),
+      );
+      return;
+    }
+    if (
+      req.method === "POST" &&
+      req.url === "/cli/admin/reviews/storage-limit/12"
+    ) {
+      res.end(
+        JSON.stringify({
+          ok: true,
+          status: "ok",
+          changed: true,
+          data: {
+            type: "storage-limit",
+            request: {
+              ...pendingRequest,
+              status: "approved",
+              approvedMaxRuntimeFileStorageBytes: GB,
+            },
+            maxRuntimeFileStorageBytes: GB,
+            item: { ...storageItem, status: "approved", decisions: [] },
           },
         }),
       );

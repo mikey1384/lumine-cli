@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.60.0
-Updated: 2026-09-27
-Generated: 2026-09-27T13:54:27.792Z
+Version: 1.61.0
+Updated: 2026-09-28
+Generated: 2026-09-27T17:21:08.257Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -137,7 +137,9 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: { success, session } when opened by lumine app-mcp
   - Register the live iframe handlers for the published app's static MCP tool manifest.
   - Tool discovery comes only from /app-tools.json in the pinned published artifact; runtime code cannot add or rename tools.
-  - Every declared tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers and resolves with active:false without starting a relay.
+  - Every declared tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers, tells Twinkle the app offers tools (so the signed-in viewer can click Connect AI helper and pair this open tab with lumine app-mcp <buildId> --code <code>), and resolves with active:false.
+  - Mark each tool that only reads with "readOnly": true in /app-tools.json; for a tool whose action argument decides, declare "readOnlyWhen": { "action": ["list", "export"] }. A helper paired through Connect AI helper can use only read-only calls until the viewer switches on Allow edits; undeclared tools count as edits.
+  - Include what the viewer has selected or is looking at in the state-reading tool (for example the selected range and active item), so a paired helper can see what the viewer is pointing at.
   - Handlers run serially inside the visible app iframe and should return the confirmed post-action state.
   - Do not synthesize server-owned state; await Twinkle SDK mutations before returning.
   - Example: await Twinkle.appTools.register({ handlers: { get_state: () => ({ view, data }), open_view: ({ view }) => navigateTo(view) } });

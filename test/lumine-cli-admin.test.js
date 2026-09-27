@@ -5877,15 +5877,17 @@ test("sponsor administration commands preserve their audited targets and decisio
 test("reward-review commands are run-independent and carry the reviewer's rules on approve only", async (t) => {
   const { readRewardConfigFile, writeRewardReviewSnapshot } =
     await import("../lib/admin.js");
+  // reward-review is an alias of `lumine admin review` fixed to rewards.
   assert.deepEqual(
     parseAdminOperation(parseArgs(["admin", "reward-review", "list"])),
     {
-      name: "reward-review.list",
+      name: "review.list",
       method: "GET",
-      path: "/cli/admin/reward-reviews?status=pending",
+      path: "/cli/admin/reviews?status=pending&type=rewards",
       body: undefined,
       mutates: false,
       requiresRun: false,
+      reviewType: "rewards",
     },
   );
   assert.equal(
@@ -5900,7 +5902,7 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
         "40",
       ]),
     ).path,
-    "/cli/admin/reward-reviews?status=all&beforeId=40",
+    "/cli/admin/reviews?status=all&type=rewards&cursor=40",
   );
   assert.throws(
     () =>
@@ -5913,13 +5915,13 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
   assert.equal(
     parseAdminOperation(parseArgs(["admin", "reward-review", "show", "2"]))
       .path,
-    "/cli/admin/reward-reviews/2?files=0",
+    "/cli/admin/reviews/rewards/2?files=0",
   );
   assert.equal(
     parseAdminOperation(
       parseArgs(["admin", "reward-review", "show", "2", "--dir", "/tmp/r2"]),
     ).path,
-    "/cli/admin/reward-reviews/2?files=1",
+    "/cli/admin/reviews/rewards/2?files=1",
   );
   assert.throws(
     () =>
@@ -5958,12 +5960,13 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
       ]),
     ),
     {
-      name: "reward-review.decide",
+      name: "review.decide",
       method: "POST",
-      path: "/cli/admin/reward-reviews/2",
+      path: "/cli/admin/reviews/rewards/2",
       body: { decision: "revoke", reason: "Farmable in two minutes." },
       mutates: true,
       requiresRun: false,
+      reviewType: "rewards",
       reviewId: 2,
       decision: "revoke",
     },
@@ -6186,5 +6189,122 @@ test("reward telemetry can select an exact UTC day without including today", () 
         parseArgs(["admin", "reward-activity", "--date", "2026-02-30"]),
       ),
     /real UTC/,
+  );
+});
+
+test("lumine admin review is one queue across request types", () => {
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "review", "list"])),
+    {
+      name: "review.list",
+      method: "GET",
+      path: "/cli/admin/reviews?status=pending",
+      body: undefined,
+      mutates: false,
+      requiresRun: false,
+      reviewType: null,
+    },
+  );
+  assert.equal(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "review",
+        "list",
+        "--type",
+        "storage,project",
+        "--status",
+        "queue",
+        "--cursor",
+        "1790530832.3.15",
+      ]),
+    ).path,
+    "/cli/admin/reviews?status=queue&type=storage-limit%2Cproject-limit&cursor=1790530832.3.15",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "review", "list", "--type", "coins-please"]),
+      ),
+    /Unknown request type/,
+  );
+  // <type>:<id>, or a bare id with --type.
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "review", "show", "storage:12"]))
+      .path,
+    "/cli/admin/reviews/storage-limit/12?files=0",
+  );
+  assert.equal(
+    parseAdminOperation(
+      parseArgs(["admin", "review", "show", "4", "--type", "project"]),
+    ).path,
+    "/cli/admin/reviews/project-limit/4?files=0",
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "review", "show", "4"])),
+    /<type>:<id>/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "review", "show", "storage:4", "--dir", "/tmp/x"]),
+      ),
+    /--dir writes a reward request/,
+  );
+  // Type-specific payloads stay with their type.
+  const storage = parseAdminOperation(
+    parseArgs(["admin", "review", "approve", "storage:12", "--size", "1GB"]),
+  );
+  assert.equal(storage.path, "/cli/admin/reviews/storage-limit/12");
+  assert.deepEqual(storage.body, {
+    decision: "approve",
+    reason: "",
+    sizeBytes: 1024 * 1024 * 1024,
+  });
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "review", "approve", "project:3", "--size", "1GB"]),
+      ),
+    /--size is only used with Lumine file storage/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "review", "revoke", "storage:12", "--reason", "x"]),
+      ),
+    /not revoked/,
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "review", "reject", "cardcraft:3"])),
+    /--reason/,
+  );
+  // Quota requests can be declined without a note.
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "review", "reject", "project:3"]))
+      .body,
+    { decision: "reject", reason: "" },
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "review", "propose", "storage:3", "--dir", "/tmp"]),
+      ),
+    /Only XP & Coin reward requests/,
+  );
+  // The per-type commands are thin aliases of the same routes.
+  assert.equal(
+    parseAdminOperation(
+      parseArgs(["admin", "cardcraft-review", "approve", "3"]),
+    ).path,
+    "/cli/admin/reviews/cardcraft/3",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "cardcraft-review", "approve", "storage:3"]),
+      ),
+    /AI Card crafting requests only/,
   );
 });
