@@ -51,6 +51,16 @@ returns the confirmed canonical limits after commit. Running the command again
 is a safe no-op that reports the already-active canonical limits. Omit the
 target to use the current workspace or selected project.
 
+Lumine file storage (uploaded assets and `Twinkle.files`) is counted per
+creator across all their Builds. `lumine assets storage` shows your limit, usage
+and any pending request. Past the default quota, `lumine assets request-storage
+[--size 500MB|1GB|2GB] [--reason "<what it is for>"]` asks Mikey for more (the
+next tier up when `--size` is omitted); nothing changes until he approves it.
+Mikey reviews with `lumine admin storage list`, `show <user>`,
+`approve <request-id> [--size <size>]`, `reject <request-id> [--reason <text>]`,
+or grants directly with `lumine admin storage grant <user> --size <size>`.
+Approvals are capped at 2 GB and never lower a creator below the default.
+
 For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and
 checks out that branch locally. Saves go to your branch, so the project owner
