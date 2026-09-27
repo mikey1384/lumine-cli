@@ -1090,7 +1090,7 @@ app declares its economy in `rewards.json` at the project root (rule ids,
 titles, XP, Coins, tries, retry share, budgets); quiz rules get their questions
 and answer keys from a private question sheet the creator's Lumine uploads with
 `lumine rewards sheet <file.json>` (never a project file: published source is
-readable by every player). **Send for review** freezes the code and proposes
+readable by every player). **Send for review** (website, or `lumine rewards review` from the workspace) freezes the code and proposes
 `rewards.json` merged with the sheet. Approval is Mikey's decision: read the
 frozen code, check that the amounts are right and that the app cannot be
 farmed, change anything that is wrong, approve. **Approval publishes** (since
