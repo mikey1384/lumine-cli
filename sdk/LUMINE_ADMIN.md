@@ -4183,6 +4183,7 @@ lumine admin subject get 123 --include-comments --json
 lumine admin comment draft subject:123 --file comment.md --json
 lumine admin comment reply comment:456 --file reply.md --json
 lumine admin comment post --draft-id <id> --json
+lumine admin comment edit <commentId> --file corrected.md --json
 lumine admin comment session status --json
 lumine admin comment session close --json
 ```
@@ -4203,6 +4204,11 @@ What the session authorizes:
   sitting directly in a named subject, Build, AI Story or Daily Reflection.
   Anything else fails with `CLI_ADMIN_COMMENT_SESSION_TARGET_FORBIDDEN` and
   the allowed list. `comment post` accepts only drafts created in the session.
+- **Edits:** `comment edit <commentId>` works under the session only for a
+  comment this session itself posted, as the same identity
+  (`CLI_ADMIN_COMMENT_SESSION_EDIT_FORBIDDEN` otherwise). The usual edit rules
+  apply unchanged, including fresh Build review evidence for a Build comment.
+  Edits do not count toward the post cap.
 - **Limits:** 30 minutes, at most five published comments
   (`CLI_ADMIN_COMMENT_SESSION_POST_CAP`), one active session per operator.
   `close` or the TTL ends it; start a new session for more.
@@ -4216,12 +4222,22 @@ What the session authorizes:
   not accepted). It does not change the Bangkok calendar assignment or the
   identity preference.
 
-A comment session and a daily run can be active together. The session never
-claims the daily-run slot, and the CLI sends both ids; the API uses the session
-only for requests on the session's own targets (or its own drafts) and the
-daily run for everything else. Queue coverage is not recorded for reads served
-while a session is active. A correction session takes precedence for its one
-comment.
+A comment session and a daily run can be active together, but every request
+carries exactly one authority. The session never claims the daily-run slot.
+
+- When only one of them is active, the CLI uses it.
+- When both are active, `comment draft`, `comment reply`, `comment post` and
+  `comment edit` refuse to run until you choose with `--via session` or
+  `--via run`. Target reads (`subject get`, `post get`, `comments get`, their
+  comment lists) default to the daily run and take `--via session` to read
+  through the session instead.
+- The API refuses a request that names a comment session together with a
+  daily run or correction session (`CLI_ADMIN_AMBIGUOUS_AUTHORITY`); a session
+  request outside the session is refused, never handed to the run.
+- A draft records the authority that created it, and only that authority can
+  publish it (`CLI_ADMIN_DRAFT_AUTHORITY_MISMATCH`).
+- A correction session still takes precedence for its one comment; `--via` is
+  refused while it is active for that comment.
 
 **Editing the bot's own comments.** `comment edit <commentId> --file
 <comment.md>` replaces the text of a comment the acting bot itself authored —

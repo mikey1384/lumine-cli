@@ -543,6 +543,7 @@ test("comment session commands parse identity, targets and reason", () => {
     ["comment", "draft", "subject:12", "--file", "package.json"],
     ["comment", "reply", "comment:34"],
     ["comment", "post", "--draft-id", "77"],
+    ["comment", "edit", "34", "--file", "package.json"],
     ["subject", "get", "12"],
   ]) {
     assert.equal(
@@ -554,7 +555,6 @@ test("comment session commands parse identity, targets and reason", () => {
     );
   }
   for (const args of [
-    ["comment", "edit", "34", "--file", "package.json"],
     ["chat", "send", "--file", "package.json"],
     ["featured", "list"],
   ]) {
@@ -604,21 +604,22 @@ test("comment post uses an active comment session without a daily run", async (t
   assert.equal(publish.runId, null);
 });
 
-test("with a daily run and a comment session both active the CLI sends both ids", async (t) => {
+const bothActiveRun = {
+  run: {
+    id: 91,
+    status: "active",
+    identity: { key: "zero", userId: 10 },
+    commentMode: "post",
+  },
+  lastRun: null,
+};
+
+test("with a daily run and a comment session both active, writes need --via and send one authority", async (t) => {
   const fixture = await createFixtureServer(t, {
-    runStatusResponse: {
-      run: {
-        id: 91,
-        status: "active",
-        runScope: "featured",
-        identity: { key: "zero", userId: 10 },
-        commentMode: "off",
-      },
-      lastRun: null,
-    },
+    runStatusResponse: bothActiveRun,
     commentSessionStatusResponse: activeCommentSession,
   });
-  const result = await runCli([
+  const ambiguous = await runCli([
     "admin",
     "comment",
     "post",
@@ -626,13 +627,92 @@ test("with a daily run and a comment session both active the CLI sends both ids"
     "77",
     ...fixture.cliArgs,
   ]);
-  // A Featured-only run must not block locally; the API picks per target.
-  assert.equal(result.code, 0, result.stderr);
-  const publish = fixture.requests.find(
-    (request) => request.url === "/cli/admin/comment-drafts/77/publish",
+  assert.equal(ambiguous.code, 1);
+  assert.match(
+    ambiguous.stderr,
+    /Both comment session #812 \(ciel\) and daily run #91 \(zero\) are active[\s\S]*--via session or --via run/,
   );
-  assert.equal(publish.commentSessionId, "812");
-  assert.equal(publish.runId, "91");
+  assert.equal(
+    fixture.requests.some((request) => request.url.includes("/publish")),
+    false,
+  );
+
+  for (const [via, expected] of [
+    ["session", { commentSessionId: "812", runId: null }],
+    ["run", { commentSessionId: undefined, runId: "91" }],
+  ]) {
+    const result = await runCli([
+      "admin",
+      "comment",
+      "post",
+      "--draft-id",
+      "77",
+      "--via",
+      via,
+      ...fixture.cliArgs,
+    ]);
+    assert.equal(result.code, 0, result.stderr);
+    const publish = fixture.requests
+      .filter((request) => request.url === "/cli/admin/comment-drafts/77/publish")
+      .at(-1);
+    assert.equal(publish.commentSessionId, expected.commentSessionId);
+    assert.equal(publish.runId, expected.runId);
+  }
+
+  // Reads create nothing: without --via they keep using the daily run only.
+  const read = await runCli([
+    "admin",
+    "subject",
+    "get",
+    "123",
+    "--include-comments",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(read.code, 0, read.stderr);
+  const subjectRead = fixture.requests.find((request) =>
+    request.url.startsWith("/cli/admin/subjects/123"),
+  );
+  assert.equal(subjectRead.runId, "91");
+  assert.equal(subjectRead.commentSessionId, undefined);
+});
+
+test("--via must name an active authority", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    runStatusResponse: bothActiveRun,
+  });
+  const noSession = await runCli([
+    "admin",
+    "comment",
+    "post",
+    "--draft-id",
+    "77",
+    "--via",
+    "session",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(noSession.code, 1);
+  assert.match(noSession.stderr, /--via session: no comment session is active/);
+  const bad = await runCli([
+    "admin",
+    "comment",
+    "post",
+    "--draft-id",
+    "77",
+    "--via",
+    "both",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(bad.code, 1);
+  assert.match(bad.stderr, /--via must be session or run/);
+  const unrelated = await runCli([
+    "admin",
+    "audit",
+    "--via",
+    "run",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(unrelated.code, 1);
+  assert.match(unrelated.stderr, /--via applies only to comment/);
 });
 
 test("without an active comment session daily-run commands are unchanged", async (t) => {
