@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.61.0
+Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-09-27T17:21:08.257Z
+Generated: 2026-09-28T07:33:56.595Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -33,8 +33,8 @@ Generated: 2026-09-27T17:21:08.257Z
 - Use Twinkle.live for one-way app livestreams and Twinkle.chat for the accompanying thread. Free livestreams require a verified host, end after at most 15 minutes, and issue at most 10 private viewer grants. Twinkle keeps platform-owned live-status/end controls above active hosts, so app code cannot hide or replace the broadcaster's Stop path.
 - Media Energy is separate from AI Energy. Replace Media Energy UI only from canonical mediaEnergy/getUsage responses; never decrement, reserve, or synthesize it in app code.
 - Twinkle.rewards awards real XP and Coins only in the current approved published release. Drafts, local previews, private apps and superseded releases cannot earn. The server supplies a published-runtime grant; app code cannot choose a recipient or award amount.
-- The creator's agent designs the rewards. Declare the economy in a project file `rewards.json` at the root: budgets (userDailyXP, userDailyCoins, optional userDailyClaims; there is no app-wide daily or lifetime budget, only what one learner can earn per day) and rules [{ id, title, howTo?, category? (section header, up to 40 characters), series? (key for repeat rules that share category and amounts), xp, coins, verifier: 'numeric-quiz' | 'completion', maxAttempts?, retry?: { xpPercent, coinsPercent, paidAttempts? }, minSeconds? (completion), progression?: 'dated' | 'until-earned' (quiz) }]. Wire the matching Twinkle.rewards calls with those literal rule ids. Questions and answer keys NEVER go in project files (published source is readable by every player): quiz rules get them from the private question sheet uploaded with `lumine rewards sheet <file.json>` ({ rules: { <ruleId>: { questions?, sets? } } }); `lumine rewards check` validates both together. A review request freezes the code and proposes rewards.json merged with the sheet; the administrator reads the code, checks the amounts and whether the app is exploitable, may change any amount, and approves. Creators are kids and teens: show approval status and one Send for review action; do not ask them to fill in technical forms. Every code update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate. Apps read amounts, tries and sets from getStatus, never from their own file.
-- Verifiers: 'numeric-quiz' pays for server-checked numeric answers (retry share, attempt limits, dated sets or until-earned sets that stay up until somebody earns them, after-answer guides). 'completion' pays when the app reports an activity finished — a cleared stage, a finished round — at least minSeconds after start({ ruleId }); the server checks only the elapsed time, once per learner per site day (UTC midnight), and the budgets. Call start when the activity begins and claim({ challengeId }) with no answers when it ends; keep completion amounts and userDailyXP small enough that a player scripting the calls would not matter, because nothing else is verified.
+- The creator's agent designs the rewards. Declare the economy in a project file `rewards.json` at the root: budgets (userDailyXP, userDailyCoins, optional userDailyClaims; there is no app-wide daily or lifetime budget, only what one learner can earn per day) and rules [{ id, title, howTo?, category? (section header, up to 40 characters), series? (key for repeat rules that share category and amounts), xp, coins, verifier: 'numeric-quiz' | 'completion' | 'generated-quiz', maxAttempts?, retry?: { xpPercent, coinsPercent, paidAttempts? }, minSeconds? (completion), progression?: 'dated' | 'until-earned' (quiz), bank? (generated-quiz): { steps: [percent, ...] rising to 100, startStep?, instructions, topics: [{ key, title, description }] } }]. generated-quiz rules need no question sheet. Wire the matching Twinkle.rewards calls with those literal rule ids. Questions and answer keys NEVER go in project files (published source is readable by every player): quiz rules get them from the private question sheet uploaded with `lumine rewards sheet <file.json>` ({ rules: { <ruleId>: { questions?, sets? } } }); `lumine rewards check` validates both together. A review request freezes the code and proposes rewards.json merged with the sheet; the administrator reads the code, checks the amounts and whether the app is exploitable, may change any amount, and approves. Creators are kids and teens: show approval status and one Send for review action; do not ask them to fill in technical forms. Every code update that retains rewards needs a new approval before publishing. Removing the SDK automatically clears its gate. Apps read amounts, tries and sets from getStatus, never from their own file.
+- Verifiers: 'numeric-quiz' pays for server-checked numeric answers (retry share, attempt limits, dated sets or until-earned sets that stay up until somebody earns them, after-answer guides). 'completion' pays when the app reports an activity finished — a cleared stage, a finished round — at least minSeconds after start({ ruleId }); the server checks only the elapsed time, once per learner per site day (UTC midnight), and the budgets. Call start when the activity begins and claim({ challengeId }) with no answers when it ends; keep completion amounts and userDailyXP small enough that a player scripting the calls would not matter, because nothing else is verified. 'generated-quiz' pays from a question bank the server fills itself: for one declared topic at the learner's step of the ladder, the server writes a question with GPT-6 Sol (billed to that learner's AI Energy), solves it again independently and keeps it only when both answers agree; every learner who has not seen a question gets it before anything new is written. `xp`/`coins` are the top step's amounts and each step pays its `steps` percent of them (then the usual retry share). Two first-try answers in a row climb a step; two misses in a row step down. Learners may earn many bank questions a day, bounded by userDailyXP/userDailyCoins. The reviewer approves the ladder, amounts, topics and instructions, not each question; learner reports and solve rates hide bad questions. Use the rewards bank methods (getBankStatus, startBankQuestion, generateBankQuestion, claimBankQuestion, reportBankQuestion); start and claim refuse bank rules.
 - Numeric quiz answers are verified on the server; client scores, privateDb state, timers and completion booleans are not verified reward evidence. Limits reset at UTC midnight. Rules are earned once per viewer per UTC day; attempt limits and retry payouts come from the approved rule. Challenges expire at the UTC day boundary. Budgets apply across release changes.
 - Optional reward rule controls: maxLifetimeClaims caps one learner’s receipts for that rule across every day and release; completionProof: classic-tower-v1 requires a server-simulated Classic Tower finish in addition to minSeconds. These are server-enforced controls. Existing completion rules without completionProof still verify elapsed time only. Registered proof profiles also include breadface-v1, breadface-v2 and breadface-v3 (server-simulated Breadface inputs; each is one reviewed release's exact physics, chosen by the reviewer) study-record-v1 (a private study record reviewed by JEV, billed to the learner’s AI Energy), and Groove Lab's groove-lab-song-v1 (a song the learner published today, checked on the server for length, notes and originality) and groove-lab-heard-v1 (three established accounts finished the learner's songs today), Ashen Vigil's vigil-guest-coplay-v1 (a new guest spent 10 minutes with the learner in a private world room, measured by the world relay; each guest pays once) and minecraft-first-link-v1 (the learner is the first Twinkle account ever linked to that Minecraft player; each player pays once). Profiles are platform-owned; an app cannot invent a verifier or authorize its own reward.
 
@@ -1064,6 +1064,122 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Others get 403 minecraft_news_forbidden.
   - Example: await Twinkle.minecraft.deleteNews({ id: post.id });
 
+### Twinkle.town
+- async getTown() | scopes: sharedDb:read
+  - Returns: { town, clock: { now, townMinute, day, weekday, kstTime }, places: [{ id, name, kind, district, door: [x, z], y, built, spots }], housing: { homes, waitingList }, residents: [publicCharacter], gazette: [{ id, townMinute, text }], goods, myCharacterId, cursor }
+  - Load Starhaven Life's shared town: places (Minecraft coordinates), the homes board, every resident's public state and the Town Gazette.
+  - Every resident is a real member's character living on its own every 15 minutes on the real KST clock (school mornings, work afternoons, rent on Mondays).
+  - publicCharacter = { characterId, name, look, pet, home, place, spot, move: { points, depart, arrive } | null, activity: { id, label, icon, place, start, until, with, withName } | null, mood: { emotion, icon, label }, title, job, knownFor, guided }. start/until/depart/arrive are town minutes (clock.townMinute is now).
+  - Pass cursor to getChanges.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+  - Example: const town = await Twinkle.town.getTown(); let cursor = town.cursor; setInterval(async () => { const ch = await Twinkle.town.getChanges({ since: cursor }); cursor = ch.cursor; /* move ch.residents */ }, 25000);
+- async getChanges({ since }) | scopes: sharedDb:read
+  - Returns: { clock, events: [{ id, townMinute, type, salience, characterId, withCharacterId, text, mine }], residents: [publicCharacter], newDiaryLines, hasMore, cursor }
+  - Poll what changed since a cursor: public town events, events about your own character, and residents whose state changed.
+  - Poll every 20-30 seconds; always continue from the returned cursor. hasMore: true means call again right away.
+  - Also marks the viewer as online (their character earns full pay while its guardian is around).
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async getMyCharacter() | scopes: sharedDb:read
+  - Returns: { character: { characterId, name, status, profile, petName, public, life, movingIn } | null, guardian: { priorities, direction, focus, civicCard, optIns, aspiration }, home, waitingListPosition, control, guidedActions, clock } | { character: null, create: { suggestedNames, suggestedPetNames, petSpecies, likeTags, axes, nameCheck } }
+  - The guardian's view of the viewer's own character (needs, feelings, wishes, worries, skills, job, plan, money, friends, proposals waiting for an answer), or the options for creating one.
+  - life is the server's canonical state; never compute needs, money or relationships in the app.
+  - life.proposals are big life changes the character asks its guardian first (for example asking someone to be best friends): answer with answerProposal; silence for 24 hours lets the character decide.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async createCharacter({ name, petName, petSpecies, personality: { neat, outgoing, active, playful, kind }, likes, dislike, look: { skin, hair, shirt, pants, hood }, homeId }) | scopes: sharedDb:write
+  - Returns: { characterId, name, petName, welcomeBucks, housing: { homeId, weeklyRent, rentDueMinute } | { waitingListPosition, error? } }
+  - Create the viewer's one character in Starhaven (safety-checked names, 200 welcome Bucks) and optionally claim a vacant home.
+  - Names are 2-16 letters. Suggested names (getMyCharacter().create) always pass; any other name needs a clear safety check and may be refused (400 town_name_not_allowed) or be unavailable (503: offer the suggestions).
+  - personality values are -2..2; likes: 3 different interest tags; dislike: 1 other tag; look colours are 0xRRGGBB numbers.
+  - Without a free home the character lodges in the Fivefold guest rooms and joins the waiting list.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async setPriorities({ priorities }) | scopes: sharedDb:write
+  - Returns: { priorities }
+  - Set the guardian's 8 priority sliders (-2..2): saving, pets, work, social, learning, fun, tidy, civic.
+  - Priorities tilt what the character chooses; they never force it (characters have free will).
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async setDirections({ text }) | scopes: sharedDb:write
+  - Returns: { ok: true, text, understoodAs, weights, neighbour } | { ok: false, reason }
+  - Give the character plain-words guidance (up to 200 characters, English). JEV checks it is safe and kind, then shows back how it was understood.
+  - Show understoodAs to the guardian. ok: false keeps the old guidance (unsafe wording, too many changes today (3 a day), or guidance reading paused).
+  - Directions can only raise time with a neighbour, never avoid or target anyone. They are private to the owner.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async setOptIns({ dontVoteForMe, voteForMe, spendLimit, savingsFloor, visitors, workOffline, tendPets }) | scopes: sharedDb:write
+  - Returns: { optIns }
+  - Guardian opt-ins: JEV votes for the character by default (dontVoteForMe: true opts out), daily spend limit (0-500 Bucks, default 50), savings floor, visitors (friends | residents | nobody).
+  - visitors: nobody also stops the character hosting a moved-out friend.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async setFocus({ skills }) | scopes: sharedDb:write
+  - Returns: { focus }
+  - Pick up to 2 Focus skills; the character spends more time on them and grows them faster.
+  - Scholarship grows only from the owner's real learning on Twinkle and cannot be a Focus.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async setCivicCard({ focus, tax, change }) | scopes: sharedDb:write
+  - Returns: { civicCard }
+  - The 3-question civic card the autopilot vote reads (focus: fun | learning | pets | saving | civic; tax: lower | keep | higher; change: new | keep).
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async confirmAspiration({ aspirationId }) | scopes: sharedDb:write
+  - Returns: { aspiration: { id, label, confirmed } }
+  - Confirm the life goal the character proposed (life.aspirationProposed) or choose another; milestones give titles only.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async takeControl({ leaseId, immediate }) | scopes: sharedDb:write
+  - Returns: { leaseId, expiresAt, heartbeatMs, renewed }
+  - Guide the character directly. Returns a lease; call takeControl({ leaseId }) about every 60 s to keep it.
+  - The lease lapses after 3 missed heartbeats (stop renewing when the tab is hidden) and the character goes back to living on its own. immediate: true stops the current activity now instead of at its end.
+  - 409 town_control_elsewhere: another window is guiding this character.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async releaseControl({ leaseId }) | scopes: sharedDb:write
+  - Returns: { released, livingOnAutopilot }
+  - "Let them live": hand the character back to its own free will.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async act({ leaseId, operationId, activity } | { leaseId, operationId, outing, withCharacterId }) | scopes: sharedDb:write
+  - Returns: { operationId, status: queued | applied | rejected, result }
+  - While guiding, tell the character what to do next: an activity (from getMyCharacter().guidedActions.activities) or an outing with another resident.
+  - The server checks it is possible (hours, weather, money, the other resident being free) and applies it within a few seconds; watch getChanges/getMyCharacter for the result. Reuse the same operationId when retrying.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async answerProposal({ proposalId, answer, operationId }) | scopes: sharedDb:write
+  - Returns: { status, result }
+  - Answer a big-life-change question the character asked its guardian: yes, no, or decide (let them decide).
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async getDiary({ since, limit }) | scopes: sharedDb:read
+  - Returns: { since, moments, decisions: [{ text, by: jev | code, at }], lines, numbers: { earned, shifts, meals, sleptHours, friendsSeen, skillUps } }
+  - "While you were away": the top moments, the decisions made for you (and whether JEV or the code made them), and the numbers since a time (ms).
+  - Text comes from fixed English templates; "(quiet stretch)" marks time the town caught up after a pause.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async getElections() | scopes: sharedDb:read
+  - Returns: { offices, elections: [{ id, office, officeLabel, status, votingOpensAt, closesAt, candidates, result, myBallot }], pledges, mottos, minEligibleVoters }
+  - Town offices and elections (Town Chief, Headmaster, Market Warden, Pet Warden; 14-day terms).
+  - Results show counts only (secret ballot), including how many were autopilot votes.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async vote({ electionId, approve }) | scopes: sharedDb:write
+  - Returns: { electionId, approve, abstain }
+  - Approval vote: approve any number of candidates (characterIds). One ballot per account; voting again replaces it until the close.
+  - Voters: account 30+ days old, living in Starhaven 7+ days, active 3 of the last 14 days (403 town_not_eligible otherwise).
+  - Without a manual vote, JEV votes for the character at the close unless the guardian opted out (setOptIns({ dontVoteForMe: true })).
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async declareCandidacy({ electionId, pledges, motto }) | scopes: sharedDb:write
+  - Returns: { electionId, pledges, motto }
+  - Stand for office during the candidacy days: exactly 3 pledges from the list and an optional templated motto id (no free text).
+  - Only the owner can declare, never the character.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async getHousing() | scopes: sharedDb:read
+  - Returns: { homes: [{ homeId, plot, district, name, type, readyMade, weeklyRent, vacant, residentName }], waitingList: [{ position, name, since, movedOut }], mine: { home, rentJar, bucks, waitingListPosition, inStorage } | null, rentDay, graceDays }
+  - The homes board (10 Harbor Row + 10 Lantern Hill plots), the public waiting list and the viewer's rent status.
+  - Rent is weekly in Bucks, due Monday 00:00 KST, with 3 days of grace; a character that can't pay moves out gently (belongings to storage) and gets the next home it can cover from the waiting list.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async claimHome({ homeId }) | scopes: sharedDb:write
+  - Returns: { homeId, weeklyRent, rentDueMinute, rentDueAt }
+  - Claim a vacant home, first come first served. The first rent is due on a Monday at least 3 days away.
+  - 409 town_home_taken when someone else got there first.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async joinWaitingList() | scopes: sharedDb:write
+  - Returns: { waitingListPosition }
+  - Join the public housing waiting list.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+- async leaveWaitingList() | scopes: sharedDb:write
+  - Returns: { waitingListPosition: null }
+  - Leave the housing waiting list.
+  - Limited rollout: app 2610 (Twinkle Minecraft Live) only; other apps get 403 with code town_sdk_not_enabled.
+
 ### Twinkle.leaderboards
 - async get({ boardKey = 'default', limit, cursor } = {}) | scopes: none
   - Returns: { entries: [{ rank, id, buildId, boardKey, viewerKind, userId, displayName, score, meta, achievedAt, createdAt, updatedAt }], scores, cursor, hasMore, personalBest: { id, buildId, boardKey, viewerKind, userId, displayName, score, meta, achievedAt, createdAt, updatedAt } | null }
@@ -1388,6 +1504,33 @@ world.updatePresence({ x, y, z, facing });
   - Read a retired bounty’s original questions and guides from the approval attached to its solve receipt.
   - Use a receiptId returned by getTimeline. Both reads independently check retirement and app ownership; guessing an active or other app’s receipt cannot reveal its questions or guides. Returns build_reward_archive_unavailable (404) if unavailable.
   - Uses that receipt’s frozen approved sheet, never today’s edited question or the mutable draft. Answer keys and tolerances are never returned. Render the question first and offer Reveal guide for learning, without a reward-claim button.
+- await Twinkle.rewards.getBankStatus({ ruleId }) | scopes: rewards:claim
+  - Returns: { mode, ruleId, dayKey, startStep, steps: [{ step, reward: { xp, coins } }], topics: [{ key, title, step, questionsAtStep }], today: { xp, coins, claims }, budgets: { userDailyXP, userDailyCoins } }
+  - Read a generated-quiz rule's ladder: what each step pays, the learner's step on every topic, and today's earnings.
+  - Read on load and after each claim; never compute amounts or steps in the app. Drafts return mode 'preview' from the owner's own rewards.json.
+- await Twinkle.rewards.startBankQuestion({ ruleId, topicKey, skip? }) | scopes: rewards:claim
+  - Returns: { needsQuestion: true, step, reward } | { challengeId, step, question: { id, topicKey, step, prompt, hint?, guide?, answer? }, attempts, maxAttempts, attemptsRemaining, firstTryAvailable, solved, reward, retryReward, stats: { learners, solved, firstSolver: { id, username, solvedAt } | null } }
+  - Serve the learner's open question on a topic, else the next question at their step that they have not seen.
+  - needsQuestion: true means no unseen question exists at the learner's step: offer to write one with generateBankQuestion, saying it uses their AI Energy.
+  - The prompt and guide use LaTeX between $...$ / $$...$$; render them with the Twinkle-served KaTeX (see the vendor guidance). The answer appears only after the learner solves it or runs out of tries; the guide after their first answer.
+  - skip: true gives up on the open question (it counts as a miss on the ladder) and serves the next one.
+- await Twinkle.rewards.generateBankQuestion({ ruleId, topicKey, onProgress?: ({ stage, phase, percent, round? }) => void }) | scopes: rewards:claim
+  - Returns: Same as startBankQuestion with the new question, or { needsQuestion: false } when an unseen question already exists (call startBankQuestion).
+  - Have the server write, double-check and serve a new question at the learner's step. Uses the learner's AI Energy.
+  - Show a progress bar from onProgress: stage is 'pending', 'writing', 'checking' (the independent solve), 'saving' or 'done'; percent follows the server's real phases and the model's streamed output, never goes backwards, and reaches 100 only when the question is served. Silent model thinking inside a phase cannot be measured, so the bar eases forward there rather than guessing.
+  - Takes as long as two GPT-6 Sol calls (tens of seconds): show progress and keep one request in flight. Both calls are billed to the signed-in learner's AI Energy; an empty battery rejects before any work.
+  - build_reward_bank_unverified (503) means two tries did not produce a question whose answers agreed; nothing is stored. build_reward_bank_generation_limit (429) caps questions one learner writes per day.
+  - The question joins the shared bank: every other learner at that step gets it before anything new is written.
+- await Twinkle.rewards.claimBankQuestion({ challengeId, answer: number }) | scopes: rewards:claim
+  - Returns: { correct, awarded, duplicate?, budgetReached?, receipt: { id, questionId, step, xp, coins, attempt, firstTry } | null, balances?, ladder?: { step, previousStep }, question: { ..., guide?, answer? }, attempts, attemptsRemaining, stats }
+  - Answer a bank question. The first answer moves the ladder; a correct answer pays the question's step share.
+  - Send one number (convert a typed fraction yourself). A wrong answer within two seconds of the previous one is refused with build_reward_throttled (429).
+  - ladder appears on the learner's first answer to a question and gives their new step on that topic. Retrying a solved challengeId returns duplicate: true with the original receipt.
+  - budgetReached: true means the solve counted but today's userDailyXP/userDailyCoins is used up. In preview mode nothing is paid and previewReward shows what the live app would pay.
+- await Twinkle.rewards.reportBankQuestion({ questionId, reason }) | scopes: rewards:claim
+  - Returns: { reported: true, duplicate, hidden }
+  - Report a wrong or unclear bank question the learner has seen.
+  - One report per learner per question; three reports hide it from everyone. Show a small 'report this problem' action next to the question.
 
 ### Twinkle.cardCraft
 - await Twinkle.cardCraft.getStatus() | scopes: cardCraft:read
