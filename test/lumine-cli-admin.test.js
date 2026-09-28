@@ -24,6 +24,7 @@ import {
   filterRecommendationQueueResult,
   formatAdminJsonError,
   normalizeAdminBuildCandidatesResult,
+  adminOperationUsesCommentSession,
   parseAdminOperation,
   parseOperatorViewFilter,
   parseRecommendationContentTypes,
@@ -454,6 +455,250 @@ test("a correction session rejects a contradictory requested identity", async (t
     ),
     false,
   );
+});
+
+test("comment session commands parse identity, targets and reason", () => {
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "comment",
+        "session",
+        "start",
+        "--identity",
+        "Ciel",
+        "--target",
+        "subject:12,comment:34",
+        "build:56",
+        "--reason",
+        "Mikey asked for a reply",
+      ]),
+    ),
+    {
+      name: "comment-session.start",
+      method: "POST",
+      path: "/cli/admin/comment-sessions",
+      body: {
+        identity: "ciel",
+        targets: [
+          { type: "subject", id: 12 },
+          { type: "comment", id: 34 },
+          { type: "build", id: 56 },
+        ],
+        reason: "Mikey asked for a reply",
+      },
+      mutates: true,
+    },
+  );
+  assert.deepEqual(
+    parseAdminOperation(
+      parseArgs([
+        "admin",
+        "comment",
+        "session",
+        "start",
+        "--identity",
+        "zero",
+        "--target",
+        "https://www.twin-kle.com/ai-stories/9,aistory:9",
+      ]),
+    ).body,
+    { identity: "zero", targets: [{ type: "aiStory", id: 9 }] },
+  );
+  for (const args of [
+    ["--target", "subject:1"],
+    ["--identity", "auto", "--target", "subject:1"],
+    ["--identity", "zero"],
+  ]) {
+    assert.throws(
+      () =>
+        parseAdminOperation(
+          parseArgs(["admin", "comment", "session", "start", ...args]),
+        ),
+      /--identity zero\|ciel|--target/,
+    );
+  }
+  assert.deepEqual(
+    parseAdminOperation(parseArgs(["admin", "comment", "session", "status"])),
+    {
+      name: "comment-session.status",
+      method: "GET",
+      path: "/cli/admin/comment-sessions/status",
+      body: undefined,
+      mutates: false,
+    },
+  );
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "comment", "session", "close"]))
+      .path,
+    "/cli/admin/comment-sessions/close",
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(parseArgs(["admin", "comment", "session", "open"])),
+    /Usage: lumine admin comment session start/,
+  );
+  // Only drafting, replying, posting and target reads go through a session.
+  for (const args of [
+    ["comment", "draft", "subject:12", "--file", "package.json"],
+    ["comment", "reply", "comment:34"],
+    ["comment", "post", "--draft-id", "77"],
+    ["subject", "get", "12"],
+  ]) {
+    assert.equal(
+      adminOperationUsesCommentSession(
+        parseAdminOperation(parseArgs(["admin", ...args])),
+      ),
+      true,
+      args.join(" "),
+    );
+  }
+  for (const args of [
+    ["comment", "edit", "34", "--file", "package.json"],
+    ["chat", "send", "--file", "package.json"],
+    ["featured", "list"],
+  ]) {
+    let operation;
+    try {
+      operation = parseAdminOperation(parseArgs(["admin", ...args]));
+    } catch {
+      continue;
+    }
+    assert.equal(adminOperationUsesCommentSession(operation), false);
+  }
+});
+
+const activeCommentSession = {
+  ok: true,
+  status: "success",
+  changed: false,
+  data: {
+    commentSession: {
+      id: 812,
+      status: "active",
+      sessionKind: "comment-session",
+      identity: { key: "ciel", userId: 11 },
+      targets: [{ type: "subject", id: 123 }],
+    },
+  },
+};
+
+test("comment post uses an active comment session without a daily run", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    runStatusResponse: { run: null, lastRun: null },
+    commentSessionStatusResponse: activeCommentSession,
+  });
+  const result = await runCli([
+    "admin",
+    "comment",
+    "post",
+    "--draft-id",
+    "77",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  const publish = fixture.requests.find(
+    (request) => request.url === "/cli/admin/comment-drafts/77/publish",
+  );
+  assert.equal(publish.commentSessionId, "812");
+  assert.equal(publish.runId, null);
+});
+
+test("with a daily run and a comment session both active the CLI sends both ids", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    runStatusResponse: {
+      run: {
+        id: 91,
+        status: "active",
+        runScope: "featured",
+        identity: { key: "zero", userId: 10 },
+        commentMode: "off",
+      },
+      lastRun: null,
+    },
+    commentSessionStatusResponse: activeCommentSession,
+  });
+  const result = await runCli([
+    "admin",
+    "comment",
+    "post",
+    "--draft-id",
+    "77",
+    ...fixture.cliArgs,
+  ]);
+  // A Featured-only run must not block locally; the API picks per target.
+  assert.equal(result.code, 0, result.stderr);
+  const publish = fixture.requests.find(
+    (request) => request.url === "/cli/admin/comment-drafts/77/publish",
+  );
+  assert.equal(publish.commentSessionId, "812");
+  assert.equal(publish.runId, "91");
+});
+
+test("without an active comment session daily-run commands are unchanged", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    runStatusResponse: {
+      run: {
+        id: 91,
+        status: "active",
+        identity: { key: "zero", userId: 10 },
+        commentMode: "post",
+      },
+      lastRun: null,
+    },
+    commentSessionStatusResponse: {
+      ok: true,
+      status: "success",
+      data: {
+        commentSession: {
+          id: 811,
+          status: "expired",
+          identity: { key: "ciel" },
+        },
+      },
+    },
+  });
+  const result = await runCli([
+    "admin",
+    "comment",
+    "post",
+    "--draft-id",
+    "77",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  const publish = fixture.requests.find(
+    (request) => request.url === "/cli/admin/comment-drafts/77/publish",
+  );
+  assert.equal(publish.commentSessionId, undefined);
+  assert.equal(publish.runId, "91");
+  // Non-comment commands never even look up the comment session.
+  const audit = await runCli(["admin", "audit", ...fixture.cliArgs]);
+  assert.equal(audit.code, 0, audit.stderr);
+  assert.equal(
+    fixture.requests.filter(
+      (request) => request.url === "/cli/admin/comment-sessions/status",
+    ).length,
+    1,
+  );
+});
+
+test("a comment session rejects an identity it and the run do not hold", async (t) => {
+  const fixture = await createFixtureServer(t, {
+    runStatusResponse: { run: null, lastRun: null },
+    commentSessionStatusResponse: activeCommentSession,
+  });
+  const result = await runCli([
+    "admin",
+    "subject",
+    "get",
+    "123",
+    "--identity",
+    "zero",
+    ...fixture.cliArgs,
+  ]);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /does not match comment session #812 \(ciel\)/);
 });
 
 test("private identity inspection requires a reason and makes raw evidence explicit", () => {
@@ -3679,6 +3924,7 @@ async function createFixtureServer(
     monthlyAiCostsResponse = null,
     monthlyMediaCostsResponse = null,
     correctionStatusResponse = null,
+    commentSessionStatusResponse = null,
     botContextResponse = null,
   } = {},
 ) {
@@ -3708,6 +3954,11 @@ async function createFixtureServer(
       url: req.url,
       body,
       runId: req.headers["x-lumine-admin-run-id"] || null,
+      ...(req.headers["x-lumine-admin-comment-session-id"]
+        ? {
+            commentSessionId: req.headers["x-lumine-admin-comment-session-id"],
+          }
+        : {}),
       requestId: req.headers["x-lumine-idempotency-key"] || null,
     });
     res.setHeader("Content-Type", "application/json");
@@ -3756,6 +4007,14 @@ async function createFixtureServer(
       botContextResponse
     ) {
       res.end(JSON.stringify(botContextResponse));
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      req.url === "/cli/admin/comment-sessions/status" &&
+      commentSessionStatusResponse
+    ) {
+      res.end(JSON.stringify(commentSessionStatusResponse));
       return;
     }
     if (
