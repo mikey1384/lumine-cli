@@ -1293,6 +1293,39 @@ those exact files and does not depend on keeping the review copy. Re-offers
 reuse the media; a failed transaction cleans up its copied objects. Declining
 leaves the offered media as unused uploads in the creator's library.
 
+### Reward question-bank seeding (every full daily review; added 2026-09-28)
+
+`generated-quiz` rules fill a question bank on the server: a question is
+written for one declared topic at one ladder step (GPT-6 Sol) and kept only
+when an independent second solve agrees. Learners write missing questions
+themselves on their own AI Energy; seeding writes the gentlest steps ahead of
+them so the first learner on a unit never waits or pays.
+
+```bash
+lumine admin reward-bank coverage <buildId> [--max-step 3] [--json]   # read-only, no run
+lumine admin reward-bank seed <buildId> [--max-step 3] [--json]       # delegated full run
+```
+
+- `seed` writes ONE question per call into the first missing slot, lowest
+  step first across every topic of every generated-quiz rule, up to
+  `--max-step` (default 3, at most 10). A slot is a (rule, topic, step) with
+  no active live question. The call takes as long as two model calls
+  (about 20–40 s; the CLI allows 4 minutes) and returns `seeded`
+  (`questionId`, `ruleId`, `topicKey`, `step`) or `complete: true`, plus
+  `coverage` (`filled` / `total`).
+- It needs the `reward:bank-seed` scope, which only full delegated runs carry.
+  The question is written as the run identity (Zero or Ciel) and billed to
+  that account's own AI Energy. It never pays anyone and opens no challenge.
+- It refuses unless the app's rewards are approved and published
+  (`CLI_ADMIN_BUILD_REWARD_BANK_NOT_LIVE`), and refuses to store a question
+  if the approval changed while it was being written
+  (`CLI_ADMIN_BUILD_REWARD_BANK_REVIEW_CHANGED`: run it again).
+  `CLI_ADMIN_BUILD_REWARD_BANK_UNVERIFIED` means the two solves disagreed
+  twice; nothing was stored.
+- Which apps to seed, how many steps and how many per run are Mikey's
+  decisions, recorded in the agent guide (Math Studio #2655: steps 1–3, at
+  most 20 per run).
+
 ### Reward activity report (standing duty, every full daily review; added 2026-09-12)
 
 Completion rewards (Arcade Typing's stage clears) prove nothing but elapsed
