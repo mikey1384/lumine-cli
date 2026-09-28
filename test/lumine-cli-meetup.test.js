@@ -59,3 +59,17 @@ test("admin meetup refuses incomplete decisions before calling the API", () => {
   assert.throws(() => op(["list", "--status", "pending"]), /--status must be/);
   assert.throws(() => op(["delete", "12"]), /Usage: lumine admin meetup/);
 });
+
+test("admin meetup slot and resend-email map to the coordinator fallbacks", () => {
+  assert.deepEqual(op(["slot", "12", "--confirm", "1"]), {
+    name: "meetup.slot",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/crews/12/slot",
+    body: { slotIndex: 1 },
+    mutates: true,
+    requiresRun: false,
+  });
+  assert.equal(op(["slot", "12", "--confirm", "0"]).body.slotIndex, 0);
+  assert.throws(() => op(["slot", "12"]), /needs --confirm/);
+  assert.equal(op(["resend-email", "12"]).path, "/cli/admin/meetup-quest/crews/12/resend-email");
+});
