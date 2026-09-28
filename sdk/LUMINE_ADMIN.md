@@ -1018,6 +1018,19 @@ Mikey gives his go-ahead; a pending proposal is not a completed refresh. After
 approval, execute the entire approved plan and verify it without asking for
 each swap again. Never omit this section from a full-run report.
 
+### Daily-run conveniences (CLI 0.2.95)
+
+```bash
+lumine admin daily-run gather --output-dir <dir> [--date YYYY-MM-DD] --json
+lumine admin featured candidates [--days 7] [--after <iso>] --json
+lumine admin report serve --file <dir>/daily-management-report.md [--port <n>] [--open] --json
+```
+
+These compose the documented commands in this contract, running them as child processes, so every scope check, audit and pagination rule applies unchanged.
+- **`gather`** saves each read-only report into `<dir>`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. It needs the active run for run-scoped reads.
+- **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured. Each one comes with its human/bot comment counts and whether Mikey has viewed it. Eligibility only: ranking stays editorial.
+- **`report serve`** detaches a loopback server that answers only `/`, `marked.min.js` and the report Markdown. `--open` opens Chrome.
+
 ### Full management report in Chrome
 
 Mikey's standing delivery preference (2026-09-15): after a full daily run, open
