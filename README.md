@@ -61,6 +61,15 @@ Mikey reviews with `lumine admin storage list`, `show <user>`,
 or grants directly with `lumine admin storage grant <user> --size <size>`.
 Approvals are capped at 2 GB and never lower a creator below the default.
 
+Bridge Builder meetup quest crews (the website's /achievements/bridge-builder
+page) are reviewed with `lumine admin meetup list [--status review|active|completed|all]`,
+`show <crewId>` (includes a one-hour link to the proof video),
+`approve-plan <crewId> [--note <text>]`, `send-back <crewId> --note <text>`
+(sends back whatever is waiting: the video, else the plan) and
+`approve <crewId> --attended <userId,userId,...>`, which unlocks the
+achievement for every member ticked. At least 3 attendees from 3 different
+branches are required.
+
 For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and
 checks out that branch locally. Saves go to your branch, so the project owner
