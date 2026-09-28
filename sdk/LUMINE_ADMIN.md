@@ -1304,7 +1304,17 @@ them so the first learner on a unit never waits or pays.
 ```bash
 lumine admin reward-bank coverage <buildId> [--max-step 3] [--json]   # read-only, no run
 lumine admin reward-bank seed <buildId> [--max-step 3] [--json]       # delegated full run
+lumine admin reward-bank report <buildId> [--days 1] [--json]         # read-only telemetry
 ```
+
+`report` covers the last `--days` (1-31): generation rounds by source
+(learner or seed) with outcomes (`accepted`, `off_brief`: the checker judged
+the question outside the brief's language, level or LaTeX rule;
+`answer_mismatch`; `malformed`; `error`), cost and time, and recent rejection
+reasons; learners served/answered/first-try/solved/skipped per rule and step;
+payouts; the current ladder distribution; active/hidden questions; the
+hardest questions (3+ learners) and every reported question with reasons;
+and seeding coverage for steps 1-3 once the app is approved.
 
 - `seed` writes ONE question per call into the first missing slot, lowest
   step first across every topic of every generated-quiz rule, up to
