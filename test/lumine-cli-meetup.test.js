@@ -73,3 +73,28 @@ test("admin meetup slot and resend-email map to the coordinator fallbacks", () =
   assert.throws(() => op(["slot", "12"]), /needs --confirm/);
   assert.equal(op(["resend-email", "12"]).path, "/cli/admin/meetup-quest/crews/12/resend-email");
 });
+
+test("admin meetup story maps to the story approval routes by crew", () => {
+  assert.equal(op(["story"]).path, "/cli/admin/meetup-quest/stories");
+  assert.equal(op(["story", "list"]).mutates, false);
+  assert.equal(op(["story", "show", "12"]).path, "/cli/admin/meetup-quest/stories/by-crew/12");
+  assert.deepEqual(op(["story", "approve", "12"]), {
+    name: "meetup.story.approve",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/stories/by-crew/12/approve",
+    body: { note: "", announce: true },
+    mutates: true,
+    requiresRun: false,
+  });
+  assert.deepEqual(op(["story", "approve", "12", "--no-announce", "--note", "Lovely"]).body, {
+    note: "Lovely",
+    announce: false,
+  });
+  assert.equal(
+    op(["story", "send-back", "12", "--note", "Use usernames"]).path,
+    "/cli/admin/meetup-quest/stories/by-crew/12/send-back",
+  );
+  assert.throws(() => op(["story", "send-back", "12"]), /needs --note/);
+  assert.throws(() => op(["story", "approve", "x"]), /Crew ID/);
+  assert.throws(() => op(["story", "delete", "12"]), /Usage: lumine admin meetup story/);
+});
