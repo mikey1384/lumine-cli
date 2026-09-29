@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-09-28T08:22:20.133Z
+Generated: 2026-09-29T05:33:14.245Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -497,20 +497,22 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Signed-in viewers only.
   - Use this instead of asking Twinkle.ai.chat to return JSON.
   - expectedStructure must be a JSON object that describes the exact returned object shape.
+  - Template values describe types, not answers to copy. All object keys are required and extra keys are rejected, including inside nested objects; {} means an exactly empty object, not a free-form dictionary. A non-empty array uses only its first item as the template for every returned item, with no fixed length; mixed examples do not declare a union. [] allows arbitrary JSON items. A null template accepts any JSON primitive (string, number, boolean or null), but the key is still required. Use 'number' for fractional numbers; 0 and other integer examples require integers. State content requirements in prompt or instructions. GPT routes retain descriptive string examples as field guidance, not enforced enum values.
+  - GPT models prefer native JSON Schema output for compatible shapes. Shapes outside the strict provider subset, such as [] with arbitrary items or deeply nested structures, use prompt-based JSON generation with the same final validation. A provider rejection specifically of the native schema triggers one prompt-based fallback; auth, quota, safety and unrelated request failures do not trigger that fallback. Validation retries preserve the original task and instructions. The returned object/result shape and streaming callbacks are unchanged.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - Omit model to use the normal Lite/Medium/High routing. model accepts gpt-6-sol or claude-opus-5-5, and every explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back. Retired IDs still work and run on their replacement: gpt-5.6-sol runs gpt-6-sol; gpt-6-astra, claude-opus-5 and claude-fable-5-1 run claude-opus-5-5.
+  - Omit model to use the normal Lite/Medium/High routing. model accepts claude-sonnet-5-5, gpt-6-sol or claude-opus-5-5, and every explicit model must be paired with thinkingMode: 'high'; unknown model IDs reject instead of silently falling back. Retired IDs still work and run on their replacement: claude-sonnet-5 runs claude-sonnet-5-5; gpt-5.6-sol runs gpt-6-sol; gpt-6-astra, claude-opus-5 and claude-fable-5-1 run claude-opus-5-5.
   - thinkingMode low uses GPT-6 Luna and consumes the viewer's AI Energy from confirmed provider usage; its smaller model is usually cheaper than Medium or High.
   - thinkingMode medium uses GPT-6 Luna with medium reasoning and consumes normal AI Energy.
-  - thinkingMode high without model uses GPT-6 Sol with high reasoning and consumes high AI Energy. Explicit model: 'gpt-6-sol' selects Sol with xhigh reasoning at the same High AI Energy tier.
-  - claude-opus-5-5 uses Anthropic adaptive High thinking and debits confirmed provider usage at the High tier.
+  - thinkingMode high without model uses Claude Sonnet 5.5 with high adaptive thinking and consumes high AI Energy. Explicit model: 'gpt-6-sol' selects GPT-6 Sol with xhigh reasoning at the same High AI Energy tier; model: 'claude-sonnet-5-5' names Sonnet 5.5 directly.
+  - claude-sonnet-5-5 and claude-opus-5-5 use Anthropic adaptive High thinking and debit confirmed provider usage at the High tier.
   - Pass onStatus, onReasoning, and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
   - onReasoning receives accumulated provider-supplied, app-visible reasoning summaries plus { done, delta, requestId, status }. A provider retry may replace the accumulated summary; treat each callback's first argument as the current source of truth. This callback never exposes hidden/private model chain-of-thought.
   - onText receives accumulated structured-output text plus { done, delta, requestId, status }. Partial output is intentionally incomplete and may include provider formatting; parse only when done is true, when the callback receives the canonical object serialized as JSON, and use the resolved object as the source of truth.
   - Put a user-facing field such as producerNotes in expectedStructure when commentary must be part of the validated final object rather than transient reasoning progress.
   - When AI Energy is empty, every automatic or named model choice rejects before new provider work; there is no free fallback mode.
   - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
-  - The server validates the final shape; automatic OpenAI/xAI routes can retry malformed output, while explicit Anthropic routes use native JSON Schema output and retry one malformed or shape-invalid result. App code should still validate business-specific enum values.
-  - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'high', model: 'claude-opus-5-5', prompt: 'Plan the next section from: ' + currentState, expectedStructure: { producerNotes: 'string', action: 'string', confidence: 0 }, onStatus: (phase) => showPhase(phase), onReasoning: (summary, meta) => showReasoningProgress(summary, meta), onText: (partialJson, meta) => showStructuredProgress(partialJson, meta) });
+  - The server validates the final shape; automatic OpenAI/xAI routes can retry malformed output, while Anthropic routes (High without a model, claude-sonnet-5-5 and claude-opus-5-5) use native JSON Schema output and retry one malformed or shape-invalid result. App code should still validate business-specific enum values.
+  - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'high', model: 'claude-opus-5-5', prompt: 'Plan the next section from: ' + currentState, expectedStructure: { producerNotes: 'string', action: 'string', confidence: 'number' }, onStatus: (phase) => showPhase(phase), onReasoning: (summary, meta) => showReasoningProgress(summary, meta), onText: (partialJson, meta) => showStructuredProgress(partialJson, meta) });
 - onChatStatus(listener) | scopes: none
   - Returns: unsubscribe function
   - Listen to shared runtime AI chat stream events.
