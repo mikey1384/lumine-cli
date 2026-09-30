@@ -1296,7 +1296,7 @@ leaves the offered media as unused uploads in the creator's library.
 ### Reward question-bank seeding (every full daily review; added 2026-09-28)
 
 `generated-quiz` rules fill a question bank on the server: a question is
-written for one declared topic at one ladder step (GPT-6 Sol) and kept only
+written for one declared topic at one ladder step (GPT-6.1 Sol) and kept only
 when an independent second solve agrees. Learners write missing questions
 themselves on their own AI Energy; seeding writes the gentlest steps ahead of
 them so the first learner on a unit never waits or pays.
