@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-09-30T02:34:09.690Z
+Generated: 2026-09-30T09:55:20.738Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -551,6 +551,26 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Only one music generation per viewer may run at a time (code ai_music_generation_in_progress). A retry with the same requestId returns the finished result without paying again (replayed: true), or code music_in_progress while it is still being made.
   - Generation usually takes one to three minutes; the SDK timeout defaults to 600000ms. Show progress UI while waiting.
   - Example: const song = await Twinkle.ai.generateMusic({ prompt: 'Warm lo-fi hip hop with dusty drums, a mellow Rhodes and rain in the background', instrumental: true }); audio.src = song.url;
+- async generateSpeech({ text, voice, language, requestId, timeoutMs } = {}) | scopes: none
+  - Returns: { success, asset, url, mimeType, durationSeconds, alignment, text, voice, model, requestId, replayed?, aiUsagePolicy }
+  - Generate spoken audio with Eleven v4 and save it in the viewer's Twinkle.files. New generations use AI Battery.
+  - Signed-in viewers only. Each new generation uses AI Battery; show this before the viewer starts voice interaction.
+  - text: 1–2,000 characters. voice: warm (default), bright, or calm. language: optional ISO language code such as en.
+  - The MP3 is saved in the viewer's Twinkle.files and counts toward storage. Replay the saved URL to listen again without another AI request.
+  - alignment contains provider character timing for subtitles or animation. Respect Twinkle tab mute and browser playback controls.
+  - Reuse requestId after a lost response. Completed audio replays the saved asset and settles the same billing receipt without regeneration or duplicate charges.
+  - Only one speech or transcription request per viewer runs at a time. SDK timeout defaults to 180000ms.
+  - Example: const speech = await Twinkle.ai.generateSpeech({ text: 'Welcome to our club!', voice: 'warm', language: 'en' }); audio.src = speech.url;
+- async transcribeAudio({ audioBase64, language, requestId, timeoutMs } = {}) | scopes: none
+  - Returns: { success, text, words: [{ text, start, end }], language, durationSeconds, model, requestId, replayed?, aiUsagePolicy }
+  - Recognize a short recording with ElevenLabs Scribe v2. New recognition requests use AI Battery.
+  - Signed-in viewers only. New recognition requests use AI Battery. Each successful response includes the canonical aiUsagePolicy.
+  - audioBase64 is plain base64 of a mono 16-bit PCM WAV at 8–48 kHz, between 0.2 and 30 seconds. The server validates the actual duration.
+  - Request microphone permission only after a viewer action, show a recording indicator, and stop microphone tracks when recording ends or the app closes.
+  - Audio is sent to the recognition provider without saving a Twinkle recording asset. Let the viewer review or correct the transcript before using it as their message.
+  - Reuse requestId after a lost response. Completed transcripts replay without recognition or duplicate charges. Word recognition is not a pronunciation score.
+  - Only one speech or transcription request per viewer runs at a time. SDK timeout defaults to 180000ms.
+  - Example: const transcript = await Twinkle.ai.transcribeAudio({ audioBase64: wavBase64, language: 'en' }); input.value = transcript.text;
 - onImageGenerationStatus(listener) | scopes: none
   - Returns: unsubscribe function
   - Subscribe to real-time image generation status events forwarded into the build iframe.
