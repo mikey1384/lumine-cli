@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
+import { testWorkRoot } from "./helpers/work-directory.js";
 import path from "node:path";
 import test from "node:test";
 
@@ -18,7 +18,7 @@ import {
 import { parseArgs } from "../lib/commands.js";
 
 function fixture(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-build-review-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-build-review-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }

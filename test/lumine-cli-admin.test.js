@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { EventEmitter, once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
-import os from "node:os";
+import { testWorkRoot } from "./helpers/work-directory.js";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -48,6 +48,7 @@ import {
 } from "../lib/admin-workflows.js";
 import { parseBuildReviewReceipt } from "../lib/build-review.js";
 import { parseArgs } from "../lib/commands.js";
+import { adminWorkDirectory } from "../lib/admin-work-directory.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.resolve(__dirname, "../bin/lumine.js");
@@ -1836,7 +1837,7 @@ test("new subject, featured, reward, and comment commands map to stable API cont
 
 test("comment edit sends composed replacement content for a bot comment", () => {
   const composedPath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-edit-")),
+    fs.mkdtempSync(path.join(testWorkRoot(), "lumine-edit-")),
     "edited.md",
   );
   fs.writeFileSync(composedPath, "Honest update from Ciel.\n");
@@ -1884,7 +1885,7 @@ test("comment edit sends composed replacement content for a bot comment", () => 
 });
 
 test("Build comment edits require complete review evidence and a canonical edit receipt", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-build-edit-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-build-edit-"));
   try {
     const commentPath = path.join(dir, "comment.md");
     const contextPath = path.join(dir, "context.json");
@@ -2259,7 +2260,7 @@ test("runtime-log commands are run-independent and finishing requires review con
 
 test("runtime-log start persists its request key before sending so a rerun replays idempotently, and abandon releases the session", async (t) => {
   const tmpDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-runtime-log-start-intent-"),
+    path.join(testWorkRoot(), "lumine-runtime-log-start-intent-"),
   );
   const outputBase = path.join(tmpDir, "output");
   const authFile = path.join(tmpDir, "auth.json");
@@ -2546,7 +2547,7 @@ test("monthly media costs map to the canonical feature-cost route", () => {
 
 test("comment draft --file sends operator-composed persona content", () => {
   const composedPath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-comment-")),
+    fs.mkdtempSync(path.join(testWorkRoot(), "lumine-comment-")),
     "comment.md",
   );
   fs.writeFileSync(composedPath, "Hello from Ciel! \u{1F49B}\n");
@@ -2688,7 +2689,7 @@ test("comment draft --file sends operator-composed persona content", () => {
 
 test("management Build comments require an actual version-bound review", () => {
   const reviewDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-build-review-"),
+    path.join(testWorkRoot(), "lumine-build-review-"),
   );
   const composedPath = path.join(reviewDir, "comment.md");
   const contextPath = path.join(reviewDir, "context.json");
@@ -3678,7 +3679,7 @@ test("management reply guidance keeps root and comment authors distinct", () => 
 
 test("runtime-log workflow downloads verified private snapshots and closes only after post-clear review", async (t) => {
   const tmpDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-runtime-log-workflow-"),
+    path.join(testWorkRoot(), "lumine-runtime-log-workflow-"),
   );
   const outputBase = path.join(tmpDir, "operator-selected-output");
   const authFile = path.join(tmpDir, "auth.json");
@@ -4008,7 +4009,7 @@ async function createFixtureServer(
     botContextResponse = null,
   } = {},
 ) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-"));
+  const tmpDir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-admin-"));
   const authFile = path.join(tmpDir, "auth.json");
   const requests = [];
   const subjectResponse = {
@@ -4469,12 +4470,12 @@ test("bot-output and composed bot chat map to the review and existing-DM routes"
   );
 
   const messagePath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-chat-")),
+    fs.mkdtempSync(path.join(testWorkRoot(), "lumine-admin-chat-")),
     "message.md",
   );
   fs.writeFileSync(messagePath, "I got that wrong. I'm sorry.");
   const announcementPath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-admin-announcement-")),
+    fs.mkdtempSync(path.join(testWorkRoot(), "lumine-admin-announcement-")),
     "announcement.md",
   );
   fs.writeFileSync(announcementPath, "Lumine can now use Grok 4.6.");
@@ -4510,7 +4511,7 @@ test("newspaper claim and submit map to the editorial routes", () => {
   assert.equal(claim.mutates, true);
 
   const editorialPath = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "lumine-news-")),
+    fs.mkdtempSync(path.join(testWorkRoot(), "lumine-news-")),
     "editorial.json",
   );
   fs.writeFileSync(
@@ -4648,7 +4649,7 @@ test("newspaper claim scaffolds preserve exact quote evidence before submit", ()
 });
 
 test("newspaper validation and claim-based submission parse locally", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-news-claim-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-news-claim-"));
   const claimPath = path.join(dir, "claim.json");
   const editorialPath = path.join(dir, "editorial.json");
   const claim = {
@@ -4709,7 +4710,7 @@ test("newspaper validation and claim-based submission parse locally", () => {
 });
 
 test("batch skip files are canonicalized and deduplicated", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-skip-batch-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-skip-batch-"));
   const targetPath = path.join(dir, "targets.json");
   fs.writeFileSync(
     targetPath,
@@ -4743,7 +4744,7 @@ test("batch skip files are canonicalized and deduplicated", () => {
 });
 
 test("automatic pagination checkpoints each canonical page and records coverage", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-pagination-"));
   const checkpoint = path.join(dir, "checkpoint.json");
   const output = path.join(dir, "result.json");
   const calls = [];
@@ -4875,7 +4876,7 @@ test("automatic pagination checkpoints each canonical page and records coverage"
 
 test("automatic pagination aborts in-flight work and resumes from its last confirmed page", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-interrupt-"),
+    path.join(testWorkRoot(), "lumine-pagination-interrupt-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const signalSource = new EventEmitter();
@@ -4992,7 +4993,7 @@ test("automatic pagination aborts in-flight work and resumes from its last confi
 
 test("automatic pagination keeps checkpoint and result paths distinct", async () => {
   const output = path.join(
-    os.tmpdir(),
+    testWorkRoot(),
     `lumine-pagination-collision-${process.pid}-${Date.now()}.json`,
   );
   await assert.rejects(
@@ -5148,7 +5149,7 @@ test("automatic pagination resumes a legacy default checkpoint path", async () =
     },
   };
   const legacyCheckpoint = path.join(
-    os.tmpdir(),
+    adminWorkDirectory(),
     `lumine-admin-run-${runId}-subjects.candidates.json`,
   );
   const initial = await runAutomaticPagination({
@@ -5198,7 +5199,9 @@ test("automatic pagination resumes a legacy default checkpoint path", async () =
 });
 
 test("automatic pagination exclusively locks a shared checkpoint", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-pagination-lock-"));
+  const dir = fs.mkdtempSync(
+    path.join(testWorkRoot(), "lumine-pagination-lock-"),
+  );
   const checkpoint = path.join(dir, "checkpoint.json");
   let enterFetch;
   let releaseFetch;
@@ -5272,7 +5275,7 @@ test("automatic pagination exclusively locks a shared checkpoint", async () => {
 
 test("automatic pagination recovers a lock owned by a dead process", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-dead-lock-"),
+    path.join(testWorkRoot(), "lumine-pagination-dead-lock-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   fs.writeFileSync(
@@ -5328,7 +5331,7 @@ test("automatic pagination recovers a lock owned by a dead process", async () =>
 
 test("automatic pagination leaves malformed checkpoint locks untouched", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-bad-lock-"),
+    path.join(testWorkRoot(), "lumine-pagination-bad-lock-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const lockPath = `${checkpoint}.lock`;
@@ -5365,7 +5368,7 @@ test("automatic pagination leaves malformed checkpoint locks untouched", async (
 
 test("automatic pagination never overwrites its resumed candidate spool", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-spool-collision-"),
+    path.join(testWorkRoot(), "lumine-pagination-spool-collision-"),
   );
   try {
     const checkpoint = path.join(dir, "checkpoint.json");
@@ -5433,7 +5436,7 @@ test("automatic pagination never overwrites its resumed candidate spool", async 
 
 test("a fresh scan replaces only its checkpoint-owned candidate spool", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-replace-"),
+    path.join(testWorkRoot(), "lumine-pagination-replace-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const operation = {
@@ -5487,7 +5490,7 @@ test("a fresh scan replaces only its checkpoint-owned candidate spool", async ()
 
 test("JSON automatic scans report bounded progress without touching result output", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-progress-"),
+    path.join(testWorkRoot(), "lumine-pagination-progress-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const progress = [];
@@ -5549,7 +5552,7 @@ test("JSON automatic scans report bounded progress without touching result outpu
 
 test("automatic pagination resumes only after the last confirmed page", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-resume-"),
+    path.join(testWorkRoot(), "lumine-pagination-resume-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const operation = {
@@ -5672,7 +5675,7 @@ test("automatic pagination resumes only after the last confirmed page", async ()
 
 test("automatic pagination migrates confirmed v2 item checkpoints without rescanning", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-v2-resume-"),
+    path.join(testWorkRoot(), "lumine-pagination-v2-resume-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const operation = {
@@ -5761,7 +5764,7 @@ test("automatic pagination migrates confirmed v2 item checkpoints without rescan
 
 test("automatic pagination requires explicit exhaustion and stable snapshot boundaries", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-proof-"),
+    path.join(testWorkRoot(), "lumine-pagination-proof-"),
   );
   const baseOperation = {
     name: "recommendations.list",
@@ -5830,7 +5833,7 @@ test("automatic pagination requires explicit exhaustion and stable snapshot boun
 
 test("automatic pagination keeps its checkpoint bounded beyond the former 64 MB ceiling", async () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-pagination-bounded-"),
+    path.join(testWorkRoot(), "lumine-pagination-bounded-"),
   );
   try {
     const checkpoint = path.join(dir, "checkpoint.json");
@@ -5903,7 +5906,7 @@ test("automatic pagination keeps its checkpoint bounded beyond the former 64 MB 
 
 test("admin JSON readers support purpose-specific bounded file caps", () => {
   const dir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "lumine-large-checkpoint-"),
+    path.join(testWorkRoot(), "lumine-large-checkpoint-"),
   );
   const checkpoint = path.join(dir, "checkpoint.json");
   const payload = "x".repeat(2 * 1024 * 1024 + 1);
@@ -5922,7 +5925,7 @@ test("admin JSON readers support purpose-specific bounded file caps", () => {
 });
 
 test("admin JSON writes clean exclusive randomized staging files on failure", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-json-write-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-json-write-"));
   const output = path.join(dir, "occupied");
   fs.mkdirSync(output);
 
@@ -5942,7 +5945,7 @@ test("admin JSON writes clean exclusive randomized staging files on failure", ()
 });
 
 test("managed Build review receipts bind comments to one confirmed artifact", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-build-review-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-build-review-"));
   const receiptPath = path.join(dir, "review.json");
   const screenshotPath = path.join(dir, "runtime.png");
   fs.writeFileSync(screenshotPath, "confirmed screenshot evidence");
@@ -6310,7 +6313,9 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
       decision: "revoke",
     },
   );
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-reward-review-"));
+  const dir = fs.mkdtempSync(
+    path.join(testWorkRoot(), "lumine-reward-review-"),
+  );
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const rulesPath = path.join(dir, "rules.json");
   const rules = {

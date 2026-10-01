@@ -1022,14 +1022,50 @@ each swap again. Never omit this section from a full-run report.
 
 ```bash
 lumine admin daily-run gather --output-dir <dir> [--date YYYY-MM-DD] --json
+lumine admin daily-run progress --dir <dir> [--file <duty-evidence.json>] --json
 lumine admin featured candidates [--days 7] [--after <iso>] --json
 lumine admin report serve --file <dir>/daily-management-report.md [--port <n>] [--open] --json
 ```
 
 These compose the documented commands in this contract, running them as child processes, so every scope check, audit and pagination rule applies unchanged.
-- **`gather`** saves each read-only report into `<dir>`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. It needs the active run for run-scoped reads.
-- **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured. Each one comes with its human/bot comment counts and whether Mikey has viewed it. Eligibility only: ranking stays editorial.
-- **`report serve`** detaches a loopback server that answers only `/`, `marked.min.js` and the report Markdown. `--open` opens Chrome.
+- **`gather`** saves each read-only report into `<dir>`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. It also creates `review-state.json`: every source is fetched, not read. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
+- **`progress`** reads local review state and explicit operator acknowledgments, writes private `progress.json`, and keeps reading, canonical effort mutations, the run lease, and browser checks separate. Add all required duties for the actual run scope and its carryovers; collection alone is not a full review. A completed run lease cannot complete a pending duty. Reading acknowledgments bind to the current file bytes and are operator attestations, not proof of comprehension.
+- **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured. Each one comes with its human/bot comment counts, explicit comment truncation/completeness, and whether Mikey has viewed it. Counts from truncated context are partial. An unavailable Subject context fails the collection. Eligibility only: ranking stays editorial.
+- **`report serve`** detaches a loopback server that answers only `/`, `marked.min.js` and the report Markdown. `--open` opens Chrome and reports whether the OS accepted the request. Render, navigation and original-source verification remain pending until actually checked. Startup failures stop only the child this command started.
+
+### Durable recovery and explicit duty evidence (CLI 0.3.5)
+
+Default checkpoints, mutation intents, runtime-log evidence and Build reviews live
+under `work/lumine-admin` in the invocation directory, with private permissions.
+Explicit persistent output/checkpoint paths take priority. Older automatic
+checkpoints in OS temp storage are copied with their candidate spools to persistent
+storage before resuming; the existing scope/hash checks still apply.
+
+Generic mutations persist their exact operation/account/run/session key before
+sending. A missing receipt leaves that key pending; rerunning the exact command
+reuses it instead of issuing a fresh mutation. Changed bodies or authorities get
+different keys. A canonical receipt is archived privately before printing, and
+the pending pointer closes only after successful output. Existing Featured,
+batch-skip and runtime-log workflows retain their own recovery contracts.
+
+`duty-evidence.json` is local operator evidence, for example:
+
+```json
+{
+  "protocol": 1,
+  "runId": 107,
+  "runReport": { "file": "run-report.json", "bytes": 123, "sha256": "<full digest>" },
+  "requiredDuties": ["effort-levels", "report-browser", "football-coach"],
+  "reading": [{ "file": "bot-chats.txt", "bytes": 456, "sha256": "<full digest>", "complete": true, "readAt": "2026-10-01T00:00:00Z" }],
+  "duties": [{ "id": "effort-levels", "status": "completed", "evidence": [{ "file": "run-report.json", "bytes": 123, "sha256": "<full digest>" }], "note": "All candidates considered; preserve higher-authority levels." }]
+}
+```
+
+Use actual byte counts/digests and only acknowledge work performed. Every evidence
+reference stays inside the run directory. Changed files invalidate reading
+acknowledgments. Effort totals use the canonical report's `subject.effort.set`
+audit counts, including failed attempts separately; unavailable receipts remain
+unknown. Pending browser duties need genuine version-bound interaction evidence.
 
 ### Full management report in Chrome
 
@@ -1039,7 +1075,7 @@ Do this as part of finishing the authorized run; a Markdown path in chat alone
 is insufficient, and no additional confirmation is needed to open the report.
 
 1. Save the complete report as
-   `/private/tmp/twinkle-daily-YYYY-MM-DD/daily-management-report.md`, using the
+   `/Users/mikey/Developer/twinkle/work/daily-management-YYYY-MM-DD/daily-management-report.md`, using the
    run's Bangkok date. Include every required reporting section, coverage gap,
    pending decision and carryover. Reflect later owner decisions accurately.
 2. Render the entire Markdown into a readable HTML page with section links,

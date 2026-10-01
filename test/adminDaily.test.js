@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
+import { testWorkRoot } from "./helpers/work-directory.js";
 import path from "node:path";
 import test from "node:test";
 import { bangkokCutoff, renderBotOutput } from "../lib/admin-daily.js";
@@ -19,7 +19,10 @@ test("featured cutoff is Bangkok midnight N days back, as UTC", () => {
 });
 
 test("bot output renders every chat row and comment, grouped by channel", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bot-")), "out.txt");
+  const file = path.join(
+    fs.mkdtempSync(path.join(testWorkRoot(), "bot-")),
+    "out.txt",
+  );
   renderBotOutput(
     {
       chatMessages: [
