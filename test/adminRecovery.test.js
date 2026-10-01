@@ -255,6 +255,27 @@ test("legacy migration uses a durable destination lock and preserves the origina
   assert.equal(JSON.parse(fs.readFileSync(old)).spoolPath, oldSpool);
 });
 
+test("legacy migration distinguishes crashed owners from live or unknown recovery owners without deleting old locks", (t) => {
+  const directory = fixture(t);
+  const old = path.join(directory, "old.json");
+  const keyedPath = path.join(directory, "new", "checkpoint.json");
+  fs.writeFileSync(old, JSON.stringify({ pages: 1 }));
+  const lockPath = `${old}.lock`;
+  const identity = { kind: "admin-pagination-lock", token: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", operationFingerprint: "a".repeat(64) };
+  fs.writeFileSync(lockPath, JSON.stringify({ ...identity, pid: process.pid }));
+  assert.throws(() => migrateLegacyCheckpoint({ old, keyedPath, operationFingerprint: "a".repeat(64) }), /still has a scan lock/);
+  const exited = spawnSync(process.execPath, ["-e", ""], { timeout: 3000 });
+  assert.equal(exited.status, 0);
+  const deadLock = JSON.stringify({ ...identity, pid: exited.pid });
+  fs.writeFileSync(lockPath, deadLock);
+  fs.writeFileSync(`${lockPath}.reclaim`, "recovery owner remains unconfirmed");
+  assert.throws(() => migrateLegacyCheckpoint({ old, keyedPath, operationFingerprint: "a".repeat(64) }), /still has a scan lock/);
+  fs.unlinkSync(`${lockPath}.reclaim`);
+  migrateLegacyCheckpoint({ old, keyedPath, operationFingerprint: "a".repeat(64) });
+  assert.ok(fs.existsSync(keyedPath));
+  assert.equal(fs.readFileSync(lockPath, "utf8"), deadLock);
+});
+
 test("fetched data, read acknowledgments, effort mutations and browser duties remain independent of a completed run lease", (t) => {
   const dir = fixture(t);
   fs.writeFileSync(path.join(dir, "input.json"), '{"rows":[1]}');
