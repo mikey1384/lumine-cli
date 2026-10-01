@@ -344,6 +344,58 @@ test("fetched data, read acknowledgments, effort mutations and browser duties re
   assert.equal(summarizeDailyProgress(dir, regathered, evidence).complete, false);
 });
 
+test("documented daily progress command reads and writes the explicit run directory", (t) => {
+  const dir = fixture(t);
+  const cwd = fixture(t);
+  fs.writeFileSync(path.join(dir, "input.json"), '{"rows":[1]}');
+  const source = reference(dir, "input.json");
+  fs.writeFileSync(path.join(dir, "review-state.json"), JSON.stringify({
+    protocol: 1,
+    scope: "explicit-run",
+    sources: [{ ...source, fetched: true }],
+    requiredDuties: ["review"],
+  }));
+  const evidenceFile = path.join(dir, "duty-evidence.json");
+  fs.writeFileSync(evidenceFile, JSON.stringify({
+    protocol: 1,
+    reading: [{ ...source, readAt: "2026-10-01T00:00:00Z", complete: true }],
+    duties: [{ id: "review", status: "completed", evidence: [source] }],
+  }));
+  const output = path.join(dir, "receipt.json");
+  const result = spawnSync(process.execPath, [
+    fileURLToPath(new URL("../bin/lumine.js", import.meta.url)),
+    "admin", "daily-run", "progress", "--dir", dir,
+    "--file", evidenceFile, "--output", output, "--json", "--no-update-check",
+  ], { cwd, encoding: "utf8", timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.ok, true);
+  assert.equal(receipt.status, "success");
+  assert.equal(receipt.data.scope, "explicit-run");
+  assert.equal(receipt.data.reading.read, 1);
+  assert.equal(receipt.data.complete, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(output, "utf8")), receipt);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "progress.json"), "utf8")), receipt.data);
+  assert.equal(fs.existsSync(path.join(cwd, "progress.json")), false);
+});
+
+test("daily progress never falls back to cwd when the explicit directory is unavailable", (t) => {
+  const cwd = fixture(t);
+  fs.writeFileSync(path.join(cwd, "review-state.json"), JSON.stringify({
+    protocol: 1, scope: "wrong-directory", sources: [], requiredDuties: [],
+  }));
+  const missing = path.join(cwd, "missing-run");
+  const result = spawnSync(process.execPath, [
+    fileURLToPath(new URL("../bin/lumine.js", import.meta.url)),
+    "admin", "daily-run", "progress", "--dir", missing, "--json", "--no-update-check",
+  ], { cwd, encoding: "utf8", timeout: 10000 });
+  assert.equal(result.status, 1);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.ok, false);
+  assert.ok(receipt.error.message.includes(path.join(missing, "review-state.json")));
+  assert.equal(fs.existsSync(path.join(cwd, "progress.json")), false);
+});
+
 function fakeChild() {
   const child = new EventEmitter();
   child.stdout = new PassThrough();
