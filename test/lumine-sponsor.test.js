@@ -2362,3 +2362,115 @@ async function readRequestBody(req) {
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
+
+test("releasing a job hands it back to the pool without failing the request", async (t) => {
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lumine-sponsor-release-test-"),
+  );
+  const authFile = path.join(tmpDir, "auth.json");
+  const jobDir = path.join(tmpDir, "lumine-sponsor-jobs", "lumine-zero-job-9-abc");
+  const workspaceDir = path.join(jobDir, "workspace");
+  const jobAuthFile = path.join(jobDir, "job-auth.json");
+  await fs.mkdir(workspaceDir, { recursive: true });
+  await fs.writeFile(jobAuthFile, JSON.stringify({ token: "job-access" }), {
+    mode: 0o600,
+  });
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    const body = await readRequestBody(req);
+    requests.push(req.url);
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/heartbeat") {
+      res.end(
+        JSON.stringify({
+          job: { id: 9, status: "working" },
+          relays: [],
+          leaseExpiresAt: 220,
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url === "/cli/sponsor/jobs/9/release") {
+      assert.equal(body.attemptToken, "attempt-token");
+      assert.equal(body.reason, "Another session should take this one");
+      res.end(
+        JSON.stringify({
+          job: { id: 9, status: "queued", heldByDutySessionId: null },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: `No mock for ${req.method} ${req.url}` }));
+  });
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  await writeTestAuth(authFile, apiUrl);
+  const environment = codexEnvironment("release-job-owner-session");
+  const operatorSession = detectSponsorAgentSession({
+    environment,
+    ancestry: { codex: null, claude: null },
+  });
+  const statePath = baseSponsorDutyStatePath({ apiUrl, authFile });
+  await fs.writeFile(
+    statePath,
+    JSON.stringify({
+      version: 2,
+      apiUrl,
+      sponsorUserId: 5,
+      operatorSession,
+      duty: {
+        ...canonicalDuty(),
+        leaseToken: "duty-lease",
+        heartbeatEverySeconds: 20,
+      },
+      jobs: {
+        9: {
+          job: { id: 9, status: "working" },
+          attempt: { id: 11, number: 1, token: "attempt-token" },
+          relays: [],
+          appliedRelayIds: [],
+          heartbeatEverySeconds: 40,
+          leaseExpiresAt: 220,
+          workspaceDir,
+          tempDir: jobDir,
+          authFile: jobAuthFile,
+          workspaceToken: null,
+        },
+      },
+      preservedWorkspaces: [],
+    }),
+    { mode: 0o600 },
+  );
+
+  const released = await runCli(
+    [
+      "sponsor",
+      "job",
+      "release",
+      "9",
+      "--reason",
+      "Another session should take this one",
+      "--json",
+      "--api-url",
+      apiUrl,
+      "--auth-file",
+      authFile,
+      "--no-update-check",
+    ],
+    { environment },
+  );
+
+  assert.equal(released.code, 0, released.stderr);
+  assert.equal(JSON.parse(released.stdout).job.status, "queued");
+  assert(requests.includes("/cli/sponsor/jobs/9/release"));
+  assert(!requests.includes("/cli/sponsor/jobs/9/fail"));
+  const finalState = JSON.parse(await fs.readFile(statePath, "utf8"));
+  assert.deepEqual(finalState.jobs, {});
+  await assert.rejects(fs.stat(jobDir), { code: "ENOENT" });
+});
