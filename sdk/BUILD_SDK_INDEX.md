@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-10-03T04:47:01.454Z
+Generated: 2026-10-03T09:02:05.836Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -552,16 +552,18 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Only one music generation per viewer may run at a time (code ai_music_generation_in_progress). A retry with the same requestId returns the finished result without paying again (replayed: true), or code music_in_progress while it is still being made.
   - Generation usually takes one to three minutes; the SDK timeout defaults to 600000ms. Show progress UI while waiting.
   - Example: const song = await Twinkle.ai.generateMusic({ prompt: 'Warm lo-fi hip hop with dusty drums, a mellow Rhodes and rain in the background', instrumental: true }); audio.src = song.url;
-- async generateSpeech({ text, voice, language, requestId, timeoutMs } = {}) | scopes: none
+- async generateSpeech({ text, voice, style, language, requestId, timeoutMs } = {}) | scopes: none
   - Returns: { success, asset, url, mimeType, durationSeconds, alignment, text, voice, model, requestId, replayed?, aiUsagePolicy }
-  - Generate spoken audio with Eleven v4 and save it in the viewer's Twinkle.files. New generations use AI Battery.
+  - Generate spoken audio (OpenAI realtime voices or ElevenLabs presets) and save it in the viewer's Twinkle.files. New generations use AI Battery.
   - Signed-in viewers only. Each new generation uses AI Battery; show this before the viewer starts voice interaction.
-  - text: 1–2,000 characters. voice: warm (default), bright, or calm. language: optional ISO language code such as en.
+  - text: 1–2,000 characters. language: optional ISO language code such as en.
+  - voice: an OpenAI realtime voice (alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar) or an ElevenLabs preset (warm, bright, calm; warm is the default). For a recurring character, pick one voice and keep it everywhere, including any pre-recorded lines, so the character always sounds the same.
+  - style (OpenAI voices only): up to 300 characters of performance direction such as age, mood, pace and clarity. The voice reads the text word for word in that style.
   - The MP3 is saved in the viewer's Twinkle.files and counts toward storage. Replay the saved URL to listen again without another AI request.
-  - alignment contains provider character timing for subtitles or animation. Respect Twinkle tab mute and browser playback controls.
+  - alignment contains provider character timing for subtitles or animation (ElevenLabs presets only; null for OpenAI voices). Respect Twinkle tab mute and browser playback controls.
   - Reuse requestId after a lost response. Completed audio replays the saved asset and settles the same billing receipt without regeneration or duplicate charges.
   - Only one speech or transcription request per viewer runs at a time. SDK timeout defaults to 180000ms.
-  - Example: const speech = await Twinkle.ai.generateSpeech({ text: 'Welcome to our club!', voice: 'warm', language: 'en' }); audio.src = speech.url;
+  - Example: const speech = await Twinkle.ai.generateSpeech({ text: 'Welcome to our club!', voice: 'shimmer', style: 'Cheerful, curious thirteen-year-old girl; bright and warm.', language: 'en' }); audio.src = speech.url;
 - async transcribeAudio({ audioBase64, language, requestId, timeoutMs } = {}) | scopes: none
   - Returns: { success, text, words: [{ text, start, end }], language, durationSeconds, model, requestId, replayed?, aiUsagePolicy }
   - Recognize a short recording with ElevenLabs Scribe v2. New recognition requests use AI Battery.
@@ -1498,7 +1500,7 @@ world.updatePresence({ x, y, z, facing });
 - await Twinkle.rewards.progress({ challengeId, completionToken?, frames?, record?, requestId? }) | scopes: rewards:claim
   - Returns: { mode: "live" | "preview", completion: { profile, token?, completed, failed?, decision?, message?, maxFrames? }, aiUsagePolicy? }
   - Verify a bounded batch of inputs for an approved server-simulated climb.
-  - Only for completionProof: classic-tower-v1. Send 1 to 600 chronological physics frames, each [dt, moveX, moveY, cameraForwardX, cameraForwardZ, jumpPressed, jumpHeld, speedMultiplier]. dt is in seconds, at most 0.05; movement axes are -1 through 1; the camera values are the horizontal components before normalization; jump flags are 0 or 1; speedMultiplier is an existing Classic Tower trail speed (1, 1.1, 1.2, 1.3, 1.35 or 1.4). Geometry and player state are owned by the registered server simulation.
+  - Only for completionProof: classic-tower-v1. Send 1 to 600 chronological physics frames, each [dt, moveX, moveY, cameraForwardX, cameraForwardZ, jumpPressed, jumpHeld, speedMultiplier]. dt is in seconds, at most 0.05; movement axes are -1 through 1; the camera values are the horizontal components before normalization; jump flags are 0 or 1; speedMultiplier is an existing Classic Tower trail speed (1, 1.1, 1.2, 1.3, 1.35, 1.4, 1.6 or 2.2). Geometry and player state are owned by the registered server simulation.
   - Send occasional batches with at most one request in flight. Keep the previous token and the exact batch until a response confirms it; an identical retry is safe. Use the returned token for the next batch. Simulation time cannot outrun wall time. A completed token is evidence of a legal simulated run, not proof that a human played or that inputs were not automated.
   - On respawn or a return from another world, begin a fresh run at the canonical spawn via start. Preserve other worlds and gameplay. Do not submit positions, scores, secret keys, or a client completion flag. Preview tokens can never be redeemed in the published app.
   - For breadface-v1, breadface-v2 and breadface-v3, send 1–1,000 chronological [dt, inputBits] frames (dt > 0 and <= 0.033). Bits are left=1, right=2, jumpHeld=4, jumpQueued=8, fireHeld=16. The server replays the registered frozen game; only a legitimate goal and any rule-specific bonus qualify. Honor maxFrames and retain unacknowledged inputs for a bounded retry.
