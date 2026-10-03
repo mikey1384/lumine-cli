@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-09-30T09:55:20.738Z
+Generated: 2026-10-03T03:01:49.471Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -81,8 +81,9 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
 
 ### Twinkle.viewer
 - async get() | scopes: none
-  - Returns: { id, username, profilePicUrl, isLoggedIn, isOwner, isGuest }
+  - Returns: { id, username, profilePicUrl, isLoggedIn, isOwner, isGuest, ageTier }
   - Cached; use refresh() to re-fetch.
+  - ageTier is 'kid', 'teen' or 'adult', taken from the viewer's Teenager and Adult achievements (granted once an admin approves their birthdate). Guests and viewers without either achievement are 'kid'. It is a display and default-selection hint computed by the Twinkle page; do not treat it as a server-side permission.
 - async refresh() | scopes: none
   - Returns: Viewer info
   - Forces a fresh fetch from the parent.
@@ -1515,6 +1516,13 @@ world.updatePresence({ x, y, z, facing });
   - Standings of who earned the most XP or Coins in THIS app, computed by Twinkle from its own receipts (never from anything the app submits). period 'day' is today (site day, UTC), 'week' the last 7 site days, 'all' (default) every day since approval. limit defaults to 20, max 100.
   - available says which boards this app's approved rules can pay: show a Coins board only when available.coins is true (an app whose rules pay XP only has no Coins standings). me is the signed-in viewer's own standing even when they fall outside the page, or null when they earned nothing in the period.
   - Drafts and previews return mode 'preview' with no entries. Use Twinkle.leaderboards for app-defined scores; use this for real XP and Coins earned.
+- await Twinkle.rewards.getChallengeBoard() | scopes: rewards:claim
+  - Returns: { mode: "live", dayKey, puzzles: [{ ruleId, title, setKey, rating, solvers, failers, failures, daysStanding, status: "untouched" | "undefeated" | "defeated" }], topSolvers: [{ rank, userId, username, profilePicUrl, rating, solves, hardestSolve: { ruleId, setKey, rating } | null }], recentSolves: [{ id, userId, username, ruleId, setKey, tier: "solved" | "first-solve" | "hard-won" | "legendary", attempt, firstSolve, failersBefore, failuresBefore, daysStanding, puzzleRating, at }], me: { rating, solves, rank } | null } | { mode: "preview", puzzles: [], topSolvers: [], recentSolves: [], me: null, message }
+  - Front-page difficulty board for until-earned quiz bounties: what is being tried and failed, who is rated highest, and the latest defeats.
+  - Computed by Twinkle from its own receipts and attempts, never from anything the app submits. Puzzles are Elo-rated against players: a player's first miss on a puzzle is a win for the puzzle, a solve is a win for the player, and repeat misses by one player never stack.
+  - puzzles lists today's set for each until-earned rule. status 'undefeated' means someone tried and nobody has solved it yet; show it as a standing challenge. failers is how many different players missed it; failures is total wrong answers.
+  - tier on a recent solve says how loudly to celebrate: 'legendary' (first solve of a long-undefeated puzzle), 'hard-won', 'first-solve', or plain 'solved'. It is fixed at solve time, so it never changes later.
+  - No questions, answers, guides or private work are ever returned. Names are the same public names the XP leaderboard shows; other players who missed a puzzle are counted, never named. Drafts and previews return mode 'preview' with empty lists.
 - await Twinkle.rewards.getTimeline({ ruleId?, cursor?, limit? } = {}) | scopes: rewards:claim
   - Returns: { mode: "live", dayKey, entries: [{ receiptId, ruleId, ruleTitle, setKey, title, promptPreview, dayKey, closedAt, solvedAt, solver: { userId, username }, firstSolver, xp, coins, attempt }], nextCursor } | { mode: "preview", entries: [], nextCursor: null, message }
   - Browse confirmed solves of retired until-earned quiz bounties, newest first.
