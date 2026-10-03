@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-10-03T03:01:49.471Z
+Generated: 2026-10-03T04:47:01.454Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -1516,6 +1516,14 @@ world.updatePresence({ x, y, z, facing });
   - Standings of who earned the most XP or Coins in THIS app, computed by Twinkle from its own receipts (never from anything the app submits). period 'day' is today (site day, UTC), 'week' the last 7 site days, 'all' (default) every day since approval. limit defaults to 20, max 100.
   - available says which boards this app's approved rules can pay: show a Coins board only when available.coins is true (an app whose rules pay XP only has no Coins standings). me is the signed-in viewer's own standing even when they fall outside the page, or null when they earned nothing in the period.
   - Drafts and previews return mode 'preview' with no entries. Use Twinkle.leaderboards for app-defined scores; use this for real XP and Coins earned.
+- await Twinkle.rewards.interpretAnswer({ challengeId, text }) | scopes: rewards:claim
+  - Returns: { mode: "live" | "preview", understood: boolean, value: number | null, source: "plain" | "model" }
+  - Read a learner's free-form answer text into the single number they meant, so they can answer in any format.
+  - For numeric-quiz bounties. Call it only when the typed text is not already a plain number or fraction (check that locally); a plain number returns source 'plain' with no model call. Then pass the returned value to claim({ challengeId, answers: [value] }). A small model reads the text and the platform pays for it, so the learner's AI Energy is never charged.
+  - understood: false means the text had no single clear number (several alternatives, no number, or a calculation). Tell the learner in friendly words to type just the number. This is not a wrong answer and does not use a try.
+  - The reader is given the puzzle text only to learn the requested answer format (unit, fraction/decimal/percent, which of several numbers answers the question), never the answer key, and never calculates or converts units: it only reads what was written, and the number it returns must be one the learner actually typed. Typed expressions like 5+8 are intentionally not evaluated.
+  - Requires an open challenge of the learner's own (build_reward_challenge_not_open, HTTP 409 otherwise). Limit: 120 characters (build_reward_answer_text_invalid, 400), rate limited to a burst of 4 then one read every 5 seconds (build_reward_throttled, 429). build_reward_answer_reader_unavailable (503) means the reader is down: ask the learner to type just the number.
+  - Drafts and owner previews return mode 'preview' and need no open challenge.
 - await Twinkle.rewards.getChallengeBoard() | scopes: rewards:claim
   - Returns: { mode: "live", dayKey, puzzles: [{ ruleId, title, setKey, rating, solvers, failers, failures, daysStanding, status: "untouched" | "undefeated" | "defeated" }], topSolvers: [{ rank, userId, username, profilePicUrl, rating, solves, hardestSolve: { ruleId, setKey, rating } | null }], recentSolves: [{ id, userId, username, ruleId, setKey, tier: "solved" | "first-solve" | "hard-won" | "legendary", attempt, firstSolve, failersBefore, failuresBefore, daysStanding, puzzleRating, at }], me: { rating, solves, rank } | null } | { mode: "preview", puzzles: [], topSolvers: [], recentSolves: [], me: null, message }
   - Front-page difficulty board for until-earned quiz bounties: what is being tried and failed, who is rated highest, and the latest defeats.
