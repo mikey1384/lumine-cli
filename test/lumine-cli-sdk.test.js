@@ -259,6 +259,44 @@ test("CLI exposes Twinkle.rewards through the server-verified reward endpoints o
     assert.equal(entry.write, true);
     assert.deepEqual(entry.mapArgs(args), body);
   }
+  // Puzzle vault: practice and explanation writes stay behind --allow-write;
+  // only the documented fields are forwarded.
+  for (const [name, operation, write, args, body] of [
+    ["rewards.practiceCheck", "practice-check", true,
+      { receiptId: 7, answer: 13, xp: 99 }, { receiptId: 7, answer: 13 }],
+    ["rewards.practiceCheck", "practice-check", true,
+      { receiptId: 7, text: "13 cards" }, { receiptId: 7, text: "13 cards" }],
+    ["rewards.getPracticeBoard", "practice-board", false, { junk: 1 }, {}],
+    ["rewards.getRelatedArchive", "related-archive", false,
+      { ruleId: "e1", grant: "x" }, { ruleId: "e1" }],
+    ["rewards.getRelatedArchive", "related-archive", false,
+      { receiptId: 3, ruleId: "e1" }, { receiptId: 3 }],
+    ["rewards.listExplanations", "explanations", true,
+      { receiptId: 3 }, { receiptId: 3 }],
+    ["rewards.postExplanation", "explanation-post", true,
+      { receiptId: 3, text: "t", userId: 9 }, { receiptId: 3, text: "t" }],
+    ["rewards.voteExplanation", "explanation-vote", true,
+      { id: 4, vote: 1, userId: 9 }, { id: 4, vote: 1 }],
+    ["rewards.deleteExplanation", "explanation-delete", true,
+      { id: 4, userId: 9 }, { id: 4 }],
+    ["rewards.getRematch", "rematch", true, { junk: 1 }, {}],
+    ["rewards.getArchivedProblem", "archived-problem", false,
+      { receiptId: 2, withGuide: true, dayKey: "x" }, { receiptId: 2, withGuide: true }],
+    ["rewards.getArchivedProblem", "archived-problem", false,
+      { receiptId: 2, withGuide: "yes" }, { receiptId: 2 }],
+    ["rewards.claimRematch", "rematch-claim", true,
+      { answer: 13, xp: 99, challengeId: "x" }, { answer: 13 }],
+    ["rewards.claimRematch", "rematch-claim", true,
+      { answers: [1, 2] }, { answers: [1, 2] }],
+  ]) {
+    const entry = SDK_CLI_METHODS[name];
+    assert.equal(entry.path, `api/rewards/${operation}`);
+    assert.equal(entry.special, "rewards");
+    assert.equal(entry.operation, operation);
+    assert.deepEqual(entry.scopes, ["rewards:claim"]);
+    assert.equal(Boolean(entry.write), write);
+    assert.deepEqual(entry.mapArgs(args), body);
+  }
   // Raw --path cannot bypass the curated handling.
   for (const operation of ["status", "receipt", "start", "claim"]) {
     assert.equal(
