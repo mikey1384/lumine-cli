@@ -1168,7 +1168,7 @@ Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with 
 lumine admin approvals list [--status pending|approved|rejected|all] [--type dob|mentor|meetup]
 lumine admin approvals show <id>
 lumine admin approvals approve|reject <id> [--reason <text>]
-lumine admin teachers audit [--limit 1-200]
+lumine admin teachers audit [--limit 1-100]
 lumine admin teachers revoke <userId> --reason <text>
 ```
 
