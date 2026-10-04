@@ -6652,3 +6652,54 @@ test("lumine admin review is one queue across request types", () => {
     /AI Card crafting requests only/,
   );
 });
+
+test("reward-bank seed works inside a daily run and on demand without one", async (t) => {
+  const inRun = await createFixtureServer(t);
+  const runResult = await runCli([
+    "admin",
+    "reward-bank",
+    "seed",
+    "2655",
+    "--json",
+    ...inRun.cliArgs,
+  ]);
+  assert.equal(runResult.code, 0, runResult.stderr);
+  const runSeed = inRun.requests.find(
+    (entry) => entry.url === "/cli/admin/reward-bank/seed",
+  );
+  assert.equal(runSeed?.runId, "91");
+  assert.deepEqual(runSeed?.body, { buildId: 2655, maxStep: 3 });
+
+  // No active run: the owner can still seed; the server picks the identity.
+  const onDemand = await createFixtureServer(t, {
+    runStatusResponse: { run: null, lastRun: null },
+  });
+  const result = await runCli([
+    "admin",
+    "reward-bank",
+    "seed",
+    "2655",
+    "--identity",
+    "ciel",
+    "--json",
+    ...onDemand.cliArgs,
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  const seed = onDemand.requests.find(
+    (entry) => entry.url === "/cli/admin/reward-bank/seed",
+  );
+  assert.equal(seed?.runId, null);
+  assert.deepEqual(seed?.body, { buildId: 2655, maxStep: 3, identity: "ciel" });
+
+  const bad = await runCli([
+    "admin",
+    "reward-bank",
+    "seed",
+    "2655",
+    "--identity",
+    "mikey",
+    "--json",
+    ...onDemand.cliArgs,
+  ]);
+  assert.notEqual(bad.code, 0);
+});
