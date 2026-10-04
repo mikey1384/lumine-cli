@@ -1162,7 +1162,7 @@ lumine admin review propose rewards:70 --dir /private/tmp/reward-review-70 --con
 
 ### Management approvals and the teacher audit (any time; also a full-daily-review duty; added 2026-10-04)
 
-Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with its evidence: the account, the request, who invited them, accounts linked by verified email, exact device or a manual identity bucket (with each one's age and role), activity, and flags. These are Mikey-only and need no daily run.
+Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with its evidence: the account, the request, who invited them, accounts linked by verified email, exact device or a manual identity bucket (with each one's age and role), the internet addresses the account acted from (network evidence, below), activity, and flags. These are Mikey-only and need no daily run.
 
 ```bash
 lumine admin approvals list [--status pending|approved|rejected|all] [--type dob|mentor|meetup]
@@ -1170,7 +1170,19 @@ lumine admin approvals show <id>
 lumine admin approvals approve|reject <id> [--reason <text>]
 lumine admin teachers audit [--limit 1-100]
 lumine admin teachers revoke <userId> --reason <text>
+lumine admin identity network <userId|username> --reason <text> [--include-private-evidence]
 ```
+
+**Network evidence** (`users_actions` addresses, added 2026-10-04): the account's most recently used addresses (up to 8), and for each one who else acted from it.
+- An address more than 8 other accounts use is a **shared network** (an academy, a school, a café): it is only counted, never listed, because it links strangers. Teachers and students at the same academy share one.
+- An address 8 or fewer other accounts use is a **small network** (a home): every account on it is listed with its age, role and account type.
+- Addresses are masked (`58.151.x.59`) with a stable `addressId` for comparing reports; `--include-private-evidence` on `identity network` shows the full address. `identity network` commits an access receipt with your reason before reading anything, like `identity inspect`.
+- Only each address's newest 5,000 actions and each person's newest 5,000 are read (index-bounded, replica, time-capped), so `older history not read` can appear.
+
+**Flags.** A linked account counts as a *minor* only with a recorded age under 18, and as a *member* when it holds no teacher/staff role (most accounts record no age, so "member" does not mean student):
+- `shares_device_with_minor_account` / `shares_device_with_member_account`, the same for `shares_email_…` and `same_identity_bucket_…`;
+- `shares_small_network_with_minor_account`, `shares_small_network_with_member_account`, `shares_small_network_with_banned_account`;
+- `linked_account_is_minor`, `own_birthdate_is_minor`, `new_account_with_linked_accounts`, `real_name_differs_from_profile`, `banned_account_in_family`.
 
 - Flags are pointers, not verdicts: a school device can link strangers. Judge each case, recommend, and act only on Mikey's decision.
 - `teachers audit` lists approved teachers, riskiest first.

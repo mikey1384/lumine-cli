@@ -6722,3 +6722,24 @@ test("lumine admin approvals and teachers build Mikey-only requests", () => {
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "revoke", "77"])), /needs --reason/);
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "approvals", "approve", "abc"])), /lumine admin approvals/);
 });
+
+test("lumine admin identity network builds a reasoned, receipt-first request", () => {
+  const op = parseAdminOperation(
+    parseArgs(["admin", "identity", "network", "bt0429", "--reason", "teacher request check"]),
+  );
+  assert.deepEqual([op.name, op.method, op.path, op.body, op.requiresRun], [
+    "identity.network",
+    "POST",
+    "/cli/admin/identity/network",
+    { target: "bt0429", reason: "teacher request check", includePrivateEvidence: false },
+    false,
+  ]);
+  const raw = parseAdminOperation(
+    parseArgs(["admin", "identity", "network", "18501", "--reason", "x", "--include-private-evidence"]),
+  );
+  assert.equal(raw.body.includePrivateEvidence, true);
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "identity", "network", "18501"])),
+    /lumine admin identity network/,
+  );
+});
