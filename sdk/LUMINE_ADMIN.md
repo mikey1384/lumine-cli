@@ -1160,6 +1160,27 @@ lumine admin review approve rewards:70 --config rules.json --json
 lumine admin review propose rewards:70 --dir /private/tmp/reward-review-70 --config rules.json --json
 ```
 
+### Management approvals and the teacher audit (any time; also a full-daily-review duty; added 2026-10-04)
+
+Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with its evidence: the account, the request, who invited them, accounts linked by verified email, exact device or a manual identity bucket (with each one's age and role), activity, and flags. These are Mikey-only and need no daily run.
+
+```bash
+lumine admin approvals list [--status pending|approved|rejected|all] [--type dob|mentor|meetup]
+lumine admin approvals show <id>
+lumine admin approvals approve|reject <id> [--reason <text>]
+lumine admin teachers audit [--limit 1-200]
+lumine admin teachers revoke <userId> --reason <text>
+```
+
+- Flags are pointers, not verdicts: a school device can link strangers. Judge each case, recommend, and act only on Mikey's decision.
+- `teachers audit` lists approved teachers, riskiest first.
+- `teachers revoke` removes a teacher status cleanly:
+  - the mentor achievement, plus the teenager/adult achievements the teacher approval gave unless a separately approved birthdate supports them;
+  - the teacher title and the public "unlocked" posts;
+  - the moderation powers that came with the level, by recounting points.
+- Revoke marks the request rejected, keeps who, when and why, and refuses sage/founder holders.
+- The daily-run procedure is in `agent-guides/lumine-admin.md`.
+
 ### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
 
 The creator's Lumine designs the rewards and writes them into the app. The

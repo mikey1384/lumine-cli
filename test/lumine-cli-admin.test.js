@@ -6703,3 +6703,22 @@ test("reward-bank seed works inside a daily run and on demand without one", asyn
   ]);
   assert.notEqual(bad.code, 0);
 });
+
+test("lumine admin approvals and teachers build Mikey-only requests", () => {
+  assert.deepEqual(parseAdminOperation(parseArgs(["admin", "approvals", "list", "--type", "mentor"])), {
+    name: "approvals.list",
+    method: "GET",
+    path: "/cli/admin/approvals?status=pending&type=mentor",
+    body: undefined,
+    mutates: false,
+    requiresRun: false,
+  });
+  assert.equal(parseAdminOperation(parseArgs(["admin", "approvals", "show", "approval:12"])).path, "/cli/admin/approvals/12");
+  const reject = parseAdminOperation(parseArgs(["admin", "approvals", "reject", "12", "--reason", "student alt"]));
+  assert.deepEqual([reject.method, reject.path, reject.body], ["POST", "/cli/admin/approvals/12", { decision: "reject", reason: "student alt" }]);
+  assert.equal(parseAdminOperation(parseArgs(["admin", "teachers", "audit", "--limit", "20"])).path, "/cli/admin/teachers/audit?limit=20");
+  const revoke = parseAdminOperation(parseArgs(["admin", "teachers", "revoke", "77", "--reason", "student alt"]));
+  assert.deepEqual([revoke.method, revoke.path, revoke.body, revoke.mutates], ["POST", "/cli/admin/teachers/77/revoke", { reason: "student alt" }, true]);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "revoke", "77"])), /needs --reason/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "approvals", "approve", "abc"])), /lumine admin approvals/);
+});
