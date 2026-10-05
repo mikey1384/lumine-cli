@@ -6716,6 +6716,8 @@ test("lumine admin approvals and teachers build Mikey-only requests", () => {
   assert.equal(parseAdminOperation(parseArgs(["admin", "approvals", "show", "approval:12"])).path, "/cli/admin/approvals/12");
   const reject = parseAdminOperation(parseArgs(["admin", "approvals", "reject", "12", "--reason", "student alt"]));
   assert.deepEqual([reject.method, reject.path, reject.body], ["POST", "/cli/admin/approvals/12", { decision: "reject", reason: "student alt" }]);
+  const supermod = parseAdminOperation(parseArgs(["admin", "approvals", "supermod", "526", "--reason", "academy staff"]));
+  assert.deepEqual([supermod.method, supermod.path, supermod.body], ["POST", "/cli/admin/approvals/526", { decision: "supermod", reason: "academy staff" }]);
   assert.equal(parseAdminOperation(parseArgs(["admin", "teachers", "audit", "--limit", "20"])).path, "/cli/admin/teachers/audit?limit=20");
   const revoke = parseAdminOperation(parseArgs(["admin", "teachers", "revoke", "77", "--reason", "student alt"]));
   assert.deepEqual([revoke.method, revoke.path, revoke.body, revoke.mutates], ["POST", "/cli/admin/teachers/77/revoke", { reason: "student alt" }, true]);
