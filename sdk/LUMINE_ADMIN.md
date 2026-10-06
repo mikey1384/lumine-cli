@@ -1378,6 +1378,7 @@ else's is a no-op and the upload route refuses them); the server keeps 30 days.
 lumine admin owner-trace --since 30m                       # readable timeline, oldest first
 lumine admin owner-trace --since 2026-10-06T09:00 --type route,feed-open
 lumine admin owner-trace --path /comments/123 --json        # raw rows
+lumine admin owner-trace --since 1h --perf                 # performance events only
 ```
 
 Event types: `session` (version, viewport, platform, PWA or tab), `route`
@@ -1389,6 +1390,17 @@ scroll-anchor diagnostics: save/restore/cancel with scroll numbers),
 later), `error`/`rejection` (short message and source file), `visibility`,
 `pagehide`, `trace-dropped`. Times are the phone's clock in this machine's
 time zone. Ids and paths only, never message text or other members' content.
+
+Performance events (`--perf` shows only these): `nav-timing` (one per
+navigation: ms from the tap to the URL change, the deploy-probe gate release
+with the probe's outcome current/armed/timeout/failed/throttled/backoff/pending
+and how long the tap waited for it, the route commit and, on content pages,
+content-ready; `cut by next-nav` means another navigation started before this
+one committed), `slow-request` (API requests over 1 s: method, path pattern
+with query keys only, status, ms, scheduler queue time), `stall` (main-thread
+gaps over 200 ms while the page is visible, bursts within 1 s coalesced) and
+`page-load` (once per load: TTFB, DOMContentLoaded, load, first route ready,
+ms since navigation start).
 
 ### Reward question-bank seeding (every full daily review; added 2026-09-28)
 

@@ -141,3 +141,82 @@ test("owner-trace prints a readable timeline", () => {
     "Nothing recorded in this window.",
   ]);
 });
+
+test("owner-trace --perf asks only for the performance events", () => {
+  const perf = parseAdminOperation(
+    parseArgs(["admin", "owner-trace", "--since", "1h", "--perf"]),
+  );
+  assert.equal(
+    perf.path,
+    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load",
+  );
+  const merged = parseAdminOperation(
+    parseArgs(["admin", "owner-trace", "--type", "route,stall", "--perf"]),
+  );
+  assert.match(
+    merged.path,
+    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load$/,
+  );
+});
+
+test("owner-trace renders performance events one line each", () => {
+  const base = new Date(2026, 9, 6, 14, 3, 12, 345).getTime();
+  const event = (offset, type, path, data) => ({
+    sessionId: "a1b2c3d4-xyz",
+    clientTime: base + offset,
+    type,
+    path,
+    data,
+  });
+  const lines = formatOwnerTrace({
+    since: Math.floor(base / 1000) - 600,
+    events: [
+      event(0, "page-load", "/", {
+        type: "navigate",
+        ttfb: 213,
+        dcl: 801,
+        load: 1491,
+        route: 1204,
+      }),
+      event(100, "nav-timing", "/comments/5", {
+        to: "/comments/5",
+        via: "nav",
+        nav: "PUSH",
+        url: 90,
+        gate: 4180,
+        commit: 4210,
+        ready: 4600,
+        total: 4600,
+        probe: "timeout",
+        probeMs: 500,
+      }),
+      event(200, "nav-timing", "/a", {
+        to: "/a",
+        via: "url",
+        nav: "PUSH",
+        url: 0,
+        total: 3900,
+        cut: "next-nav",
+      }),
+      event(300, "slow-request", "/comments/5", {
+        m: "GET",
+        api: "/content/comments?contentId",
+        status: 200,
+        ms: 1834,
+        q: 640,
+        tries: 2,
+      }),
+      event(400, "stall", "/comments/5", { ms: 450, n: 2, total: 770, span: 786 }),
+      event(500, "stall", "/", { ms: 230, n: 1, total: 230, span: 230 }),
+    ],
+  });
+  assert.deepEqual(lines.slice(2), [
+    "  · session a1b2c3d4 (continued)",
+    "  14:03:12.345  page-load      /  navigate · ttfb 213 · domcontentloaded 801 · load 1491 · first route 1204 ms",
+    "  14:03:12.445  nav-timing     /comments/5  tap→ready 4600ms · PUSH via nav · url +90 · gate +4180 (probe timeout, waited 500ms) · commit +4210 · ready +4600",
+    "  14:03:12.545  nav-timing     /a  cut after 3900ms · PUSH via url · url +0 · cut by next-nav",
+    "  14:03:12.645  slow-request   /comments/5  GET /content/comments?contentId → 200 in 1834ms (queued 640ms, 2 tries)",
+    "  14:03:12.745  stall          /comments/5  main thread blocked 450ms (2 stalls, 770ms blocked over 786ms)",
+    "  14:03:12.845  stall          /  main thread blocked 230ms",
+  ]);
+});
