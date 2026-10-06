@@ -6717,6 +6717,20 @@ test("lumine admin english builds import and review requests", () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+  {
+    const dir2 = fs.mkdtempSync(path.join(process.cwd(), "test", ".english-"));
+    try {
+      const file = path.join(dir2, "q.json");
+      fs.writeFileSync(file, JSON.stringify({ questions: [{ question: "q" }] }));
+      const add = parseAdminOperation(parseArgs(["admin", "english", "add-questions", file]));
+      assert.deepEqual([add.path, add.body.questions.length], ["/cli/admin/english/questions/import", 1]);
+      fs.writeFileSync(file, JSON.stringify([{ ref: "1", verdict: "keep" }]));
+      assert.equal(parseAdminOperation(parseArgs(["admin", "english", "adjudicate", file])).path, "/cli/admin/english/adjudicate");
+      assert.equal(parseAdminOperation(parseArgs(["admin", "english", "relevel", file])).body.items.length, 1);
+    } finally {
+      fs.rmSync(dir2, { recursive: true, force: true });
+    }
+  }
   const retag = parseAdminOperation(parseArgs(["admin", "english", "retag", "42", "--skill", "grammar.articles.zero", "--reason", "it tests zero article"]));
   assert.deepEqual([retag.path, retag.body.action, retag.body.skillCode, retag.body.reason], ["/cli/admin/english/review/42", "retag", "grammar.articles.zero", "it tests zero article"]);
   assert.equal(parseAdminOperation(parseArgs(["admin", "english", "review"])).path, "/cli/admin/english/review?limit=20");
