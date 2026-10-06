@@ -1368,6 +1368,28 @@ those exact files and does not depend on keeping the review copy. Re-offers
 reuse the media; a failed transaction cleans up its copied objects. Declining
 leaves the offered media as unused uploads in the creator's library.
 
+### Owner client trace (any time, read-only; added 2026-10-06)
+
+When Mikey reports a UI issue from his phone, read what his browser did
+before guessing. Only the owner's own signed-in browser records it (everyone
+else's is a no-op and the upload route refuses them); the server keeps 30 days.
+
+```bash
+lumine admin owner-trace --since 30m                       # readable timeline, oldest first
+lumine admin owner-trace --since 2026-10-06T09:00 --type route,feed-open
+lumine admin owner-trace --path /comments/123 --json        # raw rows
+```
+
+Event types: `session` (version, viewport, platform, PWA or tab), `route`
+(PUSH/POP/REPLACE, previous path, Home feed navigation/intent ids and action),
+`feed-open` (content type and id, open/comment/reward/recommend, how it was
+triggered and the tapped element's tag, card position), `scroll-anchor` (the
+scroll-anchor diagnostics: save/restore/cancel with scroll numbers),
+`content-scroll` (scrollTop at mount, when the content is ready, and 1 s/3 s
+later), `error`/`rejection` (short message and source file), `visibility`,
+`pagehide`, `trace-dropped`. Times are the phone's clock in this machine's
+time zone. Ids and paths only, never message text or other members' content.
+
 ### Reward question-bank seeding (every full daily review; added 2026-09-28)
 
 `generated-quiz` rules fill a question bank on the server: a question is
