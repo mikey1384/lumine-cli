@@ -802,7 +802,8 @@ test("private identity inspection requires a reason and makes raw evidence expli
       reason: "Confirm the account family before updating its quota bucket.",
       includePrivateEvidence: false,
     },
-    mutates: true,
+    // a read: writes keep their full response as a receipt file on disk
+    mutates: false,
   });
   const privateEvidence = parseAdminOperation(
     parseArgs([
@@ -1488,6 +1489,37 @@ test("shared verified-email policies are explicit, reversible, and run-independe
   assert.match(request?.requestId, /^cli:[0-9a-f-]{36}$/);
 });
 
+test("identity inspect keeps no copy on disk unless --output asks for a private one", async (t) => {
+  const fixture = await createFixtureServer(t);
+  const receiptsBefore = listAdminReceipts();
+  const base = ["admin", "identity", "inspect", "Jay1216", "--reason", "Confirm the account family before updating its quota bucket.", "--json"];
+  const plain = await runCli([...base, ...fixture.cliArgs]);
+  assert.equal(plain.code, 0, plain.stderr);
+  assert.deepEqual(listAdminReceipts(), receiptsBefore);
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-inspect-"));
+  try {
+    const file = path.join(dir, "case-evidence.json");
+    const saved = await runCli([...base, "--output", file, ...fixture.cliArgs]);
+    assert.equal(saved.code, 0, saved.stderr);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).ok, true);
+    assert.deepEqual(listAdminReceipts(), receiptsBefore);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  const network = parseAdminOperation(parseArgs(["admin", "identity", "network", "18501", "--reason", "teacher request check"]));
+  assert.equal(network.mutates, false);
+});
+
+function listAdminReceipts() {
+  const dir = path.resolve(__dirname, "..", "work", "lumine-admin", "requests");
+  try {
+    return fs.readdirSync(dir).filter((name) => name.endsWith(".receipt.json")).sort();
+  } catch {
+    return [];
+  }
+}
+
 test("identity, escalation, notable, and todo bookkeeping do not open a daily run", async (t) => {
   const fixture = await createFixtureServer(t);
   const commands = [
@@ -1569,7 +1601,9 @@ test("identity, escalation, notable, and todo bookkeeping do not open a daily ru
     includePrivateEvidence: true,
   });
   assert.equal(inspection?.runId, null);
-  assert.match(inspection?.requestId, /^cli:[0-9a-f-]{36}$/);
+  // sent as a read: no idempotency key, so no receipt is written; the server
+  // gives each call its own audit row
+  assert.equal(inspection?.requestId, null);
   const notable = fixture.requests.find(
     (request) => request.url === "/cli/admin/notable-users",
   );
