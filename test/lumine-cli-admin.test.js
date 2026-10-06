@@ -6704,6 +6704,24 @@ test("reward-bank seed works inside a daily run and on demand without one", asyn
   assert.notEqual(bad.code, 0);
 });
 
+test("lumine admin english builds import and review requests", () => {
+  const dir = fs.mkdtempSync(path.join(process.cwd(), "test", ".english-"));
+  try {
+    const file = path.join(dir, "pass-a.json");
+    fs.writeFileSync(file, JSON.stringify([{ ref: "11", primarySkill: "grammar.articles.zero" }]));
+    const imp = parseAdminOperation(parseArgs(["admin", "english", "import", file, "--pass", "a"]));
+    assert.deepEqual([imp.method, imp.path, imp.body.pass, imp.body.items.length], ["POST", "/cli/admin/english/import", "a", 1]);
+    assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "import", file])), /--pass/);
+    fs.writeFileSync(file, "[]");
+    assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "import", file, "--pass", "b"])), /1 to 500/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  const retag = parseAdminOperation(parseArgs(["admin", "english", "retag", "42", "--skill", "grammar.articles.zero", "--reason", "it tests zero article"]));
+  assert.deepEqual([retag.path, retag.body.action, retag.body.skillCode, retag.body.reason], ["/cli/admin/english/review/42", "retag", "grammar.articles.zero", "it tests zero article"]);
+  assert.equal(parseAdminOperation(parseArgs(["admin", "english", "review"])).path, "/cli/admin/english/review?limit=20");
+});
+
 test("lumine admin approvals and teachers build Mikey-only requests", () => {
   assert.deepEqual(parseAdminOperation(parseArgs(["admin", "approvals", "list", "--type", "mentor"])), {
     name: "approvals.list",
