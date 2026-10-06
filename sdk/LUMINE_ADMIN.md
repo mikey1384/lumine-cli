@@ -198,6 +198,12 @@ IP evidence, private messages, or unrelated activity. `--include-private-evidenc
 adds DOB values and verified email addresses only; exact device IDs are never
 returned.
 
+The CLI sends `identity inspect` and `identity network` as reads, so it keeps
+no copy of the result on disk; the server still records who looked, when and
+why, one audit row per call. When a case needs a kept copy (a bullying or police
+matter, say), add `--output <file>`: the result is written there with
+owner-only (0600) permissions, and nowhere else.
+
 Every inspection requires a concrete `--reason`. Before loading the evidence,
 the API commits a private `identity.inspect` audit receipt containing the real
 operator, requested target, reason, and whether private evidence was requested.
@@ -1176,7 +1182,7 @@ lumine admin identity network <userId|username> --reason <text> [--include-priva
 **Network evidence** (`users_actions` addresses, added 2026-10-04): the account's most recently used addresses (up to 8), and for each one who else acted from it.
 - An address more than 8 other accounts use is a **shared network** (an academy, a school, a café): it is only counted, never listed, because it links strangers. Teachers and students at the same academy share one.
 - An address 8 or fewer other accounts use is a **small network** (a home): every account on it is listed with its age, role and account type. The person's own linked accounts (email, device, bucket) are marked `their linked account` and never raise a flag; logged-out visits are not accounts. If the addresses cannot be read (time cap), the pack still answers, with `network_evidence_unavailable`.
-- Addresses are masked (`58.151.x.59`) with a stable `addressId` for comparing reports; `--include-private-evidence` on `identity network` shows the full address. `identity network` commits an access receipt with your reason before reading anything, like `identity inspect`.
+- Addresses are masked (`58.151.x.59`) with a stable `addressId` for comparing reports; `--include-private-evidence` on `identity network` shows the full address. `identity network` commits a server-side access audit row with your reason before reading anything, like `identity inspect`; neither leaves a local copy unless you pass `--output <file>`.
 - Only each address's newest 5,000 actions and each person's newest 5,000 are read (index-bounded, replica, time-capped), so `older history not read` can appear.
 
 **Flags.** A linked account counts as a *minor* only with a recorded age under 18, and as a *member* when it holds no teacher/staff role (most accounts record no age, so "member" does not mean student):
