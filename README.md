@@ -96,8 +96,11 @@ run `lumine suggestions <build-url-or-id>` to see their open suggestion inbox.
 The inbox prints canonical follow-up commands for merging or replacing Main and
 for applying the exact frozen thumbnail shown in a suggestion. The same actions
 are also available directly as `lumine suggestions merge <id>`,
-`lumine suggestions replace-main <id>`, and
-`lumine suggestions adopt-thumbnail <id>`. Large inboxes are cursor-paginated;
+`lumine suggestions replace-main <id>`,
+`lumine suggestions adopt-thumbnail <id>`, and
+`lumine suggestions adopt-title <id>`. To pass on a branch, thumbnail or name
+suggestion, run `lumine suggestions decline <id>`; the chat card shows it was
+declined for both sides and it leaves the inbox. Large inboxes are cursor-paginated;
 the CLI prints the exact `--cursor` command for the next page.
 
 Use `lumine explore` to list public open-source Build apps that can be used as

@@ -244,6 +244,93 @@ test("teammates suggest a name and owners adopt it by suggestion id", async (t) 
   assert.deepEqual(adoptRequest?.body, { suggestionMessageId: 46 });
 });
 
+test("owners decline branch, thumbnail and name suggestions from the CLI", async (t) => {
+  const parsed = parseArgs(["suggestions", "decline", "47", "--build", "884", "--yes"]);
+  assert.equal(parsed.suggestionAction, "decline");
+  assert.equal(parsed.suggestionId, "47");
+  assert.equal(parsed.buildIdFlag, "884");
+
+  const owner = await createFixtureServer(t, {
+    build: { id: 884, title: "Groove Lab", contributionStatus: "none", canWrite: true, canPublish: true },
+    suggestions: [
+      {
+        id: 47,
+        type: "branch",
+        rootBuildId: 884,
+        branchBuildId: 901,
+        branchNumber: 4,
+        contributorUsername: "Cloudstar",
+        note: "Added a boss level",
+        diffSummary: { total: 2 },
+        createdAt: 130,
+      },
+      {
+        id: 46,
+        type: "title",
+        rootBuildId: 884,
+        branchBuildId: 902,
+        branchNumber: 5,
+        contributorUsername: "Cloudstar",
+        suggestedTitle: "Beat Buddies",
+        currentTitle: "Groove Lab",
+        createdAt: 120,
+      },
+      {
+        id: 45,
+        type: "thumbnail",
+        rootBuildId: 884,
+        branchBuildId: 903,
+        branchNumber: 6,
+        contributorUsername: "Cloudstar",
+        suggestedThumbnailUrl: "https://images.example/suggested.png",
+        createdAt: 110,
+      },
+    ],
+  });
+  const list = await runCli(["suggestions", "884", ...owner.cliArgs]);
+  assert.equal(list.code, 0, list.stderr);
+  for (const id of [45, 46, 47]) {
+    assert.match(
+      list.stdout,
+      new RegExp(`decline: lumine suggestions decline ${id} --build 884`),
+    );
+  }
+
+  // Without --yes and without a TTY nothing is sent.
+  const unconfirmed = await runCli(["suggestions", "decline", "46", "--build", "884", ...owner.cliArgs]);
+  assert.equal(unconfirmed.code, 0, unconfirmed.stderr);
+  assert.match(unconfirmed.stdout, /re-run with --yes/);
+  assert.equal(
+    owner.requests.some((request) => request.url.endsWith("/decline-suggestion")),
+    false,
+  );
+
+  const expected = [
+    [47, 901, /Declined suggestion #47 \(updates from branch 4\) on Build #884/],
+    [46, 902, /Declined suggestion #46 \(name "Beat Buddies"\) on Build #884/],
+    [45, 903, /Declined suggestion #45 \(thumbnail\) on Build #884/],
+  ];
+  for (const [id, branchBuildId, message] of expected) {
+    const declined = await runCli([
+      "suggestions", "decline", String(id), "--build", "884", "--yes", ...owner.cliArgs,
+    ]);
+    assert.equal(declined.code, 0, declined.stderr);
+    assert.match(declined.stdout, message);
+    const request = owner.requests.find(
+      (entry) =>
+        entry.method === "POST" &&
+        entry.url === `/build/884/contributions/${branchBuildId}/decline-suggestion`,
+    );
+    assert.deepEqual(request?.body, { suggestionMessageId: id });
+  }
+
+  const missing = await runCli([
+    "suggestions", "decline", "99", "--build", "884", "--yes", ...owner.cliArgs,
+  ]);
+  assert.notEqual(missing.code, 0);
+  assert.match(missing.stderr, /Open suggestion #99 was not found/);
+});
+
 async function createFixtureServer(t, { build, suggestions = [] }) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-suggestions-"));
   const authFile = path.join(tmpDir, "auth.json");
@@ -309,6 +396,12 @@ async function createFixtureServer(t, { build, suggestions = [] }) {
           success: true,
           build: { id: 884, title: "Beat Buddies" },
         }),
+      );
+      return;
+    }
+    if (req.method === "POST" && req.url.endsWith("/decline-suggestion")) {
+      res.end(
+        JSON.stringify({ success: true, status: "declined", declinedAt: 200 }),
       );
       return;
     }
