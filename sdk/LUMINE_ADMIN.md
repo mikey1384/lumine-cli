@@ -3303,6 +3303,7 @@ lumine admin brief --days 3 --json
 lumine admin ai-costs monthly --json
 lumine admin media-costs monthly --json
 lumine admin notable status Stealth --json
+lumine admin profile show Stealth            # public profile for the candidate check
 lumine admin notable add 12647 --note "Top authored-activity kid of the window: 11 subjects, 61 comments." --json
 lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
@@ -3897,6 +3898,14 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   canonical writer and returns only the resolved public account identity,
   current membership, and the roster rationale/timestamps when present; it
   does not expose the private roster fields.
+  Before proposing a candidate, read their profile with
+  `lumine admin profile show <userId|username> [--json]` (a daily-run read,
+  like `brief`): username, real name as the public profile shows it, join and
+  last-active dates, rank/XP/title/achievements, status and bio lines, counts
+  (subjects, comments, AI stories, public builds, shared reflections) and
+  their latest ten of each with dates, excerpts and links. It serves the
+  profile as a signed-out visitor sees it: no emails, no secret answers, no
+  unshared reflections, and only comments on public surfaces.
   When Mikey authorizes removal, use `lumine admin notable remove <userId|username> --note "<why removed>" --json`. It is run-independent, transactionally audited as `notable.remove`, verifies canonical absence, and is idempotent. Never use SQL to work around a missing CLI verb. Mikey is the administrator, not a Notable candidate; do not include him in blanket roster additions.
   **Always pass `--note`** with a concrete one-or-two-sentence record of what
   made them notable — real numbers and specifics from the brief window, not

@@ -170,3 +170,118 @@ test("export needs one target and a new directory, and verifies every file again
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Fixture in the shape GET /cli/admin/chat-reports/:id returns (report 3,
+// with invented text). The human printer used to send any `data.report` to
+// the daily-run report branch and crash on `report.run.id`.
+const REPORT_FIXTURE = {
+  id: 3,
+  status: "resolved",
+  reason: "harassment",
+  reasonLabel: "Bullying or harassment",
+  note: "Keeps following my posts.",
+  createdAt: 1791008350,
+  reporter: { id: 18027, username: "reporter_kid" },
+  reported: { id: 9046, username: "reported_kid" },
+  messageId: 3835674,
+  channelId: 71244,
+  subchannelId: 0,
+  channelKind: "direct",
+  reportsOfThisMessage: 1,
+  ownerNotifiedAt: 1791008351,
+  reviewedAt: 1791297900,
+  reviewedByUserId: 5,
+  reviewNote: "Talked to both members.",
+  message: {
+    id: 3835674,
+    userId: 9046,
+    content: "first line\nsecond line",
+    username: "reported_kid",
+    timeStamp: 1790994122,
+    channelName: null,
+    subchannelId: 0,
+  },
+  context: {
+    before: [
+      { id: 3835600, userId: 18027, content: "hello", username: "reporter_kid", timeStamp: 1790937856 },
+    ],
+    after: [],
+  },
+};
+
+test("chat-reports show prints a readable report instead of crashing", async () => {
+  const { formatChatReportResult } = await import("../lib/admin-chat-reports.js");
+  const lines = formatChatReportResult({
+    operation: { name: "chat-reports.show" },
+    data: { report: REPORT_FIXTURE },
+  });
+  const text = lines.join("\n");
+  assert.match(text, /^Chat report #3: RESOLVED · filed 2026-10-03 06:19 UTC/);
+  assert.match(text, /Reporter → reported: reporter_kid \(#18027\) → reported_kid \(#9046\)/);
+  assert.match(text, /Reason: Bullying or harassment \(harassment\)/);
+  assert.match(text, /Reporter's note: Keeps following my posts\./);
+  assert.match(text, /Review: 2026-10-\d\d \d\d:\d\d UTC by user #5 — Talked to both members\./);
+  assert.match(text, /Reported message #3835674:\n> 2026-10-03 02:22 UTC  reported_kid: first line\n {6}second line/);
+  assert.match(text, /Context before \(1\):\n {2}2026-10-02 \d\d:\d\d UTC  reporter_kid: hello/);
+  assert.match(text, /Context after \(0\):\n {2}\(none\)/);
+
+  const set = formatChatReportResult({
+    operation: { name: "chat-reports.set" },
+    data: { report: { ...REPORT_FIXTURE, context: null, message: null } },
+  });
+  assert.equal(set[0], "Recorded.");
+  assert.ok(set.includes("Context: none kept."));
+});
+
+test("chat-reports list prints one line per report and the next cursor", async () => {
+  const { formatChatReportResult } = await import("../lib/admin-chat-reports.js");
+  const lines = formatChatReportResult({
+    operation: { name: "chat-reports.list" },
+    data: { filter: "pending", reports: [REPORT_FIXTURE], nextCursor: 3 },
+  });
+  assert.equal(lines[0], "1 pending chat report(s):");
+  assert.match(lines[1], /^ {2}#3 RESOLVED · Bullying or harassment · reporter_kid \(#18027\) → reported_kid \(#9046\)/);
+  assert.match(lines[1], /\n {4}"first line second line"$/);
+  assert.ok(lines.includes("More: lumine admin chat-reports list --cursor 3"));
+  assert.ok(
+    formatChatReportResult({
+      operation: { name: "chat-reports.list" },
+      data: { filter: "all", reports: [REPORT_FIXTURE], nextCursor: 3 },
+    }).includes("More: lumine admin chat-reports list --status all --cursor 3"),
+  );
+  assert.deepEqual(
+    formatChatReportResult({ operation: { name: "chat-reports.list" }, data: { filter: "all", reports: [] } }),
+    ["0 all chat report(s)."],
+  );
+  assert.equal(formatChatReportResult({ operation: { name: "chat-reports.list-holds" }, data: {} }), null);
+});
+
+test("a chat report update's receipt keeps the decision, never the reported chat", async () => {
+  const { receiptToKeep } = await import("../lib/admin-receipts.js");
+  const receipt = receiptToKeep(
+    parseAdminOperation(parseArgs(["admin", "chat-reports", "set", "3", "--status", "resolved", "--note", "handled"])),
+    {
+      ok: true,
+      status: "success",
+      data: {
+        report: {
+          id: 3,
+          status: "resolved",
+          reviewedAt: 6,
+          reviewedByUserId: 1,
+          reviewNote: "handled",
+          note: "reporter's words",
+          message: { content: "private message" },
+          context: { before: [{ content: "private context" }], after: [] },
+        },
+      },
+    },
+  );
+  assert.deepEqual(receipt, {
+    ok: true,
+    status: "success",
+    changed: undefined,
+    data: { reportId: 3, status: "resolved", reviewedAt: 6, reviewedByUserId: 1, note: "handled" },
+  });
+  assert.doesNotMatch(JSON.stringify(receipt), /private|reporter's words/);
+});
