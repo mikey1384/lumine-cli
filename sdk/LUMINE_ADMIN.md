@@ -3880,8 +3880,9 @@ farm-signal sections added that day; AI Card summon watch added 2026-08-24):
   re-read its canonical members. This duty applies even when no group crossed
   three cards, because the new enforcement prevents already-bucketed siblings
   from producing an over-limit row.
-- `notableCandidates` — kids (never bots, staff `userType`s, or users already
-  on the Notable Users list) ranked by authored activity in the window, with
+- `notableCandidates` — kids (never bots, staff `userType`s, approved teachers
+  — anyone holding the mentor or sage achievement — or users already on the
+  Notable Users list) ranked by authored activity in the window, with
   `isNewUser` marking window-new signups. Use it to find the overlooked and
   rising users the editorial priorities exist for, and propose additions to
   Mikey's Notable Users list in the report. When Mikey approves additions,
@@ -4063,6 +4064,9 @@ type InsightsBrief = Success<{
     isNewUser: boolean;
     lastActive: number | null;
   }>;
+  // Approved teachers that would otherwise have ranked into the list; counts
+  // only those met while filling it, not every active teacher.
+  notableCandidateTeachersExcluded: number;
   teachers: {
     genuinelyInterested: TeacherInsight[];
     workOnly: TeacherInsight[];
