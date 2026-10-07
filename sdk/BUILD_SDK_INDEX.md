@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-10-06T10:12:09.371Z
+Generated: 2026-10-07T07:52:06.040Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -257,6 +257,7 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - title/body are accepted as aliases for label/summary.
   - target is accepted as a backwards-compatible alias for launchTarget.
   - Twinkle applies app API rate limits, a stricter notification emit rate limit, and existing notification mutes.
+  - Twinkle shows the acting member's username right before `summary` in the notification row, so write `summary` as a predicate ('posted in Lobby', 'responded to the Twinkle Newspaper'), never starting with the member's name (otherwise it reads 'Liki Liki responded…').
   - Example: await Twinkle.notifications.notifySubscribers('room.message', { targetKey: 'room:lobby', eventKey: 'room.message.created', label: 'Room messages', summary: 'posted in Lobby', launchTarget: { view: 'room', roomId: 'lobby', messageId } });
 - async getSubjectUpdateSubscription(subjectId) | scopes: notifications:read
   - Returns: { subscription }

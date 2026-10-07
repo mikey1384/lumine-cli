@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { parseAdminOperation } from "../lib/admin.js";
 import { parseArgs } from "../lib/commands.js";
+import { receiptToKeep } from "../lib/admin-receipts.js";
 
 function op(args) {
   const operation = parseAdminOperation(parseArgs(["admin", "meetup", ...args]));
@@ -97,4 +98,54 @@ test("admin meetup story maps to the story approval routes by crew", () => {
   assert.throws(() => op(["story", "send-back", "12"]), /needs --note/);
   assert.throws(() => op(["story", "approve", "x"]), /Crew ID/);
   assert.throws(() => op(["story", "delete", "12"]), /Usage: lumine admin meetup story/);
+});
+
+test("admin meetup info maps staff's who-are-you check on a member", () => {
+  assert.deepEqual(op(["info", "6", "18816", "--decision", "ask", "--note", "Which Bundang class are you in?"]), {
+    name: "meetup.info",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/crews/6/members/18816/info-check",
+    body: { action: "request", note: "Which Bundang class are you in?" },
+    mutates: true,
+    requiresRun: false,
+  });
+  assert.deepEqual(op(["info", "6", "18816", "--decision", "accept"]).body, { action: "accept", note: "" });
+  assert.equal(op(["info", "6", "18816", "--decision", "withdraw"]).body.action, "withdraw");
+  assert.throws(() => op(["info", "6", "18816", "--decision", "ask-again"]), /needs --note/);
+  assert.throws(() => op(["info", "6", "18816"]), /--decision/);
+  assert.throws(() => op(["info", "6"]), /Member user ID/);
+});
+
+test("meetup write receipts keep the decision, never the crew view", () => {
+  const crew = {
+    crewId: 6,
+    status: "active",
+    progress: { currentStep: "crew" },
+    memberChecks: [{ teacherName: "Teacher Jenny", className: "Wed Debate", relationship: "we are friends from camp" }],
+    parentContacts: [{ email: "parent@example.test", question: "Is there an adult?" }],
+  };
+  for (const name of ["meetup.info", "meetup.approve-crew", "meetup.approve-plan", "meetup.approve-grownup", "meetup.send-back", "meetup.approve", "meetup.slot", "meetup.parent-reply", "meetup.emails"]) {
+    const receipt = receiptToKeep(
+      { name },
+      {
+        ok: true,
+        status: "ok",
+        changed: true,
+        data: {
+          result: { crewId: 6, userId: 18816, status: "requested", changed: true, note: "Which class are you in, Jenny?", attendedUserIds: [3, 4] },
+          crew,
+          slot: { date: "2026-10-10", start: "10:00", end: "11:00" },
+        },
+      },
+    );
+    const text = JSON.stringify(receipt);
+    for (const secret of ["Teacher Jenny", "Wed Debate", "camp", "parent@example.test", "adult", "Which class"]) {
+      assert.equal(text.includes(secret), false, `${name} receipt keeps "${secret}"`);
+    }
+    assert.equal(receipt.data.crewId, 6);
+    assert.equal(receipt.data.result.status, "requested");
+    assert.deepEqual(receipt.data.result.attendedUserIds, [3, 4]);
+  }
+  const other = { ok: true, data: { x: 1 } };
+  assert.equal(receiptToKeep({ name: "teachers.revoke" }, other), other);
 });
