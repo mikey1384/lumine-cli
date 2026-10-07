@@ -1208,6 +1208,47 @@ lumine admin identity network <userId|username> --reason <text> [--include-priva
 - Revoke marks the request rejected, keeps who, when and why, and refuses sage/founder holders.
 - The daily-run procedure is in `agent-guides/lumine-admin.md`.
 
+### Teacher branches (Mikey only, any time; added 2026-10-08)
+
+Which Twinkle branch each approved teacher works at, confirmed by Mikey through the academy networks teachers use. The branch a teacher typed when they applied is only a hint: many typed nothing, two branches, "Substitute", or an alias.
+
+```bash
+lumine admin teachers branches suggest
+lumine admin teachers branches networks
+lumine admin teachers branches confirm <networkId> --branch <name> [--branch <name> ...] [--note <text>]
+lumine admin teachers branches unconfirm <networkId>
+lumine admin teachers branches set <userId|username> --branch <name> [--note <text>]
+lumine admin teachers branches clear <userId|username>
+lumine admin teachers branches apply
+lumine admin teachers branches list [--branch <name>|none] [--json]
+```
+
+- `suggest` finds the **academy networks** live: an address (`users_actions`) that 15 or more accounts used in the last 365 days, among addresses approved teachers used at least 3 times. Each one shows:
+  - a 10-character `networkId` and a masked address (`58.151.x.59`); raw addresses never leave the server;
+  - its account and teacher counts, and when teachers used it (an academy that changed address shows as two networks with dates that meet);
+  - what its teachers typed, the branch most of them typed (`suggested`; `tie` when two are level), and its top 5 teachers;
+  - whether it is already `CONFIRMED`.
+  The read uses the read replica only, never the primary, and is time-bounded (75 s). A busy replica, or a read that hits its cap, is reported as not read, with the reason; it is never an error. `Incomplete` means run it again.
+- `confirm` names the network's branch. The network id must come from a `suggest` of the last 7 days (the server remembers what suggest found, so a confirm does not rescan; otherwise run suggest again). Names are the official Bridge Builder branches or their aliases (`meetup_quest_branches`; "Twinkle U" = TwinkleU, 목동 = Mokdong). A branch that is not official yet is refused: make it official in `lumine admin meetup branches` first. Give **two or more `--branch`** (or `--branches A,B`) for a building branches share (Mikey 10-08: TwinkleU and Mokdong share one). Confirming again replaces the branches. `unconfirm` removes a network.
+- `apply` recomputes the branch of every approved teacher that Mikey has not set, from their last-365-day actions on confirmed networks only:
+  - a single-branch network counts for its branch;
+  - on a shared network the actions count for the teacher's typed branch when it is one of that network's branches; otherwise they count for the shared group;
+  - the teacher gets the top branch when it is not tied, holds at least half the actions (with shared networks that include it), and no other branch has 10% or more;
+  - and the branch has actions on at least **3 distinct days** (Korea time) and at least 3 actions. Fewer is **low evidence**, which may be a single meetup visit to another branch or a new teacher. Such a teacher is listed with the branch, actions and days, and gets no branch. The default is 3 days, pending Mikey's confirmation. `TEACHER_BRANCH_MIN_DAYS` on the API overrides it; 0 turns it off;
+  - otherwise the teacher is **ambiguous** (two branches, a substitute, or mostly in a shared building with no matching typed branch) and is listed with the candidate branches. No actions on a confirmed network is **unknown**. Teachers who could not be read (replica busy, slow read, time budget) are left unchanged and counted as not read.
+  Ambiguous, low-evidence and unknown teachers get no branch; an earlier network branch is removed. It reports:
+  - counts: assigned / ambiguous / low evidence / unknown / set by owner / not read, with reasons;
+  - every change, with share, actions and days;
+  - the ambiguous and low-evidence lists;
+  - teachers given a branch other than the one they typed. Run it after each confirm or unconfirm.
+- `set` is Mikey's own setting for one teacher and always wins: `apply` never changes it. `clear` removes any branch (the next `apply` may give a network branch).
+- `list` shows every approved teacher grouped by branch, with the source (`set by owner`, or `network NN% · N actions on N day(s)`), what they typed and when last active. `--branch none` lists those without one.
+- Only approved teachers ever show a branch. Revoking a teacher deletes their branch, and other features (`loadTeacherBranches`) never return a branch for an account that is no longer a teacher.
+- Little Star is official (Mikey 10-08). "Littlestar" and 리틀스타 resolve to it.
+- `teachers audit` shows each teacher's confirmed branch on its line. The branch is not part of the review fingerprint, so a branch change never marks a reviewed teacher changed.
+- Writes are audited server-side. The local receipts hold the network id, masked address and branches; an `apply` receipt keeps only the counts and the changes.
+- After it goes live: `suggest`, Mikey confirms the networks, then `apply`, then settle the ambiguous teachers with `set`.
+
 ### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
 
 The creator's Lumine designs the rewards and writes them into the app. The
