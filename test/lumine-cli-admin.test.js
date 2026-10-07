@@ -23,6 +23,13 @@ import {
   filterListResultByOperatorView,
   filterRecommendationQueueResult,
   formatAdminJsonError,
+  formatTeacherAuditSummary,
+  formatTeacherReviewLine,
+  mergeTeacherAuditPages,
+  parseTeacherExpect,
+  planExpectedReview,
+  runTeacherWorkflow,
+  teachersToReview,
   normalizeAdminBuildCandidatesResult,
   adminOperationUsesCommentSession,
   parseAdminOperation,
@@ -34,6 +41,7 @@ import {
   resolveOperatorViewFilter,
   shouldRecordAdminQueueCoverage,
 } from "../lib/admin.js";
+import { receiptToKeep } from "../lib/admin-receipts.js";
 import {
   createNewsEditorialScaffold,
   readAdminJsonFile,
@@ -6796,6 +6804,161 @@ test("lumine admin approvals and teachers build Mikey-only requests", () => {
   assert.deepEqual([revoke.method, revoke.path, revoke.body, revoke.mutates], ["POST", "/cli/admin/teachers/77/revoke", { reason: "student alt" }, true]);
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "revoke", "77"])), /needs --reason/);
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "approvals", "approve", "abc"])), /lumine admin approvals/);
+});
+
+test("lumine admin teachers review records the owner's decision, one or all flagged", () => {
+  const FP = "a".repeat(64);
+  const legit = parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "legit", "--note", "real academy teacher"]));
+  assert.deepEqual([legit.name, legit.method, legit.path, legit.body, legit.mutates, legit.requiresRun, legit.teacherWorkflow, legit.userId], [
+    "teachers.review",
+    "POST",
+    "/cli/admin/teachers/77/review",
+    { decision: "legit", note: "real academy teacher" },
+    true,
+    false,
+    "review-one",
+    77,
+  ]);
+  // a fingerprint from the printed audit is sent as is, with no second read
+  const pinned = parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "revoke", "--note", "student alt", "--fingerprint", FP]));
+  assert.deepEqual([pinned.body, pinned.teacherWorkflow], [{ decision: "revoke", note: "student alt", fingerprint: FP }, undefined]);
+  const bulk = parseAdminOperation(parseArgs(["admin", "teachers", "review", "--all-flagged", "--expect", "4,3:ABCDEF12", "--note", "weekly look"]));
+  assert.deepEqual([bulk.name, bulk.path, bulk.body, bulk.mutates, bulk.teacherWorkflow, bulk.expect], ["teachers.review_flagged", "/cli/admin/teachers/review-flagged", { note: "weekly look" }, true, "review-flagged", { 4: "", 3: "abcdef12" }]);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "--all-flagged", "--note", "x"])), /needs --expect/);
+  assert.throws(() => parseTeacherExpect("4,abc"), /not <id>/);
+  assert.throws(() => parseTeacherExpect("4:abc"), /not <id>/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "revoke", "--note", "alt"])), /revoke needs --fingerprint/);
+  const all = parseAdminOperation(parseArgs(["admin", "teachers", "audit", "--all"]));
+  assert.deepEqual([all.path, all.teacherWorkflow], ["/cli/admin/teachers/audit?limit=50", "audit-all"]);
+  assert.equal(parseAdminOperation(parseArgs(["admin", "teachers", "audit", "--cursor", "1791331200:812"])).path, "/cli/admin/teachers/audit?limit=50&cursor=1791331200%3A812");
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "legit"])), /needs --note/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "maybe", "--note", "x"])), /--decision must be legit, revoke/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "legit", "--note", "x", "--fingerprint", "abc"])), /64-character/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--all-flagged", "--note", "x"])), /leave out <userId>/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "teachers", "review", "--note", "x"])), /lumine admin teachers audit/);
+});
+
+const teacherEntry = (userId, reviewStatus, approvedAt = userId, extra = {}) => ({
+  account: { userId, username: `t${userId}` },
+  approvedAt,
+  flags: reviewStatus === "clean" ? [] : ["shares_email_with_member_account"],
+  reviewStatus,
+  fingerprint: String(userId % 10).repeat(64),
+  ...extra,
+});
+
+test("lumine admin teachers audit pages merge in owner order; --all-flagged sends only new or changed", () => {
+  const merged = mergeTeacherAuditPages([
+    { teachers: [teacherEntry(1, "clean"), teacherEntry(2, "reviewed")], audited: 2, flagged: 1, reviewedUnchanged: 1, nextCursor: "2:2" },
+    { teachers: [teacherEntry(3, "changed"), teacherEntry(4, "unreviewed")], audited: 2, flagged: 2, newlyFlagged: 1, changedSinceReview: 1, failedUserIds: [9] },
+  ]);
+  assert.deepEqual(merged.teachers.map((t) => t.account.userId), [4, 3, 2, 1]);
+  assert.deepEqual([merged.audited, merged.flagged, merged.newlyFlagged, merged.changedSinceReview, merged.reviewedUnchanged, merged.failedUserIds], [4, 3, 1, 1, 1, [9]]);
+  assert.deepEqual(teachersToReview(merged.teachers), [
+    { userId: 4, fingerprint: "4".repeat(64) },
+    { userId: 3, fingerprint: "3".repeat(64) },
+  ]);
+});
+
+test("lumine admin teachers review workflows send the fingerprints that were shown, in bounded batches", async () => {
+  const calls = [];
+  const pages = [
+    { teachers: Array.from({ length: 30 }, (_, i) => teacherEntry(100 + i, "unreviewed")), audited: 30, flagged: 30, newlyFlagged: 30, nextCursor: "1:130" },
+    { teachers: [teacherEntry(7, "reviewed"), teacherEntry(8, "changed")], audited: 2, flagged: 2, nextCursor: null },
+  ];
+  const request = async ({ method, url, body, headers }) => {
+    calls.push({ method, url, body, headers });
+    if (method === "GET" && url.includes("/teachers/audit")) return { ok: true, status: "success", data: url.includes("cursor=") ? pages[1] : pages[0] };
+    if (method === "GET") return { ok: true, status: "success", data: { teacher: teacherEntry(77, "unreviewed") } };
+    if (url.endsWith("/review-flagged")) {
+      return { ok: true, status: "success", data: { reviewed: body.teachers.slice(1).map((t) => ({ teacherUserId: t.userId })), skipped: [{ userId: body.teachers[0].userId, reason: "changed since you looked" }], changedSinceYouLooked: [body.teachers[0].userId] } };
+    }
+    return { ok: true, status: "success", data: { teacherUserId: 77, decision: "legit", fingerprint: body.fingerprint } };
+  };
+  const options = { apiUrl: "http://api.test", json: true };
+  const expected = [...Array.from({ length: 30 }, (_, i) => 100 + i), 8, 7].join(",");
+  const bulk = await runTeacherWorkflow({
+    options,
+    operation: parseAdminOperation(parseArgs(["admin", "teachers", "review", "--all-flagged", "--expect", expected, "--note", "weekly"])),
+    authToken: "t",
+    requestId: "cli:abc12345",
+    request,
+  });
+  const posts = calls.filter((c) => c.method === "POST");
+  assert.deepEqual(posts.map((c) => c.body.teachers.length), [25, 6]);
+  assert.ok(posts.every((c) => c.body.note === "weekly"));
+  assert.deepEqual(posts.map((c) => c.headers["x-lumine-idempotency-key"]), ["cli:abc12345:0", "cli:abc12345:1"]);
+  assert.ok(!posts.flatMap((c) => c.body.teachers).some((t) => t.userId === 7), "reviewed-unchanged teachers are never sent");
+  assert.equal(posts[1].body.teachers.at(-1).fingerprint, "8".repeat(64));
+  assert.deepEqual([bulk.data.sent, bulk.data.reviewedCount, bulk.data.changedSinceYouLooked.length], [31, 29, 2]);
+  assert.deepEqual(bulk.data.skipped[0], { userId: 7, reason: "in --expect, but not new or changed in this audit" });
+  calls.length = 0;
+  const one = await runTeacherWorkflow({
+    options,
+    operation: parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "legit", "--note", "ok"])),
+    authToken: "t",
+    requestId: "cli:def12345",
+    request,
+  });
+  assert.deepEqual(calls.map((c) => [c.method, c.url]), [["GET", "http://api.test/cli/admin/teachers/77/audit"], ["POST", "http://api.test/cli/admin/teachers/77/review"]]);
+  assert.deepEqual(calls[1].body, { decision: "legit", note: "ok", fingerprint: "7".repeat(64) });
+  assert.equal(one.data.shown, undefined, "the shown entry is printed, never returned");
+  await assert.rejects(
+    runTeacherWorkflow({
+      options,
+      operation: parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "legit", "--note", "ok"])),
+      authToken: "t",
+      requestId: "cli:x1234567",
+      request: async () => ({ ok: true, status: "success", data: { teacher: teacherEntry(77, "unreviewed", 1, { evidenceGap: "linked-account evidence was truncated (identity inspection cap)" }) } }),
+    }),
+    /Not reviewed: linked-account evidence was truncated/,
+  );
+});
+
+test("lumine admin teachers --expect sends only the expected teachers, pinned to the facts read", () => {
+  const shown = [
+    { userId: 4, fingerprint: "4".repeat(64) },
+    { userId: 3, fingerprint: "3".repeat(64) },
+    { userId: 24, fingerprint: "2".repeat(64) },
+  ];
+  const { send, notSent } = planExpectedReview(shown, parseTeacherExpect("4,3:deadbeef,9"));
+  assert.deepEqual(send.map((t) => t.userId), [4]);
+  assert.deepEqual(notSent, [
+    { userId: 3, reason: "changed since the fingerprint in --expect" },
+    { userId: 24, reason: "new or changed now, but not in --expect: not reviewed" },
+    { userId: 9, reason: "in --expect, but not new or changed in this audit" },
+  ]);
+});
+
+test("admin receipts keep only the decision for teacher reviews and chat report updates", () => {
+  const review = receiptToKeep({ name: "teachers.review" }, {
+    ok: true,
+    status: "success",
+    data: { teacherUserId: 77, decision: "legit", fingerprint: "f".repeat(64), reviewedAt: 5, note: "ok", reviewId: 3, flags: ["x"], shown: { account: { realName: "Kim", verifiedEmail: "k@x" } } },
+  });
+  assert.deepEqual(review.data, { userId: 77, decision: "legit", fingerprint: "f".repeat(64), reviewedAt: 5, note: "ok", reviewId: 3, revoked: false });
+  const report = receiptToKeep({ name: "chat-reports.set" }, {
+    ok: true,
+    status: "success",
+    data: { report: { id: 9, status: "resolved", reviewedAt: 6, reviewedByUserId: 1, reviewNote: "handled", message: { content: "private" }, context: { before: [{ content: "private" }] } } },
+  });
+  assert.deepEqual(report.data, { reportId: 9, status: "resolved", reviewedAt: 6, reviewedByUserId: 1, note: "handled" });
+  assert.doesNotMatch(JSON.stringify([review, report]), /Kim|k@x|private/);
+  const other = { ok: true, status: "success", data: { a: 1 } };
+  assert.equal(receiptToKeep({ name: "teachers.revoke" }, other), other);
+});
+
+test("lumine admin teachers audit prints review status and changes compactly", () => {
+  assert.equal(
+    formatTeacherAuditSummary({ audited: 120, flagged: 23, newlyFlagged: 2, changedSinceReview: 1, reviewedUnchanged: 20, failedUserIds: [] }),
+    "Audited 120 approved teachers · 23 flagged: 2 new, 1 changed since review, 20 reviewed and unchanged",
+  );
+  assert.equal(
+    formatTeacherReviewLine({ account: { username: "msKim", userId: 812 }, flags: ["shares_device_with_minor_account"], reviewStatus: "changed", review: { decision: "legit", reviewedAt: 1791331200, reviewedBy: "mikey", note: "own kids", changes: ["new linked account #900 (exact_device, under 14)"] } }),
+    '[CHANGED since review] msKim (#812) · flags shares_device_with_minor_account · last review legit 2026-10-07 by mikey: "own kids"',
+  );
+  assert.equal(formatTeacherReviewLine({ account: { username: "mrLee", userId: 9 }, flags: ["shares_email_with_member_account"], reviewStatus: "unreviewed", review: null }), "[NEW: flagged, not reviewed] mrLee (#9) · flags shares_email_with_member_account");
+  assert.equal(formatTeacherReviewLine({ account: { username: "msPark", userId: 10 }, flags: [], reviewStatus: "clean", review: null }), "[no flags] msPark (#10)");
 });
 
 test("lumine admin identity network builds a reasoned, receipt-first request", () => {

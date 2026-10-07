@@ -1174,8 +1174,10 @@ Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with 
 lumine admin approvals list [--status pending|approved|rejected|all] [--type dob|mentor|meetup]
 lumine admin approvals show <id>
 lumine admin approvals approve|reject <id> [--reason <text>]
-lumine admin teachers audit [--limit 1-100]
+lumine admin teachers audit [--limit 1-100] [--cursor <c>] [--all]
 lumine admin teachers revoke <userId> --reason <text>
+lumine admin teachers review <userId> --decision legit|revoke --note <text> [--fingerprint <fp>]   # revoke requires --fingerprint
+lumine admin teachers review --all-flagged --expect <id[:fp],...> --note <text>
 lumine admin identity network <userId|username> --reason <text> [--include-private-evidence]
 ```
 
@@ -1191,7 +1193,14 @@ lumine admin identity network <userId|username> --reason <text> [--include-priva
 - `linked_account_is_minor`, `own_birthdate_is_minor`, `new_account_with_linked_accounts`, `real_name_differs_from_profile`, `banned_account_in_family`.
 
 - Flags are pointers, not verdicts: a school device can link strangers. Judge each case, recommend, and act only on Mikey's decision.
-- `teachers audit` lists approved teachers, riskiest first.
+- `teachers audit` reads approved teachers a page at a time (newest approval first, up to 100 per page; `--cursor` continues, `--all` pages through every teacher). Each page lists, in this order: flagged and never reviewed (`NEW`), reviewed but materially changed since (`CHANGED`, each change listed), reviewed and unchanged (one line, no evidence), then teachers with no flags. `--all` merges the pages in that order. Counts: `audited`, `flagged`, `newlyFlagged`, `changedSinceReview`, `reviewedUnchanged`. Each entry carries its `fingerprint`.
+- `teachers review` records Mikey's review (added 2026-10-07) of the facts he was shown. The fingerprint covers the flag set and the linked accounts (who, linked how, and whether each has a recorded age under 14 or under 18). Activity, last-active time, addresses and shared-device counts are not part of it. **Accounts that only share a network with the teacher count only when they change a network flag** (`shares_small_network_with_…`): a new sibling on a home address that already raised the member flag does not reopen a review, by design, because network sharers churn. The latest review per teacher wins; a teacher reappears when those facts change, or when a teacher reviewed as `revoke` holds the status again.
+  - `review <userId>` reads and prints that teacher's current entry, then sends its fingerprint; `--fingerprint <fp>` sends the one from the audit Mikey read instead. If the facts changed since, nothing is recorded (409: read it again).
+  - `--decision legit` keeps the teacher. `--decision revoke` **requires `--fingerprint`** from the entry Mikey decided on, then runs the same clean removal as `teachers revoke` (the note is its reason) and records the review.
+  - `--all-flagged --expect <id[:fp],...>` pages the whole audit, prints it, and reviews as legit, with one note, only the `--expect` teachers that it shows as new or changed. Give each as `id:<fingerprint prefix>` (8+ hex from the audit Mikey read) to pin the facts he judged. Anything else is listed and not reviewed: new or changed but not expected; expected but its fingerprint moved; expected but not new or changed now. The server also skips, and lists, any whose facts changed between the printed audit and the write, whose last review was a revoke, or whose evidence is incomplete. Sent in batches of 25.
+  - The write receipts these leave on disk hold only the decision (teacher id, decision, fingerprint, time, note); the evidence is printed, never saved.
+  - Incomplete evidence is never compared or recorded: unread network evidence, or a linked-account family truncated at the identity inspection's cap. Such a teacher keeps showing until the evidence reads in full.
+  - Record a review only on Mikey's decision for those accounts.
 - `teachers revoke` removes a teacher status cleanly:
   - the mentor achievement, plus the teenager/adult achievements the teacher approval gave unless a separately approved birthdate supports them;
   - the teacher title and the public "unlocked" posts;
