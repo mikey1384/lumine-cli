@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseAdminOperation } from "../lib/admin.js";
+import { meetupAdultLine, parseAdminOperation } from "../lib/admin.js";
 import { parseArgs } from "../lib/commands.js";
 import { receiptToKeep } from "../lib/admin-receipts.js";
 
@@ -148,4 +148,90 @@ test("meetup write receipts keep the decision, never the crew view", () => {
   }
   const other = { ok: true, data: { x: 1 } };
   assert.equal(receiptToKeep({ name: "teachers.revoke" }, other), other);
+});
+
+test("meetup show prints a Twinkle teacher as an approved account (username + id)", () => {
+  assert.equal(meetupAdultLine({ kind: "", name: "" }), "");
+  assert.equal(meetupAdultLine(undefined), "");
+  assert.equal(
+    meetupAdultLine({ kind: "parent", name: "Minjun's mom", teacher: null, teacherProblem: "" }),
+    "  Adult coming: parent: Minjun's mom",
+  );
+  assert.equal(
+    meetupAdultLine({
+      kind: "teacher",
+      name: "teacher6",
+      teacher: { userId: 179, username: "teacher6", profilePicUrl: "" },
+      teacherProblem: "",
+    }),
+    "  Adult coming: Twinkle teacher teacher6 (user 179, approved teacher account)",
+  );
+  const teacher = { userId: 179, username: "teacher6", profilePicUrl: "" };
+  assert.equal(
+    meetupAdultLine({
+      kind: "teacher",
+      name: "teacher6",
+      teacher,
+      confirmedAt: 1791417600,
+      display: { kind: "teacher", name: "teacher6", status: "confirmed", waitingFor: "" },
+    }),
+    "  Adult coming: Twinkle teacher teacher6 (user 179, approved teacher account), confirmed 2026-10-08",
+  );
+  assert.equal(
+    meetupAdultLine({
+      kind: "teacher",
+      name: "",
+      teacher,
+      confirmedAt: 0,
+      teacherProblem: "waiting for the teacher teacher6 to say yes to your request in their chat",
+      display: { kind: "teacher", name: "", status: "waiting", waitingFor: "teacher6" },
+      request: { status: "open", teacherUserId: 179, teacherUsername: "teacher6", sentAt: 1791417600, answeredAt: 0 },
+    }),
+    "  Adult coming: Twinkle teacher teacher6 (user 179, approved teacher account), waiting for confirmation (asked 2026-10-08)",
+  );
+  assert.equal(
+    meetupAdultLine({
+      kind: "",
+      name: "",
+      teacher: null,
+      display: { kind: "", name: "", status: "", waitingFor: "" },
+      request: { status: "declined", teacherUserId: 179, teacherUsername: "teacher6", sentAt: 1, answeredAt: 1791417600 },
+    }),
+    "  Adult coming: not named yet (Twinkle teacher teacher6 (user 179) declined 2026-10-08)",
+  );
+  assert.equal(
+    meetupAdultLine({
+      kind: "",
+      name: "",
+      request: { status: "declined", afterYes: true, teacherUserId: 179, teacherUsername: "teacher6", answeredAt: 1791417600 },
+    }),
+    "  Adult coming: not named yet (Twinkle teacher teacher6 (user 179) declined after saying yes 2026-10-08)",
+  );
+  assert.equal(
+    meetupAdultLine({ kind: "", name: "", display: { kind: "classroom", name: "", status: "arranging", waitingFor: "" } }),
+    "  Adult coming: classroom meetup, Twinkle arranges the grown-up (slot not confirmed yet)",
+  );
+  assert.equal(
+    meetupAdultLine({
+      kind: "",
+      name: "",
+      display: { kind: "classroom", name: "the Twinkle Mokdong classroom", status: "confirmed", waitingFor: "" },
+    }),
+    "  Adult coming: classroom meetup, supervised at the Twinkle Mokdong classroom (Twinkle arranges the grown-up)",
+  );
+  assert.equal(
+    meetupAdultLine({
+      kind: "teacher",
+      name: "",
+      unconfirmedName: "Teacher Kim",
+      teacher: null,
+      teacherProblem: "pick the Twinkle teacher who is coming from the list",
+    }),
+    '  Adult coming: Twinkle teacher NOT CONFIRMED (on file: "Teacher Kim"): pick the Twinkle teacher who is coming from the list',
+  );
+  // an older API still sends the typed name as `name`
+  assert.match(
+    meetupAdultLine({ kind: "teacher", name: "Teacher Kim" }),
+    /NOT CONFIRMED \(on file: "Teacher Kim"\): no approved teacher account picked$/,
+  );
 });
