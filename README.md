@@ -231,10 +231,10 @@ audio, and MIDI data (`.mid`/`.midi`; playback still needs an app-side parser
 or synth); `lumine assets list` prints your uploads and refreshes
 `.twinkle/assets.json`.
 
-`lumine assets generate "<prompt>" --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana>` creates
+`lumine assets generate "<prompt>" --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana|nano-banana-pro>` creates
 an AI-generated image asset instead of uploading one. `--model` is required
 (Flare = fast generation; Sunburst = precise editing; gpt-image-2 = original
-model; nano-banana = Gemini). Generation spends your Twinkle AI Battery, so the
+model; nano-banana = Gemini Nano Banana 2.1, nano-banana-pro = Gemini Nano Banana Pro). Generation spends your Twinkle AI Battery, so the
 CLI shows the estimated cost and asks for confirmation first — non-interactive
 runs must pass
 `--yes` to consent. `--quality low|medium|high|xhigh|max` applies to GPT Image
@@ -246,7 +246,7 @@ actual battery usage also includes prompt and reference input.
 `lumine thumbnail set <file>` uploads a jpg/png/webp (max 8MB) as the build's
 thumbnail. `lumine thumbnail capture` screenshots the running app server-side
 and sets the result (add `--out <file>` to keep a local copy).
-`lumine thumbnail generate ["<prompt>"] --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana>`
+`lumine thumbnail generate ["<prompt>"] --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana|nano-banana-pro>`
 generates an AI image and sets it as the thumbnail (the image is also kept as a
 normal reusable asset); without a prompt the server composes one from the build
 title and description. Replacing an existing thumbnail asks for confirmation;

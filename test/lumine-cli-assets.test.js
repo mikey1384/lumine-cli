@@ -871,5 +871,10 @@ test("CLI image quality supports 2.5 without changing legacy model contracts", (
   assert.deepEqual(resolveGenerateModel({ model: "gpt-image-2.5-sunburst", quality: "xhigh" }), { model: "gpt-image-2.5-sunburst", quality: "xhigh" });
   assert.throws(() => resolveGenerateModel({ model: "gpt-image-2", quality: "max" }), /require a GPT Image 2.5/);
   assert.throws(() => resolveGenerateModel({ model: "nano-banana", quality: "max" }), /only applies to GPT Image/);
+  // Gemini by tier: nano-banana = Nano Banana 2.1, nano-banana-pro = Pro;
+  // the old Pro preview id still works and means the stable Pro model
+  assert.equal(resolveGenerateModel({ model: "nano-banana" }).model, "gemini-nano-banana-2.1");
+  assert.equal(resolveGenerateModel({ model: "nano-banana-pro" }).model, "gemini-3-pro-image");
+  assert.equal(resolveGenerateModel({ model: "gemini-3-pro-image-preview" }).model, "gemini-3-pro-image");
   assert.throws(() => resolveGenerateModel({ model: "unknown", quality: "high" }), /model is required/);
 });

@@ -2,7 +2,7 @@
 
 Version: 1.63.0
 Updated: 2026-09-28
-Generated: 2026-10-07T07:52:06.040Z
+Generated: 2026-10-08T04:59:03.150Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -536,6 +536,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - referenceImageB64 may be a raw base64 string or a data:image/...;base64 URL.
   - Optional model: gpt-image-2.5-flare or gpt-image-2.5-sunburst. Without a model, OpenAI uses Flare for new images and Sunburst when a reference image or continuation is supplied. Explicit gpt-image-2 remains supported.
   - Quality accepts low, medium, high, xhigh, or max. xhigh and max require a GPT Image 2.5 model. Gemini has one quality tier.
+  - engine: 'gemini' uses Google's Nano Banana 2.1 (the fast Gemini image tier; it replaced the retired original Nano Banana on 2026-10-08).
   - GPT Image 2.5 battery spending uses actual image-model input and output token usage. The confirmation shows an image-output estimate; prompts and reference images use additional energy.
   - responseId and imageId are opaque continuation handles. Pass them back unchanged to edit a prior result; do not assume an OpenAI ID format. Existing GPT Image 2 continuations remain usable.
   - Example: const result = await Twinkle.ai.generateImage({ prompt: 'Create a fashion guide portrait for this face with flattering colors and outfit ideas', referenceImageB64, quality: 'high', onStatus: (status) => console.log(status.stage) });
