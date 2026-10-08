@@ -53,12 +53,25 @@ test("admin meetup operations map to the Mikey-only meetup quest routes", () => 
 });
 
 test("admin meetup refuses incomplete decisions before calling the API", () => {
+  assert.throws(() => op(["request-changes", "6"]), /needs --note/);
+  assert.throws(() => op(["request-changes", "6", "--note", "x".repeat(1001)]), /at most 1000/);
   assert.throws(() => op(["send-back", "12"]), /needs --note/);
   assert.throws(() => op(["approve", "12"]), /needs --attended/);
   assert.throws(() => op(["approve", "12", "--attended", "3,abc"]), /--attended user ID/);
   assert.throws(() => op(["show", "x"]), /Crew ID/);
   assert.throws(() => op(["list", "--status", "pending"]), /--status must be/);
   assert.throws(() => op(["delete", "12"]), /Usage: lumine admin meetup/);
+});
+
+test("shared change requests use their own audited crew endpoint without a daily run", () => {
+  assert.deepEqual(op(["request-changes", "6", "--note", "Invite one more current Twinkle student."]), {
+    name: "meetup.request-changes",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/crews/6/request-changes",
+    body: { note: "Invite one more current Twinkle student." },
+    mutates: true,
+    requiresRun: false,
+  });
 });
 
 test("admin meetup slot and resend-email map to the coordinator fallbacks", () => {
@@ -124,7 +137,7 @@ test("meetup write receipts keep the decision, never the crew view", () => {
     memberChecks: [{ teacherName: "Teacher Jenny", className: "Wed Debate", relationship: "we are friends from camp" }],
     parentContacts: [{ email: "parent@example.test", question: "Is there an adult?" }],
   };
-  for (const name of ["meetup.info", "meetup.approve-crew", "meetup.approve-plan", "meetup.approve-grownup", "meetup.send-back", "meetup.approve", "meetup.slot", "meetup.parent-reply", "meetup.emails"]) {
+  for (const name of ["meetup.request-changes", "meetup.info", "meetup.approve-crew", "meetup.approve-plan", "meetup.approve-grownup", "meetup.send-back", "meetup.approve", "meetup.slot", "meetup.parent-reply", "meetup.emails"]) {
     const receipt = receiptToKeep(
       { name },
       {

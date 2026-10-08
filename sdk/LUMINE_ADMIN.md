@@ -4927,3 +4927,14 @@ After the Study review migration is deployed, the full daily website run also re
 Study's registered `study-record-v1` checks use learner AI Energy for accepted, revise and uncertain results. Preview checks use real AI Energy but cannot award XP/Coins. The agreed proposal pays 2,000 XP + 500 Coins at most once per learner per UTC day. Breadface's `breadface-v1` uses deterministic server physics, not a model. Both creator proposals must be accepted to publish; inspect the canonical review state and acceptance/rejection events during follow-up.
 
 For total JEV cost, include `dailyAiCosts.byProviderModel` for TypeSafe/JEV across both AI Energy and system-covered ledgers. Report serving/shadow/audit operations separately as above; the Build SDK's system-covered/failed calls use `jev_decision`, while ordinary viewer SDK checks are already counted by the AI Energy ledger. Do not add the Study report's known-cost sum on top of the canonical overall AI-cost total: it is a diagnostic breakdown of those same calls.
+
+## Bridge Builder crew reviews (no daily run required)
+
+- `lumine admin meetup list` shows steps waiting for staff. Use `list --status active` to include crews making requested changes.
+- `lumine admin meetup show <crewId>` shows canonical progress, approval status, shared feedback, and private staff evidence.
+- `lumine admin meetup approve-crew <crewId>` and `approve-grownup <crewId>` approve the corresponding ready step.
+- `lumine admin meetup request-changes <crewId> --note <text>` holds the current crew or grown-up step, displays the note to **every crew member**, and announces it in the crew chat. The note is required (maximum 1,000 characters). Members use **Request review again** after making changes; this alerts staff and returns the step to the queue without approving it.
+- `lumine admin meetup send-back <crewId> --note <text>` is for a pending plan or video. Those steps keep their existing revise-and-submit flow.
+- `lumine admin meetup info <crewId> <userId> --decision ask|accept|ask-again|withdraw` is a **private identity check**. Its question and answer are visible only to the named member and staff. Use `request-changes`, not `info`, for instructions the whole crew needs to see.
+
+Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
