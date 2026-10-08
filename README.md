@@ -64,11 +64,17 @@ Approvals are capped at 2 GB and never lower a creator below the default.
 Bridge Builder meetup quest crews (the website's /achievements/bridge-builder
 page) are reviewed with `lumine admin meetup list [--status review|active|completed|all]`,
 `show <crewId>` (includes a one-hour link to the proof video),
+`approve-crew <crewId>`, `approve-grownup <crewId>`,
+`request-changes <crewId> --note <text>`,
 `approve-plan <crewId> [--note <text>]`, `send-back <crewId> --note <text>`
 (sends back whatever is waiting: the video, else the plan) and
 `approve <crewId> --attended <userId,userId,...>`, which unlocks the
-achievement for every member ticked. At least 3 attendees from 3 different
-branches are required.
+achievement for every member ticked once the server confirms the requirements.
+`request-changes` holds the current crew or grown-up approval step, shows the
+staff note to every member on the crew page and chat tracker, and announces it
+in the crew chat. Members can request review again after making the changes;
+staff still need to approve the step. Use `info` only for private questions to
+one member about their identity.
 
 For team projects, Lumine mirrors the website workspace flow: choosing or
 pulling the owner's main project creates or reuses your contribution branch and
