@@ -231,6 +231,13 @@ audio, and MIDI data (`.mid`/`.midi`; playback still needs an app-side parser
 or synth); `lumine assets list` prints your uploads and refreshes
 `.twinkle/assets.json`.
 
+**Nano Banana migration (0.3.21):** `--model nano-banana` now selects
+Nano Banana 2.1, the fast tier. In CLI 0.3.20 and earlier it selected Pro.
+To preserve Pro output in an existing script, change the option to
+`--model nano-banana-pro` before upgrading. Existing installed CLIs keep
+using Pro through the server's legacy model alias. This CLI release must be
+published after the API update that accepts the new model IDs.
+
 `lumine assets generate "<prompt>" --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana|nano-banana-pro>` creates
 an AI-generated image asset instead of uploading one. `--model` is required
 (Flare = fast generation; Sunburst = precise editing; gpt-image-2 = original
