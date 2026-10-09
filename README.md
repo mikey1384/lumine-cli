@@ -81,6 +81,17 @@ pulling the owner's main project creates or reuses your contribution branch and
 checks out that branch locally. Saves go to your branch, so the project owner
 can merge or replace main from Twinkle.
 
+For an exact source review of the live app, use `lumine pull <build-id>
+--published` in a persistent review folder. This checks out the requested
+build's published artifact read-only; `--main` explicitly selects its root
+project. It never substitutes the latest draft or creates a contribution
+branch. The CLI checks the publication pointer again before writing and
+refuses a concurrent publication; modified local files are stashed before a
+successful checkout. It requires the API's published-version selector to be
+deployed first. `--published` and `--version <n>` are mutually exclusive.
+`lumine admin builds review` already reviews the published app; unsupported
+selectors such as `--mode` or `--review-mode` fail instead of being ignored.
+
 Use `lumine branches <build-url-or-id>` to list the contribution branches you
 can review, including each contributor, branch number, status, and URL. Then use
 `lumine diff <branch-url>` to inspect one branch.

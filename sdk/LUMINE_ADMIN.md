@@ -1737,6 +1737,35 @@ audit path: canonical todo state and its private `todo.create` / `todo.update`
 audit response commit together, and no public bot, public mutation count, or
 rotation signal is involved.
 
+Track implementation, release and verification separately when a carryover
+involves a fix. After `add-admin-todo-workflow.sql` and the matching API are
+deployed, save a local JSON file such as:
+
+```json
+{
+  "implementation": "ready",
+  "release": "pending",
+  "verification": "pending",
+  "fixRef": "work/topic/release-review.md",
+  "releaseRef": "",
+  "evidence": "Focused regression passed; production is unchanged.",
+  "nextAction": "Deployer releases the reviewed fix, then check the live result."
+}
+```
+
+Use `lumine admin todo update 12 --revision <current-revision> --workflow
+work/topic/workflow.json --status in_progress --note "Ready for the deployer."
+--json`. The revision comes from the canonical list/update response; stale
+updates are rejected. Implementation values are `needed`, `in_progress`,
+`ready`, `not_needed`; release is `pending`, `live`, `not_needed`; verification
+is `pending` or `passed`. Any unfinished phase needs a concrete `nextAction`;
+passed verification needs `evidence`. Completion requires implementation ready
+(or unnecessary), release live (or unnecessary), and verification passed.
+Keep physical-device checks and observation windows pending until they happen.
+Legacy todos have `workflow: null`, which means unknown, never verified. An
+update without `--workflow` preserves an existing workflow and cannot bypass
+its completion requirements.
+
 Every successful full `daily-run start` response automatically includes all
 unfinished items under `data.carryoverTodos`. The same run ID increments an
 item's surfacing telemetry at most once, even when start is retried. This is the
