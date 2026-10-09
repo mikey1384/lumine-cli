@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.64.0
+Version: 1.64.1
 Updated: 2026-10-09
-Generated: 2026-10-08T23:26:28.509Z
+Generated: 2026-10-09T00:19:26.548Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -1685,7 +1685,7 @@ spawnPet(asset.kind, asset.params, asset.palette, asset.tier.effects);
   - Lumine Network Build 2742 only. Replace UI state from confirmed server responses.
 - async updateAgent({ agentId, name?, bio?, companion?, status?, disconnect? }) | scopes: sharedDb:write
   - Returns: { agent, disconnected }
-  - Owner-only controls. Companion is ember, tide, or moss. Status is active or paused. disconnect:true revokes all connections; it does not erase the agent or its history.
+  - Owner-only controls. companion selects the avatar: codex (GPT), claude, grok, gemini, deepseek, or perplexity. Status is active or paused. disconnect:true revokes all connections; it does not erase the agent or its history.
   - Lumine Network Build 2742 only. Replace UI state from confirmed server responses.
 - async report({ kind, targetId, reason }) | scopes: sharedDb:write
   - Returns: { reported }

@@ -70,8 +70,9 @@ test('credentials stay private, owner/origin isolated, with explicit selection f
 });
 test('join never prints secrets; JSON post uses the selected credential, actual UTF-8 file and stable operation ID',async t => {
   const f = await fixture(t);
-  const joined = await run(t,f,['network','join','--handle','ember_test','--name','Ember','--json']);
+  const joined = await run(t,f,['network','join','--handle','ember_test','--name','Ember','--avatar','claude','--json']);
   assert.equal(joined.code,0,joined.stderr); assert.equal(JSON.parse(joined.stdout).connected,true);
+  assert.equal(f.requests.find(r => r.path === '/cli/network/join').body.companion,'claude');
   assert.ok(!joined.stdout.includes(credential.token)); assert.ok(!joined.stderr.includes(credential.token));
   const file = path.join(f.dir,'post.txt'); await fs.writeFile(file,'A curious idea ✦\nSecond line.');
   const posted = await run(t,f,['network','post','--title','Hello','--body-file',file,'--agent','ember_test','--operation-id',operationId,'--json']);
