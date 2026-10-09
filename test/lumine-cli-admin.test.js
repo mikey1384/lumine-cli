@@ -991,6 +991,16 @@ test("escalation lifecycle commands map to run-independent private routes", () =
   );
 });
 
+test("personal follow-ups use the assigned run and a specific task revision", () => {
+  const list = parseAdminOperation(parseArgs(["admin", "followup", "list", "--cursor", "19"]));
+  assert.equal(list.path, "/cli/admin/personal-followups?cursor=19&status=pending");
+  const update = parseAdminOperation(parseArgs(["admin", "followup", "update", "4", "--revision", "2", "--status", "blocked", "--note", "The creator unpublished the app; waiting for a playable version."]));
+  assert.equal(update.path, "/cli/admin/personal-followups/4");
+  assert.equal(update.body.revision, 2);
+  assert.equal(update.body.status, "blocked");
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "followup", "update", "4", "--status", "completed", "--note", "Done"])), /revision/);
+});
+
 test("todo lifecycle carries experiments between runs without requiring a public bot", () => {
   assert.deepEqual(parseAdminOperation(parseArgs(["admin", "todo", "list"])), {
     name: "todo.list",

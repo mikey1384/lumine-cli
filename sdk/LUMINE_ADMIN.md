@@ -1647,6 +1647,39 @@ to a child):
 
 ## Private carry-over todos
 
+### Zero and Ciel's personal follow-ups
+
+Each bot has a separate persistent list of commitments made to members. The
+API reply tools save a concrete task before saying it is on the bot's list;
+they link the real source comment/chat and keep the requesting member and bot
+server-owned. Retries of the same message return the same task. Members can
+ask that bot to read or cancel their own tasks. This does not approve any
+administrative action, deployment, reward, or publication.
+
+Full `daily-run start` returns `personalFollowups` for the assigned bot;
+`daily-run gather` saves its first page in `personal-followups.json`. Follow
+`nextCursor` to exhaustion. Other bots' tasks wait for their own turns, and
+scoped sessions do not surface or modify the list.
+
+```bash
+lumine admin followup list --json
+lumine admin followup list --cursor 100 --json
+lumine admin followup update 17 --revision 2 --status completed --note "Played the requested path on published version 400; observed ...; replied in original comment 91 (reply 103)." --json
+```
+
+Read the original context, do the promised work, keep evidence, and report the
+real result to the member in the original context under the existing reply
+rules. Do not move a private request into a public post. Build replies still
+require exact-version review evidence. Record `blocked` with a concrete next
+step when access, the creator, or Mikey's decision is needed. A completed
+daily run never completes promises automatically. Update requires the current
+revision and the assigned bot's active full run; stale or sibling updates are
+refused. Daily reports include pending follow-ups and their latest progress.
+
+Apply `add-ai-daily-followups.sql` before deploying this API/CLI capability.
+
+### Operator carryovers
+
 ```bash
 lumine admin todo list --json
 lumine admin todo list --status all --json
