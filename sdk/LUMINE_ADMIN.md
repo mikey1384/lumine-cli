@@ -198,6 +198,22 @@ IP evidence, private messages, or unrelated activity. `--include-private-evidenc
 adds DOB values and verified email addresses only; exact device IDs are never
 returned.
 
+`sharedDevices[].usage` reports recorded event counts, first/last observed Unix
+timestamps, an `eventsByType` breakdown, and the same details per account. These
+come from `ai_usage_session_evidence`, which records the exact device identifier;
+`users_actions` has account/IP activity but no device identifier. Counts include
+events such as login, logout, socket binding and AI use, **not unique visits or
+physical-device sessions**. Only events attached to an account are counted.
+
+Usage `status: complete` means the queried device's records fit inside the
+365-day lookback and read limit. `partial` counts are lower bounds, with observed
+dates and `truncatedBy` explaining the gap. `not_read` has a null event count,
+never zero. `accountsTruncated` separately marks a capped account-detail list;
+its totals still include omitted accounts. Device discovery can be truncated
+even when an individual device's usage is complete: always check the overall
+`evidenceCoverage` too. Human-readable CLI output includes these distinctions;
+older APIs explicitly report that usage counts are unavailable.
+
 The CLI sends `identity inspect` and `identity network` as reads, so it keeps
 no copy of the result on disk; the server still records who looked, when and
 why, one audit row per call. When a case needs a kept copy (a bullying or police
