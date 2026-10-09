@@ -130,12 +130,34 @@ private Lumine audit log; no public bot identity is involved.
 canonical bucket. Use it to distinguish quota bookkeeping from moderation;
 the note itself changes no access, ban, or identity rules.
 
-This surface is quota bookkeeping only. It cannot ban accounts, block signup,
+The commands above are quota bookkeeping only. They cannot ban accounts, block signup,
 add IP/device/risk-key rules, or infer an account family. Identification
 remains a human/LLM evidence judgment and must be explicitly requested by
 Mikey; routine administrator runs still escalate suspected alternate accounts
 and never auto-enforce. `accounts add` and `note set` still accept only an
 existing **unbanned** bucket.
+
+For an exact device Mikey explicitly authorizes blocking, use the separate
+signup-only action after reviewing `identity inspect`:
+
+```bash
+lumine admin ai-bucket device block-signup --bucket-id 10 --user 3127 \
+  --device-key 0123456789abcdef --user-ids 3127 \
+  --note "Mikey approved this reviewed device for the household signup block" --json
+```
+
+`--user` is the source account ID; `--user-ids` is the complete reviewed list
+of accounts observed on that device, not every member of the household.
+The API resolves the inspection handle internally, rechecks bounded 365-day
+device evidence, requires the exact expected account set, and rejects devices
+used by anyone outside the existing bucket. Incomplete history, unresolved
+handles and a rule belonging to another bucket stop the action. The bucket
+must already have an active **signup-only** restriction. This cannot turn on
+a bucket ban, change full-site bans, add network rules or infer membership.
+The response confirms the canonical rule and restriction without returning the
+raw device ID. The private audit records the request before evidence is read
+and records successful completion separately. Routine reviews still never
+auto-enforce; this action requires Mikey's explicit instruction for the device.
 
 ### Shared verified-email policies
 
