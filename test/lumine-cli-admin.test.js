@@ -6790,6 +6790,8 @@ test("lumine admin english check-candidates, check-import and check-broken (Gram
     assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "check-import"])), /check-import/);
     const apply = parseAdminOperation(parseArgs(["admin", "english", "check-apply", file]));
     assert.deepEqual([apply.method, apply.path, apply.body.items.length], ["POST", "/cli/admin/english/item-checks/apply", 1]);
+    const verify = parseAdminOperation(parseArgs(["admin", "english", "check-verify", file]));
+    assert.deepEqual([verify.method, verify.path], ["POST", "/cli/admin/english/item-checks/verify"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
