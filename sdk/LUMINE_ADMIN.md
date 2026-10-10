@@ -3753,6 +3753,19 @@ patterns. Keep the two explicit denominators separate: unchanged stops / all
 budget stops, and unchanged stops / completed manual runs in the same cohort.
 Do not divide by usage reservations or assume busy-refusal counts measure waits.
 
+Each day also carries `nothingSaved`: the Energy stops that saved nothing,
+split by cause (`byCause`): `not_started` (no paid work round ran: too big
+for the model, or one round did not fit), `read_only`, `edit_failed`,
+`cut_off`, `after_landing` (the apply-only landing round ran and still saved
+nothing), `early_hand_off`, `other`, and `unattributed` (days before the split
+shipped). `paidUnchangedRatio` is the nothing-saved rate among stops that paid
+for a work round; it is meaningful only from the release day of the cause
+split (before it `not_started` is 0, so it just repeats `unchangedRatio`).
+`landingRounds` (granted/saved) counts the last-round landings that may use
+the hand-off reserve, and `resumes` (started /
+fellBackToFresh) counts Continues that resumed the stopped run's provider
+thread. Headline the paid rate and the largest cause beside the 30% flag.
+
 Inspect the stop cases' observed starting budget, recorded work/handoff turns,
 remaining Energy and final-reservation spend. Missing lineage is unknown, not
 zero work or zero cost; final-reservation cost can exclude earlier planning
