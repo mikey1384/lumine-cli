@@ -129,6 +129,42 @@ test("admin meetup info maps staff's who-are-you check on a member", () => {
   assert.throws(() => op(["info", "6"]), /Member user ID/);
 });
 
+test("admin meetup set-branch maps staff's branch correction on a member", () => {
+  assert.deepEqual(op(["set-branch", "8", "11040", "--branch", "Bundang", "--note", "Old profile comments name Bundang teachers"]), {
+    name: "meetup.set-branch",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/crews/8/members/11040/branch",
+    body: { branch: "Bundang", note: "Old profile comments name Bundang teachers" },
+    mutates: true,
+    requiresRun: false,
+  });
+  assert.deepEqual(op(["set-branch", "8", "11040", "--branch", "Not a Twinkle student"]).body, {
+    branch: "Not a Twinkle student",
+    note: "",
+  });
+  assert.throws(() => op(["set-branch", "8", "11040"]), /needs --branch/);
+  assert.throws(() => op(["set-branch", "8", "11040", "--branch", "Bundang", "--branch", "Mapo"]), /exactly one --branch/);
+  assert.throws(() => op(["set-branch", "8"]), /Member user ID/);
+  assert.throws(() => op(["set-branch", "x", "11040", "--branch", "Bundang"]), /Crew ID/);
+  assert.throws(() => op(["set-branch", "8", "11040", "--branch", "Bundang", "--note", "x".repeat(1001)]), /at most 1000/);
+  // the receipt keeps ids and the decision, never the private note or the crew
+  const receipt = receiptToKeep(
+    { name: "meetup.set-branch" },
+    {
+      ok: true,
+      status: "ok",
+      changed: true,
+      data: {
+        result: { crewId: 8, userId: 11040, oldBranch: "Not a Twinkle student", branch: "Bundang", branchStatus: "official", branchVerified: true, changed: true },
+        crew: { crewId: 8, status: "active", progress: { currentStep: "crew" }, branchChanges: [{ note: "Old profile comments" }] },
+      },
+    },
+  );
+  assert.equal(JSON.stringify(receipt).includes("Old profile"), false);
+  assert.equal(receipt.data.result.branch, "Bundang");
+  assert.equal(receipt.data.result.branchVerified, true);
+});
+
 test("meetup write receipts keep the decision, never the crew view", () => {
   const crew = {
     crewId: 6,
@@ -137,7 +173,7 @@ test("meetup write receipts keep the decision, never the crew view", () => {
     memberChecks: [{ teacherName: "Teacher Jenny", className: "Wed Debate", relationship: "we are friends from camp" }],
     parentContacts: [{ email: "parent@example.test", question: "Is there an adult?" }],
   };
-  for (const name of ["meetup.request-changes", "meetup.info", "meetup.approve-crew", "meetup.approve-plan", "meetup.approve-grownup", "meetup.send-back", "meetup.approve", "meetup.slot", "meetup.parent-reply", "meetup.emails"]) {
+  for (const name of ["meetup.request-changes", "meetup.info", "meetup.set-branch", "meetup.approve-crew", "meetup.approve-plan", "meetup.approve-grownup", "meetup.send-back", "meetup.approve", "meetup.slot", "meetup.parent-reply", "meetup.emails"]) {
     const receipt = receiptToKeep(
       { name },
       {
