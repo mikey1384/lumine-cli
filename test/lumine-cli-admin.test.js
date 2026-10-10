@@ -6999,7 +6999,7 @@ test("lumine admin notable suggestions/review/profile/refresh/dismiss/note build
   assert.equal(parseAdminOperation(parseArgs(["admin", "notable", "review"])).path, "/cli/admin/notable/review");
   assert.equal(parseAdminOperation(parseArgs(["admin", "notable", "profile", "Chu"])).path, "/cli/admin/notable/profile/Chu");
   const refresh = parseAdminOperation(parseArgs(["admin", "notable", "refresh"]));
-  assert.deepEqual([refresh.method, refresh.path, refresh.mutates], ["POST", "/cli/admin/notable/refresh", true]);
+  assert.deepEqual([refresh.method, refresh.path, refresh.mutates, refresh.timeoutMs], ["POST", "/cli/admin/notable/refresh", true, 120000]);
   const dismiss = parseAdminOperation(parseArgs(["admin", "notable", "dismiss", "Chu", "--note", "not yet"]));
   assert.deepEqual(dismiss.body, { target: "Chu", note: "not yet" });
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "notable", "dismiss", "Chu"])), /--note/);
