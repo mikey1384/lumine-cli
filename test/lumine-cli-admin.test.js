@@ -6991,3 +6991,21 @@ test("lumine admin identity network builds a reasoned, receipt-first request", (
     /lumine admin identity network/,
   );
 });
+
+test("lumine admin notable suggestions/review/profile/refresh/dismiss/note build Mikey-only requests", () => {
+  const sug = parseAdminOperation(parseArgs(["admin", "notable", "suggestions", "--archetype", "thinker", "--limit", "15"]));
+  assert.deepEqual([sug.name, sug.method, sug.path, sug.requiresRun], ["notable.suggestions", "GET", "/cli/admin/notable/suggestions?archetype=thinker&limit=15", false]);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "notable", "suggestions", "--archetype", "wizard"])), /--archetype is one of/);
+  assert.equal(parseAdminOperation(parseArgs(["admin", "notable", "review"])).path, "/cli/admin/notable/review");
+  assert.equal(parseAdminOperation(parseArgs(["admin", "notable", "profile", "Chu"])).path, "/cli/admin/notable/profile/Chu");
+  const refresh = parseAdminOperation(parseArgs(["admin", "notable", "refresh"]));
+  assert.deepEqual([refresh.method, refresh.path, refresh.mutates], ["POST", "/cli/admin/notable/refresh", true]);
+  const dismiss = parseAdminOperation(parseArgs(["admin", "notable", "dismiss", "Chu", "--note", "not yet"]));
+  assert.deepEqual(dismiss.body, { target: "Chu", note: "not yet" });
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "notable", "dismiss", "Chu"])), /--note/);
+  const note = parseAdminOperation(parseArgs(["admin", "notable", "note", "Chu", "--polarity", "positive", "--trait", "helps others", "--note", "explained a puzzle", "--evidence", "https://www.twin-kle.com/comments/1"]));
+  assert.deepEqual(note.body, { target: "Chu", polarity: "positive", trait: "helps others", note: "explained a puzzle", evidenceUrl: "https://www.twin-kle.com/comments/1" });
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "notable", "note", "Chu", "--polarity", "great", "--trait", "x", "--note", "y"])), /--polarity/);
+  // the existing add/remove/status verbs are unchanged
+  assert.equal(parseAdminOperation(parseArgs(["admin", "notable", "add", "Chu", "--note", "x"])).path, "/cli/admin/notable-users");
+});

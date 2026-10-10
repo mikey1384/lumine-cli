@@ -3436,6 +3436,33 @@ never opens a new conversation. The message is audited and idempotent, reopens
 the existing DM canonically, and leaves the child's unread pointer untouched.
 A full-run report that skipped the conduct review is incomplete.
 
+## Notable suggestions (the site ranks, Mikey decides; added 2026-10-10)
+
+```bash
+lumine admin notable refresh                      # recompute every active member's scores (~20 s, reader)
+lumine admin notable suggestions --json           # ranked, with scores, weekly trend and the facts behind them
+lumine admin notable suggestions --archetype thinker --limit 15
+lumine admin notable review                       # current notables whose signals faded, or who went inactive
+lumine admin notable profile Chu                  # one member: scores, facts, trend, character notes
+lumine admin notable note Chu --polarity positive --trait "helps others" \
+  --note "Explained a puzzle step by step to a younger member." --evidence https://www.twin-kle.com/comments/123
+lumine admin notable dismiss Chu --note "not yet"  # Mikey declined; suggested again only after a clear rise
+```
+
+Four kinds of valuable person (Mikey's standard). Each kind is ranked separately, and a member is notable for any one:
+- **builder:** building days, builds improved over 3+ days, distinct players, other kids earning in their builds, merged contributions, readers of their chapters.
+- **adapter:** activity kinds used, tools new to them, apps earned in, unfamiliar Bounties apps tried.
+- **thinker:** puzzles others had failed that they solved, first-ever solves, solves after misses, hardest puzzle rating, grammar skills mastered, thoughtful daily answers, Grammarbles level.
+- **community:** distinct people replying to them, distinct people recommending their posts (bots excluded), meetups attended, crews founded, explanation votes.
+
+How the scores work:
+- Each signal becomes a percentile among active members.
+- An archetype score is the mean of its two strongest signals, so a specialist doesn't need everything.
+- Members qualify with 8+ active days in the last 60; consistency qualifies, it never ranks.
+- Teacher rewards are not used.
+
+Character is not scored. The daily run records what it notices, with a link to the post, through `notable note`. Notes are observations; nothing excludes anyone automatically, and Mikey decides. The same suggestions are on the management page (Notable Users → Suggested).
+
 ## Daily brief (management insights)
 
 ```bash
