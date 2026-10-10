@@ -1490,6 +1490,19 @@ gaps over 200 ms while the page is visible, bursts within 1 s coalesced) and
 `page-load` (once per load: TTFB, DOMContentLoaded, load, first route ready,
 ms since navigation start).
 
+### Who holds which management level (any time, read-only; added 2026-10-10)
+
+Answer "who can see this?" or "is level N a teacher?" from this command, not
+from a raw production query. A member's management level is the higher of
+their user type's level and what their achievement points earn. Points never
+pass level 2, so every admin (level 3+) is a holder of a listed user type.
+
+```bash
+lumine admin roles                     # every type; holders listed for level 1+ types
+lumine admin roles --min-level 3       # only the admin types' holders
+lumine admin roles --min-level 0 --limit 200 --json
+```
+
 ### Reward question-bank seeding (every full daily review; added 2026-09-28)
 
 `generated-quiz` rules fill a question bank on the server: a question is
