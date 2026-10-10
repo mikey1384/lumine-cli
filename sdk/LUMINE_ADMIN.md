@@ -5083,6 +5083,8 @@ For total JEV cost, include `dailyAiCosts.byProviderModel` for TypeSafe/JEV acro
 
 ## Bridge Builder crew reviews (no daily run required)
 
+On the website, Zero and Ciel acting for an admin can make these staff decisions too (who-are-you checks, branch corrections, crew, plan and branch reviews), through the same routes the admin's own taps use and only after the admin's yes on the approval card (Mikey, 2026-10-10). A member's Zero or Ciel still cannot.
+
 - `lumine admin meetup list` shows steps waiting for staff. Use `list --status active` to include crews making requested changes.
 - `lumine admin meetup show <crewId>` shows canonical progress, approval status, shared feedback, and private staff evidence.
 - `lumine admin meetup approve-crew <crewId>` and `approve-grownup <crewId>` approve the corresponding ready step.
