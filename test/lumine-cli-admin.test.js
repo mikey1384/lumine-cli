@@ -6759,6 +6759,9 @@ test("reward-bank seed works inside a daily run and on demand without one", asyn
 test("lumine admin english build-candidates and build-import (Grammar Quest Build it)", () => {
   const list = parseAdminOperation(parseArgs(["admin", "english", "build-candidates", "--after", "120", "--limit", "300"]));
   assert.deepEqual([list.method || "GET", list.path], ["GET", "/cli/admin/english/build-chunks/candidates?after=120&limit=300"]);
+  // no --after: from the start
+  const first = parseAdminOperation(parseArgs(["admin", "english", "build-candidates"]));
+  assert.equal(first.path, "/cli/admin/english/build-chunks/candidates?after=0&limit=200");
   const dir = fs.mkdtempSync(path.join(process.cwd(), "test", ".build-chunks-"));
   try {
     const file = path.join(dir, "verdicts.json");
