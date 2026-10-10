@@ -6774,6 +6774,25 @@ test("lumine admin english build-candidates and build-import (Grammar Quest Buil
   }
 });
 
+test("lumine admin english check-candidates, check-import and check-broken (Grammar Quest item checks)", () => {
+  const list = parseAdminOperation(parseArgs(["admin", "english", "check-candidates", "--after", "120", "--limit", "300"]));
+  assert.deepEqual([list.method || "GET", list.path], ["GET", "/cli/admin/english/item-checks/candidates?after=120&limit=300"]);
+  const first = parseAdminOperation(parseArgs(["admin", "english", "check-candidates"]));
+  assert.equal(first.path, "/cli/admin/english/item-checks/candidates?after=0&limit=200");
+  const broken = parseAdminOperation(parseArgs(["admin", "english", "check-broken"]));
+  assert.equal(broken.path, "/cli/admin/english/item-checks/broken?after=0&limit=100");
+  const dir = fs.mkdtempSync(path.join(process.cwd(), "test", ".item-checks-"));
+  try {
+    const file = path.join(dir, "verdicts.json");
+    fs.writeFileSync(file, JSON.stringify([{ questionId: 7, version: 1, verdict: "sound", crack: { b: [2, 3] } }]));
+    const imp = parseAdminOperation(parseArgs(["admin", "english", "check-import", file]));
+    assert.deepEqual([imp.method, imp.path, imp.body.items.length], ["POST", "/cli/admin/english/item-checks/import", 1]);
+    assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "check-import"])), /check-import/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lumine admin english builds import and review requests", () => {
   const dir = fs.mkdtempSync(path.join(process.cwd(), "test", ".english-"));
   try {
