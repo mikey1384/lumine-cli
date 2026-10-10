@@ -6756,6 +6756,21 @@ test("reward-bank seed works inside a daily run and on demand without one", asyn
   assert.notEqual(bad.code, 0);
 });
 
+test("lumine admin english build-candidates and build-import (Grammar Quest Build it)", () => {
+  const list = parseAdminOperation(parseArgs(["admin", "english", "build-candidates", "--after", "120", "--limit", "300"]));
+  assert.deepEqual([list.method || "GET", list.path], ["GET", "/cli/admin/english/build-chunks/candidates?after=120&limit=300"]);
+  const dir = fs.mkdtempSync(path.join(process.cwd(), "test", ".build-chunks-"));
+  try {
+    const file = path.join(dir, "verdicts.json");
+    fs.writeFileSync(file, JSON.stringify([{ questionId: 7, version: 1, verdict: "ok", chunks: ["She", "goes to", "school."] }]));
+    const imp = parseAdminOperation(parseArgs(["admin", "english", "build-import", file]));
+    assert.deepEqual([imp.method, imp.path, imp.body.items.length], ["POST", "/cli/admin/english/build-chunks/import", 1]);
+    assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "build-import"])), /build-import/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lumine admin english builds import and review requests", () => {
   const dir = fs.mkdtempSync(path.join(process.cwd(), "test", ".english-"));
   try {
