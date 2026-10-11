@@ -6795,6 +6795,8 @@ test("lumine admin english check-candidates, check-import and check-broken (Gram
     const faulty = parseAdminOperation(parseArgs(["admin", "english", "check-follow-faulty", "--after", "12:3"]));
     assert.deepEqual([faulty.method, faulty.path, faulty.body.after, faulty.body.limit], ["POST", "/cli/admin/english/item-checks/follow-faulty", "12:3", 100]);
     assert.equal(parseAdminOperation(parseArgs(["admin", "english", "check-follow-faulty", "--after", "c:12:3"])).body.after, "c:12:3");
+    assert.equal(parseAdminOperation(parseArgs(["admin", "english", "retire", "12", "--fault"])).body.fault, true);
+    assert.equal(parseAdminOperation(parseArgs(["admin", "english", "retire", "12", "--reason", "duplicate"])).body.fault, undefined);
     assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "check-follow-faulty", "--after", "12"])), /next/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
