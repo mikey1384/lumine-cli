@@ -1636,6 +1636,32 @@ lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools ve
 - Expansion: `stats` shows the frontier (items no pair uses yet, and untried
   pairs); seed pairs that use frontier items so Today's Star has fresh targets.
 
+Take-down and repair (added 2026-10-13):
+
+```bash
+lumine admin craft retire --build 1499 --item "<name or id>" --reason "Not suitable for children"            # dry run
+lumine admin craft retire --build 1499 --item "<name or id>" --reason "Not suitable for children" --confirm
+lumine admin craft unfizzle --build 1499 [--since 2026-10-13T00:00:00Z] [--pair Water+Fire]                # dry run
+lumine admin craft unfizzle --build 1499 --since 2026-10-13T00:00:00Z --confirm
+```
+
+- `retire` takes a bad item down everywhere: it leaves collections, item
+  cards, rankings, journeys and the daily target (today's star is re-picked);
+  the pairs that make it fizzle and no AI answer or seed can make it again;
+  its unpaid World First no longer pays (a paid one stays paid); its name
+  leaves bounty story lines. Who, when and why are stored on the item and in
+  the admin audit (`craft.retire`). Starters cannot be retired. There is no
+  un-retire.
+- AI answers and seeds whose name contains a word on Word Master's censored
+  list are refused automatically (the AI's is regenerated once, then the pair
+  fizzles). Add a word to that list to block it in both.
+- `unfizzle` repairs pairs that fizzled because the safety check itself
+  failed (an outage before 2026-10-13; a check outage now fails the merge
+  without storing anything). It resets only fizzles whose stored checks all
+  errored, never a real low verdict or a censored word; the next player to
+  try the pair asks again. `--since` and `--pair` narrow it; up to 5,000
+  fizzles are scanned per run.
+
 ### Reward question-bank seeding (every full daily review; added 2026-09-28)
 
 `generated-quiz` rules fill a question bank on the server: a question is

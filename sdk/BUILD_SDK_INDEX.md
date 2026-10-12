@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.65.0
-Updated: 2026-10-12
-Generated: 2026-10-12T13:02:05.243Z
+Version: 1.65.1
+Updated: 2026-10-13
+Generated: 2026-10-12T17:14:00.482Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -1664,9 +1664,10 @@ spawnPet(asset.kind, asset.params, asset.palette, asset.tier.effects);
   - Returns: { status: "ok" | "fizzle", item: item | null, why: string | null, newForMe: boolean, worldFirst: boolean, newPair: boolean, aiUsagePolicy? }
   - a and b are item ids the player has (starters or their collection); the order does not matter and an item can merge with itself. A known pair answers at once and costs nothing. A new pair asks the AI (usually a few seconds; the SDK waits up to 120 s), costs the player a little AI Energy (newPair: true) and is then known for everyone. fizzle means the pair makes nothing; it is stored too, so it is also free afterwards.
   - why is one true sentence explaining the result ("Lava cools in water and hardens into rock."): show it, it is the learning part. worldFirst: true means this player is the first in this universe to make the item; their name is on it for good.
-  - Limits: 300 new pairs per player per day (known pairs are unlimited), 20,000 items per collection, and about 1 merge a second. Errors carry code: craft_item_not_owned, craft_item_not_found, craft_in_progress (someone else is discovering the same pair; retry shortly), craft_daily_limit, craft_collection_full, craft_universe_full, craft_generation_failed / craft_generation_timeout (the AI was unavailable or too slow and the pair stays new; try again), craft_app_not_found / craft_forbidden (the app was deleted or the viewer can no longer open it), craft_throttled, and the AI Energy codes of Twinkle.ai.
+  - Limits: 300 new pairs per player per day (known pairs are unlimited), 20,000 items per collection, and about 1 merge a second. Errors carry code: craft_item_not_owned, craft_item_not_found, craft_in_progress (someone else is discovering the same pair; retry shortly), craft_daily_limit, craft_collection_full, craft_universe_full, craft_generation_failed / craft_generation_timeout (the AI was unavailable or too slow and the pair stays new; try again), craft_check_unavailable (HTTP 503: Twinkle's safety check is briefly down; nothing was stored and the pair stays new, so try again in a minute), craft_app_not_found / craft_forbidden (the app was deleted or the viewer can no longer open it), craft_throttled, and the AI Energy codes of Twinkle.ai.
   - Pass the same requestId when retrying after a lost reply. Keep a run's successful merges as [a, b] ids for Twinkle.rewards.claim (craft-target-v1 / craft-par-v1).
   - A result that is a starter (Water + Water = Water) is not added to the collection: newForMe is false. An error can carry aiUsagePolicy when an earlier AI attempt already used Energy.
+  - Items can be taken down by Twinkle moderators: a retired item leaves the player's collection (list, item, getState counts) and its pairs answer fizzle. Treat ids you cached as possibly gone: a merge with one returns craft_item_not_found.
   - Example: const result = await Twinkle.craft.merge({ a: water.id, b: fire.id });
 if (result.status === 'ok') showCard(result.item, result.why, result.worldFirst);
 - await Twinkle.craft.list({ cursor?, limit? }) | scopes: craft:read

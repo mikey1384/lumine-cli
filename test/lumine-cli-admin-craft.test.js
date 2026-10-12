@@ -5,7 +5,7 @@ import test from "node:test";
 import { testWorkRoot } from "./helpers/work-directory.js";
 import { parseAdminOperation } from "../lib/admin.js";
 import { parseArgs } from "../lib/commands.js";
-import { formatCraftResult } from "../lib/admin-craft.js";
+import { buildCraftOperation, formatCraftResult } from "../lib/admin-craft.js";
 
 const op = (...args) => parseAdminOperation(parseArgs(["admin", "craft", ...args]));
 const STEAM = { name: "Steam", emoji: "♨️", category: "science", why: "Fire heats water into vapour." };
@@ -78,4 +78,43 @@ test("craft results print plainly for agents", () => {
   assert.ok(stats.includes("Today's Star (2026-10-12): Rain (#9), par 3."));
   assert.ok(stats.includes("  #7 Lava + Water = 🪨 Stone (#9, earth, basic): Lava cools into rock."));
   assert.ok(stats.includes("  #8 Fire + Fire = fizzle"));
+});
+
+test("craft retire and unfizzle are dry runs unless --confirm", () => {
+  const retire = op("retire", "--build", "1499", "--item", "Bad Name", "--reason", "Not suitable for children");
+  assert.deepEqual([retire.name, retire.path, retire.mutates], ["craft.retire.preview", "/cli/admin/builds/1499/craft/retire", false]);
+  assert.deepEqual(retire.body, { item: "Bad Name", reason: "Not suitable for children", dryRun: true });
+  const real = op("retire", "--build", "1499", "--item", "42", "--reason", "Bad", "--confirm");
+  assert.deepEqual([real.name, real.mutates, real.body.dryRun], ["craft.retire", true, false]);
+  assert.throws(() => op("retire", "--build", "1499", "--item", "42"), /--reason/);
+  const unfizzle = op("unfizzle", "--build", "1499", "--since", "2026-10-13T00:00:00Z", "--pair", "Water+Fire");
+  assert.deepEqual(unfizzle.body, { since: "2026-10-13T00:00:00Z", pair: "Water+Fire", dryRun: true });
+  assert.equal(unfizzle.path, "/cli/admin/builds/1499/craft/unfizzle");
+  assert.deepEqual(op("unfizzle", "--build", "1499", "--confirm").body, { dryRun: false });
+  assert.throws(() => op("unfizzle", "--build", "1499", "--since", "last week"), /ISO date/);
+  assert.throws(() => op("unfizzle", "--build", "1499", "--pair", "Water"), /two item names/);
+  const lines = formatCraftResult({
+    operation: { name: "craft.unfizzle.preview" },
+    data: { dryRun: true, scanned: 3, reset: 1, pairs: [{ pairId: 7, pair: "Water + Fire" }], more: false },
+  });
+  assert.deepEqual(lines, [
+    "DRY RUN: would reset 1 of 3 fizzled pair(s) whose safety check errored.",
+    "  #7 Water + Fire",
+    "Nothing was written. Add --confirm to reset.",
+  ]);
+});
+
+test("a text flag without a value is refused, never sent as \"true\"", () => {
+  for (const flag of ["--why", "--emoji", "--category"]) {
+    assert.throws(() => op("revise", "--build", "1499", "--item", "42", `${flag}=`), new RegExp(`${flag} needs a value`));
+    // whatever parseArgs hands over for a bare flag, the command refuses it
+    assert.throws(
+      () => buildCraftOperation({
+        action: "revise",
+        options: { adminBuild: "1499", adminCraftItem: "42", adminConfirm: "", [{ "--why": "adminCraftWhy", "--emoji": "adminCraftEmoji", "--category": "adminCraftCategory" }[flag]]: true },
+      }),
+      new RegExp(`${flag} needs a value`),
+    );
+  }
+  assert.throws(() => op("revise", "--build", "1499", "--why", "x", "--item="), /--item needs a value/);
 });
