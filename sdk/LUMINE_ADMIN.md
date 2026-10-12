@@ -1592,6 +1592,50 @@ lumine admin roles --min-level 3       # only the admin types' holders
 lumine admin roles --min-level 0 --limit 200 --json
 ```
 
+### Twinkle.craft universes: seed, audit, revise (any time; added 2026-10-12)
+
+An app using `Twinkle.craft` (Infinity Craft, build 1499) has its own
+universe of items and pairs. Players' new pairs are answered by the AI on
+their own Energy; we seed and curate the rest with Claude Code agents, not
+API calls (Mikey 10-12): an initial seed, then expansion and a daily audit,
+Math Lab style. No daily run is needed. `seed` and `revise` are dry runs
+unless `--confirm` is given.
+
+```bash
+lumine admin craft stats --build 1499 [--limit 50]       # sizes, frontier, today's star, newest AI answers
+lumine admin craft seed --build 1499 --file pairs.json   # dry run: what would be added, skipped, rejected
+lumine admin craft seed --build 1499 --file pairs.json --confirm
+lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools very fast turns into glassy rock." --confirm
+```
+
+- `pairs.json` is up to 500 pairs, in order: `[{ "a": "Water", "b": "Fire",
+  "result": { "name": "Steam", "emoji": "♨️", "category": "science", "why":
+  "Fire heats water until it turns into vapour." } }]` (or `{ "pairs": [...] }`).
+  `a` and `b` are item names: starters (Water, Fire, Earth, Wind, Tree,
+  Nature), items already in the universe, or results earlier in the same file.
+- Every result passes the same checks as AI answers: 1-3 English words of
+  letters (32 characters), exactly one emoji, a category from nature, weather,
+  earth, space, life, body, science, energy, materials, food, tools, places,
+  ideas, and one plain-text why of at most 140 characters (no links or
+  markup). No AI or JEV call runs, so the content is ours to get right: real,
+  common English nouns or ideas, no people, characters or brands, child-safe,
+  and a true why that teaches the link.
+- A pair that already has an answer is skipped, never overwritten. Each
+  chunk of 100 is one audited transaction (`craft.seed`); a re-run is safe.
+  Word levels (Word Master's basic..epic) are looked up as for player items.
+- Seeded items have no World First: the first player to make one claims it
+  (name on the item, rankings, the discovery reward). Seeded pairs count for
+  Today's Star like any answered pair and never count toward the admin's
+  daily new-pair limit.
+- `stats` lists the newest AI-made pairs (`source: ai`, newest first, `--limit`
+  1-100, default 20) with each result's name, emoji, category, word level and
+  why. Audit them daily; fix a wrong or weak explanation with `revise`.
+- `revise` changes an item's `--why` (the explanation on its card: the pair
+  that first made it), `--emoji` or `--category`, through the same checks. The
+  name never changes: players hold it. Audited as `craft.revise`.
+- Expansion: `stats` shows the frontier (items no pair uses yet, and untried
+  pairs); seed pairs that use frontier items so Today's Star has fresh targets.
+
 ### Reward question-bank seeding (every full daily review; added 2026-09-28)
 
 `generated-quiz` rules fill a question bank on the server: a question is
