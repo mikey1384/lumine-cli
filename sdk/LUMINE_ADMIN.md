@@ -1652,18 +1652,22 @@ lumine admin craft unfizzle --build 1499 --since 2026-10-13T00:00:00Z --confirm
   leaves bounty story lines. Who, when and why are stored on the item and in
   the admin audit (`craft.retire`). Starters cannot be retired. There is no
   un-retire.
-- AI answers and seeds whose name contains a word on Word Master's censored
-  list are refused automatically (the AI's is regenerated once, then the pair
-  fizzles). Add a word to that list to block it in both. Matching is whole
-  words only, with simple inflections both ways (-s, -es, -ed, -ing), so a
-  list entry "...s" also blocks the bare word. A few ordinary names the list
-  would still catch ("Booby Trap", "Pirate Booty", "Cotton Balls", "Naked Mole
-  Rat") are allowed by name in `CRAFT_CENSOR_ALLOWED_NAMES`
-  (`twinkle-api helpers/build/craftSafety.ts`); JEV still judges them.
-- During a safety-check outage players get `craft_check_unavailable` and pay
-  for at most one answer per pair: the answer is kept on the pair and
-  re-checked on the next try, and each server pauses new attempts for a
-  minute after an outage (per pair, or everywhere after three).
+- Word Master's censored list (`content_words_censored`) is a Wordle filter,
+  not a moderation list, so a hit never decides anything on its own. A name
+  with a listed word (whole words only, simple inflections both ways: -s,
+  -es, -ed, -ing; hyphens count as spaces) is always judged by JEV as a
+  whole, told which word to look at, and must clear a stricter bar. Crystal
+  Ball, Sperm Whale, Pork Loin or Blue-Footed Booby pass when JEV finds them
+  innocent; a rude reading is regenerated once, then the pair fizzles.
+  There is no allowlist. For seeds a hit is a **warning** in the report
+  (`warnings`, shown with `--json`), never a rejection: read the name and
+  drop the pair if it reads rudely.
+- During a safety-check outage players get `craft_check_unavailable` and
+  there is at most one billed generation per pair while its kept answer is
+  fresh (24 h): the paid answer is kept on the pair and re-checked for free on
+  the next try. Each server pauses new billed generations for a minute after
+  an outage (per pair, or everywhere after three); the free re-check of a kept
+  answer is never paused.
 - `unfizzle` repairs pairs that fizzled because the safety check itself
   failed (an outage before 2026-10-13; a check outage now fails the merge
   without storing anything). It resets only fizzles whose stored checks all
