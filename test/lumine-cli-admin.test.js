@@ -6440,6 +6440,90 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
   ]);
   assert.deepEqual(propose.body.config, rules);
   assert.equal(propose.body.reason, "Moved the claim after the stage clears.");
+  // No name or thumbnail unless asked, and nothing to upload first.
+  assert.equal("title" in propose.body, false);
+  assert.equal("thumbnailFrom" in propose.body, false);
+  assert.equal(propose.prepare, undefined);
+  const coverPath = path.join(dir, "cover.png");
+  fs.writeFileSync(coverPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  // A new name and a local thumbnail: the image is put on the workspace copy
+  // before the offer, which then names the copy as its thumbnail source.
+  const renamed = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "review",
+      "propose",
+      "rewards:2",
+      "--dir",
+      editedDir,
+      "--config",
+      rulesPath,
+      "--title",
+      "Word Forge",
+      "--thumbnail",
+      coverPath,
+    ]),
+  );
+  assert.equal(renamed.body.title, "Word Forge");
+  assert.equal(renamed.body.thumbnailFrom, "workspace");
+  assert.match(renamed.body.thumbnailSha256, /^[0-9a-f]{64}$/);
+  assert.equal(typeof renamed.prepare, "function");
+  // A missing or unsupported picture fails before anything is sent.
+  for (const bad of [path.join(dir, "missing.png"), rulesPath]) {
+    assert.throws(
+      () =>
+        parseAdminOperation(
+          parseArgs([
+            "admin",
+            "reward-review",
+            "propose",
+            "2",
+            "--dir",
+            editedDir,
+            "--config",
+            rulesPath,
+            "--thumbnail",
+            bad,
+          ]),
+        ),
+      /Thumbnail file does not exist|--thumbnail must be/,
+    );
+  }
+  // --thumbnail workspace offers the copy's current picture: no upload.
+  const fromCopy = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "reward-review",
+      "propose",
+      "2",
+      "--dir",
+      editedDir,
+      "--config",
+      rulesPath,
+      "--thumbnail",
+      "workspace",
+    ]),
+  );
+  assert.equal(fromCopy.body.thumbnailFrom, "workspace");
+  assert.equal(fromCopy.prepare, undefined);
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "reward-review",
+          "propose",
+          "2",
+          "--dir",
+          editedDir,
+          "--config",
+          rulesPath,
+          "--title",
+          "x".repeat(101),
+        ]),
+      ),
+    /--title/,
+  );
   assert.throws(
     () =>
       parseAdminOperation(

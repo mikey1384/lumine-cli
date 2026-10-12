@@ -1320,9 +1320,18 @@ lumine admin reward-review approve 2 --config rules.json \
 lumine admin reward-review show 2 --dir /private/tmp/reward-review-2 --json   # then edit that directory…
 lumine admin reward-review propose 2 --dir /private/tmp/reward-review-2 \
   --config rules.json --reason "Moved the claim after the stage clears" --json  # …and offer it
+lumine admin reward-review propose 2 --dir /private/tmp/reward-review-2 --config rules.json \
+  --title "Word Forge" --thumbnail cover.png --json         # …also offering a new name and thumbnail
 lumine admin reward-review reject 2 --reason "Rewards fire on game over; nothing is earned" --json
 lumine admin reward-review revoke 2 --reason "Farmable; pausing until redesigned" --json
 ```
+
+A proposal can also offer the app a new name (`--title`, at most 100
+characters) and a new thumbnail (`--thumbnail <jpg|png|webp>`, uploaded to your
+proposal workspace copy first; `--thumbnail workspace` offers the one already
+set on that copy, e.g. from the website). Both are frozen with the offer and
+applied together with the files and rules when the creator accepts. An offer
+may change only the name or thumbnail; the files can then stay as submitted.
 
 `show --dir` writes the exact reviewed snapshot (private files, including the
 app's own `rewards.json`) so the agent can read it like a pulled workspace. The
