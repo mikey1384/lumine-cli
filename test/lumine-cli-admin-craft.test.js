@@ -118,3 +118,28 @@ test("a text flag without a value is refused, never sent as \"true\"", () => {
   }
   assert.throws(() => op("revise", "--build", "1499", "--why", "x", "--item="), /--item needs a value/);
 });
+
+test("seed warnings and kept flagged names print in plain output", () => {
+  const seed = formatCraftResult({
+    operation: { name: "craft.seed.preview" },
+    data: {
+      dryRun: true, added: 1, newItems: 1, skipped: [], rejected: [],
+      warnings: [{ pair: "Glass + Fortune = Crystal Ball", reason: "\"ball\" is on Word Master's censored list; make sure the name reads innocently" }],
+    },
+  });
+  assert.ok(seed.includes("  warning Glass + Fortune = Crystal Ball: \"ball\" is on Word Master's censored list; make sure the name reads innocently"));
+  const stats = formatCraftResult({
+    operation: { name: "craft.stats" },
+    data: {
+      buildId: 1499,
+      items: { total: 9, starters: 6, seededUnclaimed: 0, worldFirsts: 1, missingWordLevel: 0, retired: 0 },
+      pairs: { ai: { ok: 1 } },
+      frontier: { unusedItems: 1, untriedPairs: 2 },
+      today: { day: "2026-10-13", targetId: null, target: null, par: null },
+      recentAi: [],
+      keptFlagged: [{ pairId: 7, item: { id: 9, name: "Crystal Ball", emoji: "🔮" }, words: ["ball"], fine: 0.97, keptAt: 1760313600 }],
+    },
+  });
+  assert.ok(stats.includes("Kept flagged names (a word matched the censored list; JEV kept them; check each):"));
+  assert.ok(stats.includes("  #7 🔮 Crystal Ball (#9): \"ball\" · JEV 0.97 · 2025-10-13 00:00 UTC"));
+});

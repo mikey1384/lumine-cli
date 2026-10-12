@@ -1602,9 +1602,9 @@ Math Lab style. No daily run is needed. `seed` and `revise` are dry runs
 unless `--confirm` is given.
 
 ```bash
-lumine admin craft stats --build 1499 [--limit 50]       # sizes, frontier, today's star, newest AI answers
-lumine admin craft seed --build 1499 --file pairs.json   # dry run: what would be added, skipped, rejected
-lumine admin craft seed --build 1499 --file pairs.json --confirm
+lumine admin craft stats --build 1499 [--limit 50]       # sizes, frontier, today's star, newest AI answers, kept flagged names
+lumine admin craft seed --build 1499 --file pairs.json   # ALWAYS first: what would be added, skipped, rejected, warned
+lumine admin craft seed --build 1499 --file pairs.json --confirm   # only after reading every warning
 lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools very fast turns into glassy rock." --confirm
 ```
 
@@ -1620,6 +1620,10 @@ lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools ve
   markup). No AI or JEV call runs, so the content is ours to get right: real,
   common English nouns or ideas, no people, characters or brands, child-safe,
   and a true why that teaches the link.
+- **Always dry-run a seed first and read every warning before `--confirm`.**
+  A warning means a word of the name is on Word Master's censored list; the
+  pair is still written on `--confirm`, so drop or rename any pair whose name
+  could read rudely before confirming.
 - A pair that already has an answer is skipped, never overwritten. Each
   chunk of 100 is one audited transaction (`craft.seed`); a re-run is safe.
   Word levels (Word Master's basic..epic) are looked up as for player items.
@@ -1630,6 +1634,9 @@ lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools ve
 - `stats` lists the newest AI-made pairs (`source: ai`, newest first, `--limit`
   1-100, default 20) with each result's name, emoji, category, word level and
   why. Audit them daily; fix a wrong or weak explanation with `revise`.
+- `stats` also lists **kept flagged names**: AI items JEV kept although a word
+  matched the censored list (name, matched word, JEV's score, when). Read
+  each one as a child would; `retire` any that reads rudely.
 - `revise` changes an item's `--why` (the explanation on its card: the pair
   that first made it), `--emoji` or `--category`, through the same checks. The
   name never changes: players hold it. Audited as `craft.revise`.
@@ -1659,15 +1666,18 @@ lumine admin craft unfizzle --build 1499 --since 2026-10-13T00:00:00Z --confirm
   whole, told which word to look at, and must clear a stricter bar. Crystal
   Ball, Sperm Whale, Pork Loin or Blue-Footed Booby pass when JEV finds them
   innocent; a rude reading is regenerated once, then the pair fizzles.
-  There is no allowlist. For seeds a hit is a **warning** in the report
-  (`warnings`, shown with `--json`), never a rejection: read the name and
-  drop the pair if it reads rudely.
-- During a safety-check outage players get `craft_check_unavailable` and
-  there is at most one billed generation per pair while its kept answer is
-  fresh (24 h): the paid answer is kept on the pair and re-checked for free on
-  the next try. Each server pauses new billed generations for a minute after
-  an outage (per pair, or everywhere after three); the free re-check of a kept
-  answer is never paused.
+  Only JEV itself judges such a name: if JEV is down and its fallback model
+  answers, the merge takes the outage path below (the answer is kept and
+  re-checked once JEV is back). There is no allowlist. For seeds a hit is a
+  **warning** in the report (printed as `warning …` lines, and in `warnings`
+  with `--json`), never a rejection.
+- During a safety-check outage players get `craft_check_unavailable`. A
+  pair's answer is paid for once and re-checked free for 24 h from when the
+  model wrote it; after that a new try generates fresh. (If JEV later judges
+  the kept answer low, the one normal regeneration is billed as usual.) Each
+  server pauses new runs for a minute after an outage (per pair, or
+  everywhere after three); the pause never stops the free re-check of a kept
+  answer or a run that has already paid.
 - `unfizzle` repairs pairs that fizzled because the safety check itself
   failed (an outage before 2026-10-13; a check outage now fails the merge
   without storing anything). It resets only fizzles whose stored checks all
