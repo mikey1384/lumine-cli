@@ -1205,13 +1205,22 @@ test("AI bucket restriction and rule commands: dry run is a read, real runs conf
   );
   assert.throws(() => op(["restrict", "--bucket-id", "4", "--mode", "partial", "--confirm"]), /--mode none, signup or full/);
 
-  assert.deepEqual(op(["rule", "add", "--bucket-id", "4", "--type", "user", "--user", "18559"]), {
+  // every real change needs --confirm, unrestricted bucket or not
+  assert.throws(
+    () => op(["rule", "add", "--bucket-id", "4", "--type", "user", "--user", "18559"]),
+    /Every bucket change needs --confirm/,
+  );
+  assert.deepEqual(op(["rule", "add", "--bucket-id", "4", "--type", "user", "--user", "18559", "--confirm"]), {
     name: "ai-bucket.rule.add",
     method: "POST",
     path: "/cli/admin/ai-buckets/4/rules",
-    body: { type: "user", userId: 18559 },
+    body: { type: "user", userId: 18559, confirm: true },
     mutates: true,
   });
+  assert.throws(
+    () => op(["rule", "disable", "--bucket-id", "4", "--rule-id", "77"]),
+    /Every bucket change needs --confirm/,
+  );
   assert.deepEqual(
     op(["rule", "add", "--bucket-id", "4", "--type", "user", "--user", "18559", "--confirm", "--note", "Mikey asked"]).body,
     { type: "user", userId: 18559, note: "Mikey asked", confirm: true },
@@ -1235,8 +1244,8 @@ test("AI bucket restriction and rule commands: dry run is a read, real runs conf
     { type: "email", email: "family@example.com", confirmEmailRule: true, confirm: true },
   );
   assert.deepEqual(
-    op(["rule", "add", "--bucket-id", "4", "--type", "ip", "--ip", "58.151.12.59", "--scope", "signup", "--include-prefix"]).body,
-    { type: "ip", ip: "58.151.12.59", scope: "signup", includePrefix: true },
+    op(["rule", "add", "--bucket-id", "4", "--type", "ip", "--ip", "58.151.12.59", "--scope", "signup", "--include-prefix", "--confirm"]).body,
+    { type: "ip", ip: "58.151.12.59", scope: "signup", includePrefix: true, confirm: true },
   );
   assert.throws(
     () => op(["rule", "add", "--bucket-id", "4", "--type", "ip", "--ip", "58.151.12.59"]),

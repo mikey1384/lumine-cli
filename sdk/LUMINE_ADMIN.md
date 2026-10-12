@@ -174,6 +174,7 @@ lumine admin ai-bucket inspect --bucket-id 4 --reason "todo 79 review" --json
 lumine admin ai-bucket restrict --bucket-id 4 --mode signup --dry-run
 lumine admin ai-bucket restrict --bucket-id 4 --mode signup --confirm
 lumine admin ai-bucket rule add --bucket-id 4 --type user --user 18559 --dry-run
+lumine admin ai-bucket rule add --bucket-id 4 --type user --user 18559 --confirm
 lumine admin ai-bucket rule add --bucket-id 4 --type email \
   --email family@example.com --confirm-email-rule --confirm
 lumine admin ai-bucket rule add --bucket-id 4 --type ip --ip 58.151.12.59 \
@@ -191,8 +192,9 @@ members, every account a full restriction would reach, and for each member
 (first 25) their devices (inspection keys, never raw IDs) and network
 addresses with how many accounts share each. A device or address used by many
 accounts (an academy, a school) is counted, marked shared and never listed or
-treated as family evidence. Addresses (in evidence, IP rules and rule notes)
-are masked unless `--include-private-evidence`. `--reason` is required; the API commits an
+treated as family evidence. Addresses and email-rule addresses (in evidence, rules and rule notes)
+are masked unless `--include-private-evidence`; every other output, and the
+audit, keeps them masked (with a keyed hash in the audit). `--reason` is required; the API commits an
 access receipt before reading evidence.
 
 `--dry-run` on `restrict`, `rule add` and `rule disable` is a read: it returns
@@ -221,7 +223,10 @@ result instead of running again.
   passed; use it only on Mikey's explicit word. The CLI prints the override.
   Saving a full bucket again (even only a new message) re-kicks its members,
   as on the Management page; the preview lists them.
-- `rule add` / `rule disable` need `--confirm` when the bucket is restricted.
+- `rule add` / `rule disable` always need `--confirm` too: on an unrestricted
+  bucket a rule still pools AI Energy, on a restricted one it changes who is
+  blocked. On a fully restricted bucket an account or email rule re-kicks every
+  account the bucket reaches (as on the Management page); the preview lists them.
   Email rules cover every account with that verified address and also need
   `--confirm-email-rule`. IP and device rules need `--scope`; IP prefix rules
   (`--include-prefix`, the whole /24 or /64) are opt-in, their reach measured
