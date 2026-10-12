@@ -1654,7 +1654,16 @@ lumine admin craft unfizzle --build 1499 --since 2026-10-13T00:00:00Z --confirm
   un-retire.
 - AI answers and seeds whose name contains a word on Word Master's censored
   list are refused automatically (the AI's is regenerated once, then the pair
-  fizzles). Add a word to that list to block it in both.
+  fizzles). Add a word to that list to block it in both. Matching is whole
+  words only, with simple inflections both ways (-s, -es, -ed, -ing), so a
+  list entry "...s" also blocks the bare word. A few ordinary names the list
+  would still catch ("Booby Trap", "Pirate Booty", "Cotton Balls", "Naked Mole
+  Rat") are allowed by name in `CRAFT_CENSOR_ALLOWED_NAMES`
+  (`twinkle-api helpers/build/craftSafety.ts`); JEV still judges them.
+- During a safety-check outage players get `craft_check_unavailable` and pay
+  for at most one answer per pair: the answer is kept on the pair and
+  re-checked on the next try, and each server pauses new attempts for a
+  minute after an outage (per pair, or everywhere after three).
 - `unfizzle` repairs pairs that fizzled because the safety check itself
   failed (an outage before 2026-10-13; a check outage now fails the merge
   without storing anything). It resets only fizzles whose stored checks all
