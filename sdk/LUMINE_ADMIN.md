@@ -131,7 +131,8 @@ canonical bucket. Use it to distinguish quota bookkeeping from moderation;
 the note itself changes no access, ban, or identity rules.
 
 The commands above are quota bookkeeping only. They cannot ban accounts, block signup,
-add IP/device/risk-key rules, or infer an account family. Identification
+add IP/device/risk-key rules, or infer an account family (the explicit
+restricted-bucket commands below can, on Mikey's instruction). Identification
 remains a human/LLM evidence judgment and must be explicitly requested by
 Mikey; routine administrator runs still escalate suspected alternate accounts
 and never auto-enforce. `accounts add` and `note set` still accept only an
@@ -158,6 +159,80 @@ The response confirms the canonical rule and restriction without returning the
 raw device ID. The private audit records the request before evidence is read
 and records successful completion separately. Routine reviews still never
 auto-enforce; this action requires Mikey's explicit instruction for the device.
+
+### Restricted buckets: inspect, rules and restrictions
+
+These are the operator path for buckets with a restriction (and for adding
+email, IP and device rules to any bucket). They use the same shared operations
+as the Management page, so each change has the same side effects there
+(current-day usage re-attribution, ban cache, member notification and kicks,
+live quota updates). Use them only on Mikey's explicit instruction for that
+bucket, rule or restriction.
+
+```bash
+lumine admin ai-bucket inspect --bucket-id 4 --reason "todo 79 review" --json
+lumine admin ai-bucket restrict --bucket-id 4 --mode signup --dry-run
+lumine admin ai-bucket restrict --bucket-id 4 --mode signup --confirm
+lumine admin ai-bucket rule add --bucket-id 4 --type user --user 18559 --dry-run
+lumine admin ai-bucket rule add --bucket-id 4 --type email \
+  --email family@example.com --confirm-email-rule --confirm
+lumine admin ai-bucket rule add --bucket-id 4 --type ip --ip 58.151.12.59 \
+  --scope signup [--include-prefix] --confirm
+lumine admin ai-bucket rule add --bucket-id 4 --type device --user 18559 \
+  --device-key 0123456789abcdef --scope signup --user-ids 18559,20001 \
+  --note "Mikey approved this reviewed device" --confirm
+lumine admin ai-bucket rule disable --bucket-id 4 --rule-id 77 --dry-run
+```
+
+`inspect` works for unrestricted and restricted buckets. It returns the
+canonical bucket (label, note, restriction `none|signup|full`, message), every
+active rule (id, kind, scope, effective restriction, match), the canonical
+members, every account a full restriction would reach, and for each member
+(first 25) their devices (inspection keys, never raw IDs) and network
+addresses with how many accounts share each. A device or address used by many
+accounts (an academy, a school) is counted, marked shared and never listed or
+treated as family evidence. Addresses (in evidence, IP rules and rule notes)
+are masked unless `--include-private-evidence`. `--reason` is required; the API commits an
+access receipt before reading evidence.
+
+`--dry-run` on `restrict`, `rule add` and `rule disable` is a read: it returns
+the current and resulting restriction, the accounts newly affected or released,
+the accounts whose sessions a full restriction drops, admin conflicts and any
+blocker, and changes nothing. Device, IP and email previews read private
+evidence, so they record an access receipt; the others record nothing.
+
+A real run is audited (request receipt with the idempotency key and payload
+fingerprint, then the completed result) and returns the bucket read back from
+the database and checked (`verified: true`); the CLI refuses a result that
+does not confirm the requested state. A failure after the change started is
+recorded as failed; a replay with the same idempotency key returns the stored
+result instead of running again.
+
+- `restrict` always needs `--confirm`. `signup` blocks only new accounts:
+  existing logins and existing bans (`users.banned`) stay as they are. `full`
+  drops members' sessions and is refused while any member is an admin. `none`
+  lifts the restriction; each member gets its effective ban state pushed again.
+  Without `--message` the current message is kept. The preview and the
+  result list every IP, prefix and device rule whose effective restriction
+  changes, with how many accounts it reaches (exact IPs from site activity;
+  prefixes and devices from a year of AI usage, a lower bound). A rule that
+  gets stronger on a shared network (more than 8 accounts) or whose reach
+  can't be measured refuses the change unless `--allow-shared-network` is
+  passed; use it only on Mikey's explicit word. The CLI prints the override.
+  Saving a full bucket again (even only a new message) re-kicks its members,
+  as on the Management page; the preview lists them.
+- `rule add` / `rule disable` need `--confirm` when the bucket is restricted.
+  Email rules cover every account with that verified address and also need
+  `--confirm-email-rule`. IP and device rules need `--scope`; IP prefix rules
+  (`--include-prefix`, the whole /24 or /64) are opt-in, their reach measured
+  as above. A shared exact address or prefix, or an unmeasured prefix under a
+  full restriction, is refused unless `--allow-shared-network`. An address or
+  prefix rule held by another bucket is refused, never moved. Device rules
+  keep the `device block-signup` guards: the reviewed `--user-ids` must equal
+  the accounts seen on the device, all inside the bucket; a device more than
+  9 accounts used is shared (counted, not listed, refused). Disabling an exact
+  IP rule leaves its prefix rules active (the preview names them).
+  `rule disable` keeps `--note` in the audit receipt only.
 
 ### Shared verified-email policies
 

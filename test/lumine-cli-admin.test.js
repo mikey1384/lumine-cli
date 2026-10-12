@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import {
   adminCommand,
   assertAdminOperationAllowedForRunScope,
+  assertAiBucketChangeResult,
   assertAiEmailPolicySetResult,
   assertComposedCommentDraftResult,
   assertComposedCommentEditResult,
@@ -1157,6 +1158,208 @@ test("todo lifecycle carries experiments between runs without requiring a public
       }),
     /carry-over telemetry was suppressed/,
   );
+});
+
+test("AI bucket restriction and rule commands: dry run is a read, real runs confirm", () => {
+  const op = (args) => parseAdminOperation(parseArgs(["admin", "ai-bucket", ...args]));
+  assert.deepEqual(op(["inspect", "--bucket-id", "4", "--reason", "todo 79 review"]), {
+    name: "ai-bucket.inspect",
+    method: "POST",
+    path: "/cli/admin/ai-buckets/4/inspect",
+    body: { reason: "todo 79 review", includePrivateEvidence: false },
+    mutates: false,
+  });
+  assert.equal(
+    op(["inspect", "--bucket-id", "4", "--reason", "x", "--include-private-evidence"]).body
+      .includePrivateEvidence,
+    true,
+  );
+  assert.throws(() => op(["inspect", "--bucket-id", "4"]), /--reason/);
+
+  assert.deepEqual(op(["restrict", "--bucket-id", "4", "--mode", "signup", "--dry-run"]), {
+    name: "ai-bucket.restrict.preview",
+    method: "PUT",
+    path: "/cli/admin/ai-buckets/4/restriction",
+    body: { mode: "signup", dryRun: true },
+    mutates: false,
+  });
+  assert.deepEqual(
+    op(["restrict", "--bucket-id", "4", "--mode", "full", "--message", "Shared family", "--confirm"]),
+    {
+      name: "ai-bucket.restrict",
+      method: "PUT",
+      path: "/cli/admin/ai-buckets/4/restriction",
+      body: { mode: "full", message: "Shared family", confirm: true },
+      mutates: true,
+    },
+  );
+  // --confirm may come before other flags too
+  assert.equal(
+    op(["restrict", "--confirm", "--bucket-id", "4", "--mode", "none"]).body.confirm,
+    true,
+  );
+  assert.throws(() => op(["restrict", "--bucket-id", "4", "--mode", "signup"]), /needs --confirm/);
+  assert.throws(
+    () => op(["restrict", "--bucket-id", "4", "--mode", "signup", "--confirm", "yes"]),
+    /without a value/,
+  );
+  assert.throws(() => op(["restrict", "--bucket-id", "4", "--mode", "partial", "--confirm"]), /--mode none, signup or full/);
+
+  assert.deepEqual(op(["rule", "add", "--bucket-id", "4", "--type", "user", "--user", "18559"]), {
+    name: "ai-bucket.rule.add",
+    method: "POST",
+    path: "/cli/admin/ai-buckets/4/rules",
+    body: { type: "user", userId: 18559 },
+    mutates: true,
+  });
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "user", "--user", "18559", "--confirm", "--note", "Mikey asked"]).body,
+    { type: "user", userId: 18559, note: "Mikey asked", confirm: true },
+  );
+  assert.throws(
+    () => op(["rule", "add", "--bucket-id", "4", "--type", "email", "--email", "Family@Example.com"]),
+    /--confirm-email-rule/,
+  );
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "email", "--email", "Family@Example.com", "--dry-run"]),
+    {
+      name: "ai-bucket.rule.add.preview",
+      method: "POST",
+      path: "/cli/admin/ai-buckets/4/rules",
+      body: { type: "email", email: "family@example.com", dryRun: true },
+      mutates: false,
+    },
+  );
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "email", "--email", "family@example.com", "--confirm-email-rule", "--confirm"]).body,
+    { type: "email", email: "family@example.com", confirmEmailRule: true, confirm: true },
+  );
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "ip", "--ip", "58.151.12.59", "--scope", "signup", "--include-prefix"]).body,
+    { type: "ip", ip: "58.151.12.59", scope: "signup", includePrefix: true },
+  );
+  assert.throws(
+    () => op(["rule", "add", "--bucket-id", "4", "--type", "ip", "--ip", "58.151.12.59"]),
+    /--scope signup or full/,
+  );
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "device", "--user", "18559", "--device-key", "0123456789abcdef", "--scope", "full", "--dry-run"]),
+    {
+      name: "ai-bucket.rule.add.preview",
+      method: "POST",
+      path: "/cli/admin/ai-buckets/4/rules",
+      body: { type: "device", sourceUserId: 18559, deviceKey: "0123456789abcdef", scope: "full", dryRun: true },
+      mutates: false,
+    },
+  );
+  assert.throws(
+    () => op(["rule", "add", "--bucket-id", "4", "--type", "device", "--user", "18559", "--device-key", "0123456789abcdef", "--scope", "full", "--user-ids", "18559"]),
+    /--note/,
+  );
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "device", "--user", "18559", "--device-key", "0123456789abcdef", "--scope", "signup", "--user-ids", "18559,20001", "--note", "reviewed", "--confirm"]).body,
+    {
+      type: "device",
+      sourceUserId: 18559,
+      deviceKey: "0123456789abcdef",
+      scope: "signup",
+      expectedUserIds: [18559, 20001],
+      note: "reviewed",
+      confirm: true,
+    },
+  );
+  assert.throws(
+    () => op(["rule", "add", "--bucket-id", "4", "--type", "device", "--user", "18559", "--device-key", "web:raw-device", "--scope", "signup", "--dry-run"]),
+    /--device-key/,
+  );
+  assert.throws(() => op(["rule", "add", "--bucket-id", "4", "--type", "phone"]), /--type user, email, ip or device/);
+
+  assert.deepEqual(op(["rule", "disable", "--bucket-id", "4", "--rule-id", "77", "--dry-run"]), {
+    name: "ai-bucket.rule.disable.preview",
+    method: "POST",
+    path: "/cli/admin/ai-buckets/4/rules/77/disable",
+    body: { dryRun: true },
+    mutates: false,
+  });
+  assert.deepEqual(
+    op(["rule", "disable", "--bucket-id", "4", "--rule-id", "77", "--note", "wrong family", "--confirm"]),
+    {
+      name: "ai-bucket.rule.disable",
+      method: "POST",
+      path: "/cli/admin/ai-buckets/4/rules/77/disable",
+      body: { note: "wrong family", confirm: true },
+      mutates: true,
+    },
+  );
+  assert.throws(() => op(["rule", "disable", "--bucket-id", "4"]), /--rule-id/);
+
+  // the shared-network override is explicit, sent only when given
+  assert.deepEqual(
+    op(["restrict", "--bucket-id", "4", "--mode", "full", "--allow-shared-network", "--dry-run"]).body,
+    { mode: "full", allowSharedNetwork: true, dryRun: true },
+  );
+  assert.deepEqual(
+    op(["rule", "add", "--bucket-id", "4", "--type", "ip", "--ip", "58.151.12.59", "--scope", "full", "--allow-shared-network", "--confirm"]).body,
+    { type: "ip", ip: "58.151.12.59", scope: "full", allowSharedNetwork: true, confirm: true },
+  );
+  assert.throws(
+    () => op(["rule", "disable", "--bucket-id", "4", "--rule-id", "7", "--allow-shared-network", "--confirm"]),
+    /only to restrict and rule add/,
+  );
+  // a following short flag is never taken as the confirm value
+  const parsed = parseArgs(["admin", "ai-bucket", "restrict", "--bucket-id", "4", "--mode", "signup", "--confirm", "-h"]);
+  assert.equal(parsed.adminConfirm, "true");
+});
+
+test("AI bucket changes are accepted only when the canonical state is verified", () => {
+  const operation = { name: "ai-bucket.restrict", body: { mode: "signup", confirm: true } };
+  const verified = {
+    ok: true,
+    status: "success",
+    changed: true,
+    data: { bucket: { id: 4, restriction: { mode: "signup" } }, verified: true },
+  };
+  assert.doesNotThrow(() => assertAiBucketChangeResult({ operation, result: verified }));
+  assert.throws(
+    () =>
+      assertAiBucketChangeResult({
+        operation,
+        result: { ...verified, data: { ...verified.data, bucket: { id: 4, restriction: { mode: "full" } } } },
+      }),
+    (error) => error.code === "LUMINE_ADMIN_AI_BUCKET_NOT_VERIFIED",
+  );
+  assert.throws(
+    () =>
+      assertAiBucketChangeResult({
+        operation: { name: "ai-bucket.rule.add", body: {} },
+        result: { ...verified, data: { bucket: { id: 4 } } },
+      }),
+    /did not confirm/,
+  );
+  // the receipt on disk keeps ids, modes and counts, never matches or names
+  const receipt = receiptToKeep(
+    { name: "ai-bucket.rule.add" },
+    {
+      ok: true,
+      status: "success",
+      changed: true,
+      data: {
+        bucket: { id: 4, label: "Jayden", restriction: { mode: "signup" } },
+        addedRules: [
+          { id: 77, kind: "email", match: "family@example.com", scope: "full", effectiveRestriction: "signup" },
+        ],
+        kickedUserIds: [],
+        ruleCount: 3,
+        memberCount: 2,
+        verified: true,
+      },
+    },
+  );
+  assert.deepEqual(receipt.data.addedRules, [
+    { id: 77, kind: "email", scope: "full", effectiveRestriction: "signup" },
+  ]);
+  assert.ok(!JSON.stringify(receipt).includes("family@example.com"));
+  assert.ok(!JSON.stringify(receipt).includes("Jayden"));
 });
 
 test("AI bucket account batches are explicit, bounded, and run-independent", async (t) => {
