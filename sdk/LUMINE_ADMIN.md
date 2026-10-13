@@ -2673,6 +2673,12 @@ never previously been Featured from canonical evidence.
 
 ### Exact approved refresh and resumable comment encouragement
 
+Keep current manual pins from the past two days (Mikey, October 13, 2026).
+Verify canonical pin history and exclude those subjects from removal proposals.
+Subject 3529, “What is special about Twinkle?”, also has an explicit keep
+instruction. An absent pin is still never restored. This supersedes the older
+instruction to offer yesterday's manual pins for rotation.
+
 For the daily old-to-new proposal, prepare a canonical plan without changing pins:
 
 ```bash
@@ -2982,6 +2988,14 @@ to join in. Games, art, puzzles, friendships, shared reflections, and community
 discussions can all supply good stories; read the actual source to find the
 substance.
 
+**Community significance (Mikey, 2026-10-13):** substantive messages about
+Twinkle's shared values, purpose and direction deserve explicit front-page
+priority, including the lead when they are the day's most consequential story.
+Judge what the message means for members, regardless of who wrote it. Immediate
+entertainment, likely comments and opportunities to join in are not the only
+measures of importance. Explain the values being communicated; do not reduce
+them to founder biography or an administrative announcement.
+
 Use clear, lively language that respects readers' intelligence. Give enough
 context for someone who missed the original post, and make the interesting
 part clear in the headline and opening. Avoid talking down to readers, forced
@@ -3101,7 +3115,9 @@ make the call by reading:
 
 - **Choose the lead for readers aged 10–15.** Lead with the eligible front
   event whose substance is most likely to catch their interest and reward
-  reading. A thoughtful conversation, a funny or relatable reflection, a
+  reading, weighing community significance as well as immediate appeal.
+  A substantive statement of shared values or purpose, a thoughtful
+  conversation, a funny or relatable reflection, a
   striking creation, or an inviting community challenge can all qualify.
   Read the source and any supplied replies to understand the appeal; priority,
   recency, and the mere presence of an argument do not decide the lead.
