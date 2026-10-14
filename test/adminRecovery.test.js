@@ -399,6 +399,7 @@ test("daily progress never falls back to cwd when the explicit directory is unav
 function fakeChild() {
   const child = new EventEmitter();
   child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
   child.pid = 123;
   child.kills = 0;
   child.kill = () => {
@@ -441,4 +442,16 @@ test("report startup failures stop their own child and valid readiness still lea
   assert.equal(result.ok, true);
   assert.equal(result.data.opened, false);
   assert.equal(result.data.browserVerification.navigation, "pending");
+});
+
+test('report startup preserves structured listen failures and bounded stderr after exit', async () => {
+  const rejected = fakeChild(), result = waitForReportServer(rejected);
+  rejected.stdout.write(JSON.stringify({ok:false,status:'error',error:{message:'listen EPERM 127.0.0.1:8766'}})+'\n');
+  await assert.rejects(result, /listen EPERM 127\.0\.0\.1:8766/);
+  const closed = fakeChild(), closing = waitForReportServer(closed);
+  closed.emit('exit', 1);
+  closed.stderr.write('x'.repeat(10000)+'\u001b[31mEADDRINUSE: address already in use\u001b[0m\n');
+  closed.emit('close',1);
+  await assert.rejects(closing, error => error.message.includes('EADDRINUSE') && error.message.length < 2200 && !error.message.includes('\u001b'));
+  assert.equal(closed.stderr.listenerCount('data'),0);
 });

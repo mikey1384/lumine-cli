@@ -622,6 +622,10 @@ additions are not the live inventory. At two or fewer remaining, prepare a
 refill to at least ten, with complete interactive guides, and track it until
 approved publication. Report one or zero remaining prominently. Details are
 in the linked guide's **Daily queue monitoring and refill** section.
+Read this inventory with `lumine admin math-lab queue --json`. Its receipt
+binds the published artifact and live reward review, includes all twelve
+grades, and reports incomplete coverage explicitly. Today’s cleared set stays
+current until UTC midnight, but no longer counts as unearned inventory.
 This is not part of Featured-only or newspaper-only work and is not a new
 scheduler, delegated API scope, or automatic extension of admin permissions.
 Use the expressly authorized owner Build workflow for Math Lab; retain the
@@ -878,6 +882,8 @@ type StandalonePost = {
   updatedAt: null;
   title: string | null;
   question: string | null;
+  grade?: "Pass" | "Fail" | "Masterpiece" | null; // Daily Reflection only
+  masterpieceType?: "heart" | "mind" | "heart_and_mind" | null;
   content: string | null;
   explanation: string | null;
   imagePath: string | null;
@@ -1152,7 +1158,7 @@ lumine admin report serve --file <dir>/daily-management-report.md [--port <n>] [
 ```
 
 These compose the documented commands in this contract, running them as child processes, so every scope check, audit and pagination rule applies unchanged.
-- **`gather`** saves each read-only report into `<dir>`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. It also creates `review-state.json`: every source is fetched, not read. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
+- **`gather`** saves each read-only report into `<dir>`, including the canonical published Math Lab queue in `math-lab-queue.json`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. Total/per-step `durationMs`, attempts and recovered reads make recurring slow or failing collection steps visible during the daily review. It also creates `review-state.json`: every source is fetched, not read. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
 - **`progress`** reads local review state and explicit operator acknowledgments, writes private `progress.json`, and keeps reading, canonical effort mutations, the run lease, and browser checks separate. Add all required duties for the actual run scope and its carryovers; collection alone is not a full review. A completed run lease cannot complete a pending duty. Reading acknowledgments bind to the current file bytes and are operator attestations, not proof of comprehension.
 - **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured. Each one comes with its human/bot comment counts, explicit comment truncation/completeness, and whether Mikey has viewed it. Counts from truncated context are partial. An unavailable Subject context fails the collection. Eligibility only: ranking stays editorial.
 - **`report serve`** detaches a loopback server that answers only `/`, `marked.min.js` and the report Markdown. `--open` opens Chrome and reports whether the OS accepted the request. Render, navigation and original-source verification remain pending until actually checked. Startup failures stop only the child this command started.
@@ -1479,9 +1485,8 @@ Rule fields (all server-enforced, none inferred from app code):
 - Top-level `userDailyClaims`: receipts one learner may earn per site day
   across all rules. `1` is "one bounty a day".
 
-Math Lab's economy (Mikey, 2026-09-12): twelve level rules, one per grade per
-day, elementary 50,000 XP + 1,000 Coins, middle 70,000 + 5,000, high
-100,000 + 10,000; `retry` 50 % XP / 0 % Coins; `maxAttempts` null;
+Math Lab's economy (Mikey, equal pay 2026-10-04): twelve level rules, one per grade per
+day, all paying 70,000 XP + 5,000 Coins; `retry` 50 % XP / 0 % Coins; `maxAttempts` null;
 `userDailyClaims` 1; until-earned sets authored from the Korean curriculum.
 Arcade Typing (Mikey, 2026-09-12): XP for clearing campaign stages, up to
 10,000 XP per learner per day, no Coins. Platform ceilings: 100,000 XP /
@@ -1496,6 +1501,18 @@ also closes itself on that save). Rejection and revocation require a
 `--reason` the creator reads verbatim in their workspace. A later code save
 needs a new request. Never approve without reading the code; never approve a
 request whose `isLatest` is false.
+
+Mikey-owned apps automatically attempt approval and publication when the owner
+requests reward review. Before that write, run
+`lumine rewards review --preflight --json` and retain its complete receipt.
+It identifies the saved version, artifact ID, source hash, private sheet hash
+and effective reward configuration hash, and states the publication behavior.
+After Mikey approves that exact candidate, use
+`lumine rewards review --approval-file <receipt.json>`. The API checks those
+values under the build lock before freezing content; a change returns
+`build_reward_approval_stale`. There is no silent fallback to an unbound request.
+Saving a new preflight is read-only and is not approval. These commands require
+the matching API and CLI release.
 
 `propose <id> --dir <edited> --config rules.json [--reason]` sends the edited
 directory (text files only; dotfiles and tool folders skipped) as the
@@ -2479,6 +2496,12 @@ type StandalonePostComments = Success<{
 Inspection never silently bypasses secret semantics. Until the selected bot is
 the author or has canonically responded/revealed, secret values and comments
 remain unavailable.
+
+Daily Reflection post reads and recommendation candidates include the stored
+`grade` and `masterpieceType` (nullable), independently of XP and recommendations.
+An absent grade is unknown. Verify `grade === "Masterpiece"` before placing one
+of Mikey's reflections anywhere on the newspaper front page; lower or missing
+grades can be considered for inside pages. The CLI does not infer a grade.
 
 ## Subject and Featured mutations
 
