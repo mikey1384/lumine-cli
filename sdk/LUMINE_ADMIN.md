@@ -1714,7 +1714,31 @@ them so the first learner on a unit never waits or pays.
 lumine admin reward-bank coverage <buildId> [--max-step 3] [--json]   # read-only, no run
 lumine admin reward-bank seed <buildId> [--max-step 3] [--json]       # delegated full run
 lumine admin reward-bank report <buildId> [--days 1] [--json]         # read-only telemetry
+lumine admin reward-bank question <buildId> --question-id <id> [--json]
+lumine admin reward-bank repair <buildId> --file <repair.json> --dry-run [--json]
+lumine admin reward-bank repair <buildId> --file <repair.json> [--json]
 ```
+
+`question` returns the complete prompt, answer, hint and guide, question
+statistics, a canonical `fingerprint`, and aggregate challenge history. It is
+owner-only and does not need a daily run. A report excerpt is not an exact
+question inspection.
+
+`repair` accepts exactly `{ "questionId": 41, "expectedFingerprint": "<hash
+from inspection>", "answer": 0.5, "reason": "Verified explanation and arithmetic" }`.
+Inspect and verify the mathematics before preparing a repair. `--dry-run`
+checks the same guard without writing. The real command locks and rechecks the
+question, changes only its numeric answer, returns canonical readback and
+records an idempotent transaction audit. A stale fingerprint is rejected;
+inspect again instead of guessing a new hash. Unknown plan fields are rejected.
+No model call or AI Energy charge is involved.
+
+The repaired answer governs subsequent attempts, including already-issued
+unsolved challenges. Past attempts, grades, ladders, question statistics and
+rewards stay unchanged; the receipt states this explicitly. The history counts
+are observations, not a lock over every learner's activity. If the old answer
+affected a learner, inspect that history and prepare a separate, exact remedy;
+this command never guesses compensating rewards or rewrites past grades.
 
 `report` covers the last `--days` (1-31): generation rounds by source
 (learner or seed) with outcomes (`accepted`, `off_brief`: the checker judged
