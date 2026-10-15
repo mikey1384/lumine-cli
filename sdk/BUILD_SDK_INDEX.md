@@ -1029,9 +1029,9 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Example: const { level } = await Twinkle.minecraft.getPlayArea({ id: 'twinkle-keep' });
 - async getPlayAreaChunks({ id, chunks: [[cx, cz], ...] }) | scopes: content:read
   - Returns: { scenes: [{ cx, cz, scene: { origin: [x,y,z], size: [w,h,d], palette, blocks, light, biomes, count, ... } | null }] }
-  - Up to 9 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
+  - Up to 24 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
   - Same scene format as getSnap; only blocks with a visible face inside the area are included. scene is null for a chunk that is not part of the area.
-  - At most 9 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
+  - At most 24 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
   - Example: const { scenes } = await Twinkle.minecraft.getPlayAreaChunks({ id: level.id, chunks: [[64, 29], [65, 29]] });
 - async createPlayArea({ name, world, box, spawn, id }) | scopes: content:write
   - Returns: { level }

@@ -2502,6 +2502,9 @@ Daily Reflection post reads and recommendation candidates include the stored
 An absent grade is unknown. Verify `grade === "Masterpiece"` before placing one
 of Mikey's reflections anywhere on the newspaper front page; lower or missing
 grades can be considered for inside pages. The CLI does not infer a grade.
+Masterpiece is only an eligibility condition for his reflections: it does not
+award front-page placement, the lead, or editorial priority. Read the actual
+content and compare its significance to members with the day's other stories.
 
 ## Subject and Featured mutations
 
@@ -3018,6 +3021,12 @@ Judge what the message means for members, regardless of who wrote it. Immediate
 entertainment, likely comments and opportunities to join in are not the only
 measures of importance. Explain the values being communicated; do not reduce
 them to founder biography or an administrative announcement.
+
+**Editorial judgment (Mikey, 2026-10-15):** a Masterpiece grade never automatically
+earns a front-page slot or the lead. Use the project's canonical `CORE_VALUES.md`
+to assess the actual story's relevance to the community and its culture, alongside
+the other eligible stories. Give the substantive reason for the placement;
+neither the grade nor Mikey's authorship supplies that reason.
 
 Use clear, lively language that respects readers' intelligence. Give enough
 context for someone who missed the original post, and make the interesting
