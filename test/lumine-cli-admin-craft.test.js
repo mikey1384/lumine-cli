@@ -143,3 +143,33 @@ test("seed warnings and kept flagged names print in plain output", () => {
   assert.ok(stats.includes("Kept flagged names (a word matched the censored list; JEV kept them; check each):"));
   assert.ok(stats.includes("  #7 🔮 Crystal Ball (#9): \"ball\" · JEV 0.97 · 2025-10-13 00:00 UTC"));
 });
+
+test("craft revise --pair sends only the pair and its why; dry run unless --confirm", () => {
+  const dry = op("revise", "--build", "1499", "--pair", "Earth + Smoke", "--why", "Smoke rising from the earth can mean a volcano below.");
+  assert.deepEqual([dry.name, dry.method, dry.path, dry.mutates], ["craft.revise.preview", "POST", "/cli/admin/builds/1499/craft/revise", false]);
+  assert.deepEqual(dry.body, { pair: "Earth + Smoke", why: "Smoke rising from the earth can mean a volcano below.", dryRun: true });
+  const real = op("revise", "--build", "1499", "--pair", " 4821 ", "--why", "Hot.", "--confirm");
+  assert.deepEqual([real.name, real.mutates], ["craft.revise", true]);
+  assert.deepEqual(real.body, { pair: "4821", why: "Hot.", dryRun: false });
+  assert.throws(() => op("revise", "--build", "1499", "--pair", "Earth + Smoke"), /--why <text> with --pair/);
+  assert.throws(() => op("revise", "--build", "1499", "--pair", "Earth", "--why", "x"), /pair id or two item names/);
+  assert.throws(() => op("revise", "--build", "1499", "--pair", "4821", "--why", "x", "--emoji", "🌋"), /only the pair's --why/);
+  assert.throws(() => op("revise", "--build", "1499", "--pair", "4821", "--item", "42", "--why", "x"), /only the pair's --why/);
+  assert.throws(() => op("revise", "--build", "1499", "--pair=", "--why", "x"), /--pair needs a value/);
+  assert.throws(() => op("revise", "--build", "1499", "--why", "x"), /Pass --item <id\|name> or --pair/);
+  const lines = formatCraftResult({
+    operation: { name: "craft.revise.preview" },
+    data: {
+      dryRun: true,
+      pair: { id: 4821, a: "Earth", b: "Smoke", result: { id: 77, name: "Volcano", emoji: "🌋" } },
+      before: { why: "Smoke can build into a volcano." },
+      after: { why: "Smoke rising from the earth can mean a volcano below." },
+    },
+  });
+  assert.deepEqual(lines, [
+    "DRY RUN: pair #4821 Earth + Smoke = 🌋 Volcano (#77)",
+    "  before: Smoke can build into a volcano.",
+    "  after:  Smoke rising from the earth can mean a volcano below.",
+    "Nothing was written. Add --confirm to revise.",
+  ]);
+});

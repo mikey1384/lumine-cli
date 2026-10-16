@@ -1609,7 +1609,7 @@ lumine admin roles --min-level 3       # only the admin types' holders
 lumine admin roles --min-level 0 --limit 200 --json
 ```
 
-### Twinkle.craft universes: seed, audit, revise (any time; added 2026-10-12)
+### Twinkle.craft universes: seed, audit, revise (any time; added 2026-10-12, revise --pair 2026-10-16)
 
 An app using `Twinkle.craft` (Infinity Craft, build 1499) has its own
 universe of items and pairs. Players' new pairs are answered by the AI on
@@ -1623,6 +1623,8 @@ lumine admin craft stats --build 1499 [--limit 50]       # sizes, frontier, toda
 lumine admin craft seed --build 1499 --file pairs.json   # ALWAYS first: what would be added, skipped, rejected, warned
 lumine admin craft seed --build 1499 --file pairs.json --confirm   # only after reading every warning
 lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools very fast turns into glassy rock." --confirm
+lumine admin craft revise --build 1499 --pair "Earth + Smoke" --why "Smoke rising from the earth can mean a volcano below."   # dry run
+lumine admin craft revise --build 1499 --pair 4821 --why "<text>" --confirm                                                # by pair id
 ```
 
 - `pairs.json` is up to 500 pairs, in order: `[{ "a": "Water", "b": "Fire",
@@ -1657,6 +1659,15 @@ lumine admin craft revise --build 1499 --item Obsidian --why "Lava that cools ve
 - `revise` changes an item's `--why` (the explanation on its card: the pair
   that first made it), `--emoji` or `--category`, through the same checks. The
   name never changes: players hold it. Audited as `craft.revise`.
+- `revise --pair` (added 2026-10-16) changes one pair's `--why`: the line a
+  player sees when they make THAT pair (an item made by several pairs has one
+  why per pair, and `--item` reaches only the first). The pair is its id (the
+  `#n` in `stats`' newest AI answers) or `"A + B"` by item names, in either
+  order. Only the why changes, never the pair's result; a fizzle has no why.
+  Same checks as AI answers (one plain-text sentence, at most 140
+  characters), dry run unless `--confirm`, audited as `craft.revise` with the
+  pair in the audit metadata. `--pair` takes no `--item`, `--emoji` or
+  `--category`.
 - Expansion: `stats` shows the frontier (items no pair uses yet, and untried
   pairs); seed pairs that use frontier items so Today's Star has fresh targets.
 
