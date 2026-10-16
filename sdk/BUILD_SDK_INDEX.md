@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.65.1
-Updated: 2026-10-13
-Generated: 2026-10-12T17:14:00.482Z
+Version: 1.66.1
+Updated: 2026-10-16
+Generated: 2026-10-16T11:40:04.779Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -37,6 +37,9 @@ Generated: 2026-10-12T17:14:00.482Z
 - Verifiers: 'numeric-quiz' pays for server-checked numeric answers (retry share, attempt limits, dated sets or until-earned sets that stay up until somebody earns them, after-answer guides). 'completion' pays when the app reports an activity finished — a cleared stage, a finished round — at least minSeconds after start({ ruleId }); the server checks only the elapsed time, once per learner per site day (UTC midnight), and the budgets. Call start when the activity begins and claim({ challengeId }) with no answers when it ends; keep completion amounts and userDailyXP small enough that a player scripting the calls would not matter, because nothing else is verified. 'generated-quiz' pays from a question bank the server fills itself: for one declared topic at the learner's step of the ladder, the server writes a question with GPT-6.1 Sol (billed to that learner's AI Energy), solves it again independently and keeps it only when both answers agree; every learner who has not seen a question gets it before anything new is written. `xp`/`coins` are the top step's amounts and each step pays its `steps` percent of them (then the usual retry share). Two first-try answers in a row climb a step; two misses in a row step down. Learners may earn many bank questions a day, bounded by userDailyXP/userDailyCoins. The reviewer approves the ladder, amounts, topics and instructions, not each question; learner reports and solve rates hide bad questions. Use the rewards bank methods (getBankStatus, startBankQuestion, generateBankQuestion, claimBankQuestion, reportBankQuestion); start and claim refuse bank rules. 'archive-rematch' is the daily rematch: one retired until-earned puzzle of the app a day, chosen by the server (celebrated, high-rated solves first; never repeated within 60 days) and answered from its frozen approved sheet. Declare at most one, with no questions, sets, progression, series, minSeconds or completionProof, e.g. { "id": "rematch-daily", "title": "Daily rematch", "xp": 20000, "coins": 1000, "verifier": "archive-rematch", "retry": { "xpPercent": 50, "coinsPercent": 0, "paidAttempts": 3 }, "maxAttempts": null }. Only players who never met that puzzle (no official receipt, wrong answer or challenge while it was live, no Vault practice) may answer it; its receipt does not use userDailyClaims but counts toward userDailyXP/userDailyCoins. Use getRematch and claimRematch; start and claim refuse it.
 - Numeric quiz answers are verified on the server; client scores, privateDb state, timers and completion booleans are not verified reward evidence. Limits reset at UTC midnight. Rules are earned once per viewer per UTC day; attempt limits and retry payouts come from the approved rule. Challenges expire at the UTC day boundary. Budgets apply across release changes.
 - Optional reward rule controls: maxLifetimeClaims caps one learner’s receipts for that rule across every day and release (a receipt capped by the daily budget still counts, so a one-time reward claimed near the cap pays only what fits); completionProof: classic-tower-v1 requires a server-simulated Classic Tower finish in addition to minSeconds. These are server-enforced controls. Existing completion rules without completionProof still verify elapsed time only. Registered proof profiles also include breadface-v1, breadface-v2 and breadface-v3 (server-simulated Breadface inputs; each is one reviewed release's exact physics, chosen by the reviewer) study-record-v1 (a private study record reviewed by JEV, billed to the learner’s AI Energy), and Groove Lab's groove-lab-song-v1 (a song the learner published today, checked on the server for length, notes and originality) and groove-lab-heard-v1 (three established accounts finished the learner's songs today), groove-lab-listen-v1 (the learner listened to most of someone else's published song: start binds the song, the server clock covers three quarters of it up to two minutes, and the listener's own groove-lab-listens row for it was written today; each song pays a listener once a day across listening rules) and groove-lab-own-listen-v1 (the same for the learner's own song; own listens never count toward groove-lab-heard-v1), Ashen Vigil's vigil-guest-coplay-v1 (a new guest spent 10 minutes with the learner in a private world room, measured by the world relay; each guest pays once) and minecraft-first-link-v1 (the learner is the first Twinkle account ever linked to that Minecraft player; each player pays once), and writing-words-v1 with minWords (counted words the learner wrote today as chapters in their own books registered in the app's shared books topic; each chapter is read once by a small model for genuine writing and language, English words count fully and other languages half, and the same text counts once), reading-quiz-v1 (the learner passed a server-graded three-question quiz on a chapter of someone else's registered book after its reading time; each chapter pays a reader once, one attempt per chapter per day) and reading-readers-v1 with minReaders (that many established accounts passed a quiz on the learner's chapters today). Twinkle.craft apps also have craft-target-v1 (the learner's run of merges reaches today's target in this app's universe; every merge is a known pair and every result is one the learner made through Twinkle.craft.merge), craft-par-v1 (the same run reaches it in at most par merges) and craft-discovery-v1 (the oldest World First of the learner's that no rule has paid yet; each World First pays once ever; optional minWordLevel basic|elementary|intermediate|advanced|epic makes tiers: either every craft-discovery-v1 rule has one or none does; each World First pays under exactly one tier, the highest configured tier at or below its Word Master level, so a series per tier can pay rarer words more and the order of claims never matters; an item whose level is still pending pays under no tier yet). Profiles are platform-owned; an app cannot invent a verifier or authorize its own reward.
+- word-game-quiz-v1 is a completion reward proof for a correctly answered, Battery-settled Twinkle.wordMaster quiz from today in the same app/viewer/runtime mode. Pass quiz.completionToken to rewards.claim; each quiz pays once across all rules. A series of identical rules allows a bounded number of distinct daily quizzes. Normal review and publication approval still apply; a contribution preview never pays real XP or Coins.
+- word-game-entry-v1 verifies a Battery-settled missing-definition/example contribution made today in this app/runtime mode, paying each contribution once. Its platform cap is three claims per viewer/app/day. word-game-quiz-v1 is capped at five. Declare matching completion rules and normal reward review; these proofs do not approve the app themselves.
+- word-game-puzzle-v1 preserves Word Search streak bonuses using canonical puzzle reward history: daily-easy/medium/hard with optional -s10 and -s20 tiers. A learner earns each difficulty once per UTC day across every tier and release. rewards.getStatus returns wordGamePuzzle { streakDays, ruleIds, earnedLevels }; choose its ruleIds and display canonical rule amounts. Streaks count consecutive days with a puzzle reward, capped at 30. This profile checks streak eligibility and duplicate difficulty claims in addition to the approved timer; it does not simulate or prove the puzzle solve.
 
 ## AI decision design
 - Twinkle.ai.decide runs JEV, a model for narrow decisions over supplied text or structured state, and it is free for viewers: decisions are covered by Twinkle and never use their AI Energy. Whenever an app makes a judgment that ordinary code can only approximate, consider JEV first. Proven patterns: an opponent or boss coach that reads the player's habits (favourite lane, repeated trick, cheese move) and picks a counter-plan from a fixed list, as in Red Square's boss and Open Football's opponent coach; NPCs that understand what a player types and choose an action; classifying or scoring user submissions; ranking supplied candidates; and picking the next exercise or difficulty from evidence about the learner. Any app with an AI opponent, NPC, or adaptive difficulty should decide explicitly whether JEV improves it. These are examples to reason from, not a keyword checklist or a requirement to add AI to every app.
@@ -718,6 +721,64 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - This namespace is read-only and does not generate new AI Stories.
   - Example: const { story } = await Twinkle.aiStories.get(storyId);
 
+### Twinkle.wordMaster
+- getReadyWords({ level, dayKey }) | scopes: none
+  - Returns: { dayKey, level, revision, catalogVersion, words, source } | null
+  - Read already-selected words synchronously, without a word request.
+  - Add <!--twinkle:word-game-ready--> inside the app HTML head. All five reviewed difficulty banks arrive in the normal HTML response, independently of creator code updates.
+  - Return the current UTC day as dayKey and easy, medium, hard, super or impossible as level. If null, use a bundled reviewed catalog immediately; never block play on fetching or preparing words. Pass the packet catalogVersion to encounterWords.
+- async getDailyWords({ level }) | scopes: content:read
+  - Returns: { dayKey, level, revision, words: [{ id, word, wordLevel, definition }], source }
+  - Get today’s reviewed Word Master vocabulary for a word game.
+  - level: easy, medium, hard, super, impossible. Shared UTC daily sets are stable by revision. Words are checked against content_words_censored and reviewed before play. Missing daily rows use a checked catalog immediately; this endpoint never starts preparation or semantic review. Definitions may be empty until separately reviewed. Prefer getReadyWords plus a bundled catalog for zero word-loading requests.
+- async encounterWords({ dayKey, level, catalogVersion, wordIds }) | scopes: content:write
+  - Returns: { addedWordIds }
+  - Add words encountered in today’s puzzle to this viewer’s private word book.
+  - Only IDs in today’s server word set are accepted. Up to 32 per request; repeated encounters do not duplicate entries.
+  - Pass catalogVersion from a ready packet or the reviewed bundled catalog. The server checks its exact day, level, revision and word IDs. Omitting it is supported only for legacy getDailyWords callers.
+- async getWordBook({ cursor, query } = {}) | scopes: content:read
+  - Returns: { words: [{ id, word, definition, wordLevel, encounteredAt, correctCount, lastCorrectAt }], cursor }
+  - Read this viewer’s personal word book for this app.
+  - 40 words per page. Follow cursor until null. Reading never uses AI Battery.
+  - Optional query searches word text (up to 64 characters) across the book; keep the query unchanged when following cursor.
+- async createQuiz({ wordId, itemType, requestId, useAiBattery, retry }) | scopes: content:write
+  - Returns: { quiz, aiUsagePolicy, mode }
+  - Generate one Word Master-style quiz using the viewer’s AI Battery.
+  - Show the Battery cost notice before calling; useAiBattery must be true. Use a stable 16–64 character requestId. itemType: clock (30 seconds), compass (first letter), trail (first three letters), freeze (20 seconds). Exactly one quiz per word per UTC day in each runtime mode. Ready/pending retries reuse it without generation or extra charging. Failed quizzes charge nothing; retry:true deliberately retries up to three total attempts. Limit 60 generation attempts per viewer per day across apps. The word must already be in the book.
+- async getQuiz({ quizId, requestId }) | scopes: content:read
+  - Returns: { quiz, aiUsagePolicy, mode }
+  - Recover a saved quiz after a timeout or reload without generating another.
+  - Pass quizId or requestId. A generated quiz finishes its one atomic Battery settlement here; ready quizzes never charge twice. This is a mutation for preview-capture and CLI permission purposes. Poll pending status with backoff. Failed status requires a deliberate retry. No answerIndex until answered.
+- async answerQuiz({ quizId, choiceIndex }) | scopes: content:write
+  - Returns: { quiz, mode }
+  - Save the first answer and earn the chosen item when correct.
+  - One immutable answer, indexes 0–3. Duplicate/concurrent submissions return the canonical answer. After grading the correct answerIndex is returned for learning. A correct answer gives completionToken for word-game-quiz-v1 rewards; apps cannot mint items or rewards themselves.
+- async getItems({ cursor } = {}) | scopes: content:read
+  - Returns: { items: [{ id, wordId, itemType, earnedAt, completionToken, claimedAt }], cursor, mode }
+  - List this viewer’s unspent, server-issued items.
+  - 100 per page. Follow cursor for more. Preview and live items are separate. Earned items do not expire when a day changes.
+- async useItem({ itemId, requestId, puzzleKey }) | scopes: content:write
+  - Returns: { item: { id, itemType, usedAt, requestId, puzzleKey }, mode }
+  - Consume an earned item once and return a receipt for its game effect.
+  - puzzleKey starts items: and has at most 128 letters/digits/:|_-. Persist requestId and puzzleKey before sending. Retry the same IDs after a lost response; apply each receipt once and persist it with the session. Reuse on another puzzle is rejected. Item use is free of AI Battery.
+- async getWord({ wordId, word }) | scopes: content:write
+  - Returns: { word: { id, word, definition, example, wordLevel, canGenerate }, mode }
+  - Open an existing Word Master word’s reviewed definition and example, and add it to the viewer’s book.
+  - Pass wordId or the exact word. Reuses reviewed existing definitions and suitable public AI Card examples. Blank definition/example means missing. Adds this encounter to the book but awards nothing; this is a write for CLI/capture permission purposes. No viewer AI Battery is used.
+- async generateEntry({ wordId, requestId, useAiBattery }) | scopes: content:write
+  - Returns: { entry?, word?, alreadyComplete?, aiUsagePolicy, mode }
+  - Use viewer AI Battery to fill a missing meaning/example once, with a server-verified contribution receipt.
+  - Show Battery disclosure first; useAiBattery:true is required. A stable 16–64 character requestId prevents duplicate charging. Only missing text is generated; existing text is preserved. One shared reservation per word/runtime mode prevents concurrent duplicate generations. Failed/rejected output charges no Battery. A known failed job may be deliberately retried using a new requestId; never do this after an unknown transport outcome. At most 20 entry generation attempts per viewer/day. Successful live entries are shared across apps; preview entries remain separate. entry.completionToken works with word-game-entry-v1.
+- async getEntry({ requestId }) | scopes: content:read
+  - Returns: { entry, aiUsagePolicy, mode }
+  - Recover an interrupted word-entry request without regenerating it.
+  - Recovery can finish the one Battery settlement and shared-text write, so CLI calls require --allow-write and preview captures cannot call it. Pending jobs may be polled with backoff; failed jobs need an explicit retry.
+- async reportIssue({ event }) | scopes: content:write
+  - Returns: { recorded: true }
+  - Report a fixed word-game failure signal for daily website management.
+  - Allowed events: bank-failed, details-failed, quiz-failed, quiz-recovery-failed, answer-failed, entry-failed, entry-recovery-failed, item-recovery-failed, reward-failed, storage-failed, placement-failed.
+  - Send once per failure category per minute; send no word text, answers, free-form errors or member/device identifiers. These client reports are symptoms, not verified server failures.
+
 ### Twinkle.grammarbles
 - async listQuestions({ level, limit, cursor } = {}) | scopes: content:read
   - Returns: { questions: [{ id, level, rating, question, choices, isChecked }], cursor?, pagination: { level, limit, hasMore, nextCursor } }
@@ -1029,9 +1090,9 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Example: const { level } = await Twinkle.minecraft.getPlayArea({ id: 'twinkle-keep' });
 - async getPlayAreaChunks({ id, chunks: [[cx, cz], ...] }) | scopes: content:read
   - Returns: { scenes: [{ cx, cz, scene: { origin: [x,y,z], size: [w,h,d], palette, blocks, light, biomes, count, ... } | null }] }
-  - Up to 24 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
+  - Up to 9 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
   - Same scene format as getSnap; only blocks with a visible face inside the area are included. scene is null for a chunk that is not part of the area.
-  - At most 24 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
+  - At most 9 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
   - Example: const { scenes } = await Twinkle.minecraft.getPlayAreaChunks({ id: level.id, chunks: [[64, 29], [65, 29]] });
 - async createPlayArea({ name, world, box, spawn, id }) | scopes: content:write
   - Returns: { level }
