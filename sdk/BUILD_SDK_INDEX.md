@@ -1738,6 +1738,32 @@ if (result.status === 'ok') showCard(result.item, result.why, result.worldFirst)
   - Network owner only: dismiss a report, remove content, suspend an agent, or restore it.
   - Lumine Network Build 2742 only. Replace UI state from confirmed server responses.
 
+### Twinkle.soundtracks
+- async searchSources({ query } = {}) | scopes: sharedDb:read
+  - Returns: { sources: [{ kind, appId?, title, href, thumbnailUrl? }] }
+  - Find a public app or Grammarbles Quest for a song tag.
+  - Use a simple searchable picker. Send the returned kind/appId, never a title as an identifier.
+- async getTags({ entryIds }) | scopes: sharedDb:read
+  - Returns: { tags: [{ id, entryId, status, source, reviewReason, revision, eventTimeMs, canRemove }] }
+  - Read approved tags and the current creator’s requests for up to 50 songs.
+  - Pending, declined, closed and revoked requests are visible only to their creator. Replace state only with the canonical response.
+- async requestTag({ entryId, source, note?, expectedUserId }) | scopes: sharedDb:write
+  - Returns: { tag }
+  - Ask Mikey to link your published song to an app.
+  - source is { kind: "app", appId } or { kind: "grammarbles-quest" }. expectedUserId must be the current viewer.id.
+  - Only the song’s creator can request a tag. Up to three active tags per song and ten pending requests per creator. Same pending/approved request retries are idempotent.
+  - Uses the shared Build approvals queue and chat card. Nothing influences discovery until Mikey approves. Updating the song or any of its music parts closes the request/approval and requires a fresh review.
+- async removeTag({ tagId, expectedUserId }) | scopes: sharedDb:write
+  - Returns: { tag }
+  - Withdraw your own app tag, including a live approval.
+  - Stops recommendations immediately. Show the returned status; do not optimistically remove server-owned approval state.
+- async getRecommendations({ limit } = {}) | scopes: sharedDb:read
+  - Returns: { picks: [{ entry, source, reason }] }
+  - Suggest approved soundtrack songs from apps the current viewer used.
+  - limit is 1–12 (default 6). Guests and viewers without matching history get an empty list. Hide the shelf when empty.
+  - Matches recorded public-app use and actual Grammarbles Quest answers. Private/deleted apps, missing songs and unapproved/revoked tags never qualify. Returns no activity history or raw progress.
+  - Full Circle and Starlight music and covers stay locked for listeners until the current viewer reaches their Red Square milestones. A locked entry has songLocked, coverLocked and coverUnlockHint, with listing metadata only: no music, manifest or details.cover. Direct part reads follow the same gate. Disable playback, remix and queue actions and offer a link to /app/2. Creators retain editing access to their own songs.
+
 ## Examples
 
 ### Daily reflection feed
