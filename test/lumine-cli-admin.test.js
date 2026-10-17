@@ -7101,6 +7101,13 @@ test("lumine admin english check-candidates, check-import and check-broken (Gram
     assert.equal(parseAdminOperation(parseArgs(["admin", "english", "lessons", "--status", "draft"])).path, "/cli/admin/english/lessons?status=draft");
     assert.equal(parseAdminOperation(parseArgs(["admin", "english", "retire", "12", "--reason", "duplicate"])).body.fault, undefined);
     assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "check-follow-faulty", "--after", "12"])), /next/);
+    const backlog = parseAdminOperation(parseArgs(["admin", "english", "audit-backlog", "--after", "40", "--limit", "500"]));
+    assert.deepEqual([backlog.method || "GET", backlog.path], ["GET", "/cli/admin/english/item-audits/backlog?after=40&limit=500"]);
+    const marks = path.join(dir, "marks.json");
+    fs.writeFileSync(marks, JSON.stringify({ audit: "crack-ambiguity-20261017", items: [{ questionId: 7, version: 1, contentHash: "ab", outcome: "clean" }] }));
+    const mark = parseAdminOperation(parseArgs(["admin", "english", "audit-mark", marks]));
+    assert.deepEqual([mark.method, mark.path, mark.body.audit, mark.body.items.length], ["POST", "/cli/admin/english/item-audits/mark", "crack-ambiguity-20261017", 1]);
+    assert.throws(() => parseAdminOperation(parseArgs(["admin", "english", "audit-mark", file])), /audit/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
