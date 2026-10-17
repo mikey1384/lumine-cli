@@ -214,27 +214,27 @@ test("an output-file failure retains the canonical mutation receipt", (t) => {
   assert.deepEqual(fs.readdirSync(directory), []);
 });
 
-test("approvals runs start from a source full run and allow only applying its work", () => {
-  const operation = parseAdminOperation(
+test("approvals runs are flexible: optional source, chosen identity, full write work", () => {
+  const withSource = parseAdminOperation(
+    parseArgs(["admin", "daily-run", "start", "--scope", "approvals", "--source-run", "125"]),
+  );
+  assert.equal(withSource.path, "/cli/admin/daily-runs/start/approvals");
+  assert.equal(withSource.body.scope, "approvals");
+  assert.equal(withSource.body.sourceRunId, 125);
+  assert.equal(withSource.body.commentMode, "post");
+  assert.match(withSource.body.runKey, /^scoped:approvals:/);
+  const bare = parseAdminOperation(
+    parseArgs(["admin", "daily-run", "start", "--scope", "approvals"]),
+  );
+  assert.equal(bare.body.sourceRunId, undefined);
+  const chosen = parseAdminOperation(
     parseArgs([
-      "admin",
-      "daily-run",
-      "start",
-      "--scope",
-      "approvals",
-      "--source-run",
-      "125",
+      "admin", "daily-run", "start", "--scope", "approvals",
+      "--source-run", "125", "--identity", "zero", "--comment-mode", "draft",
     ]),
   );
-  assert.equal(operation.path, "/cli/admin/daily-runs/start/approvals");
-  assert.equal(operation.body.scope, "approvals");
-  assert.equal(operation.body.sourceRunId, 125);
-  assert.match(operation.body.runKey, /^scoped:approvals:/);
-  assert.throws(() =>
-    parseAdminOperation(
-      parseArgs(["admin", "daily-run", "start", "--scope", "approvals"]),
-    ),
-  );
+  assert.equal(chosen.body.identity, "zero");
+  assert.equal(chosen.body.commentMode, "draft");
   assert.throws(() =>
     parseAdminOperation(
       parseArgs(["admin", "daily-run", "start", "--source-run", "125"]),
@@ -243,12 +243,14 @@ test("approvals runs start from a source full run and allow only applying its wo
   assert.equal(canonicalAdminRunScope({ runScope: "approvals" }), "approvals");
   assert.equal(shouldRecordAdminQueueCoverage("approvals"), false);
   for (const name of [
+    "featured.plan",
     "featured.apply",
+    "featured.rotate",
     "featured.comments.recommend",
     "post.recommend",
     "post.reward",
     "comment.post",
-    "comment.draft",
+    "comment.edit",
     "build.review",
     "daily-run.complete",
   ])
@@ -260,15 +262,7 @@ test("approvals runs start from a source full run and allow only applying its wo
         }),
       name,
     );
-  for (const name of [
-    "news.print",
-    "featured.comments.scan",
-    "subject.effort.set",
-    "post.skip",
-    "builds.candidates",
-    "comment.edit",
-    "featured.plan",
-  ])
+  for (const name of ["news.print", "sponsor.integrity.scan", "reward-bank.seed"])
     assert.throws(
       () =>
         assertAdminOperationAllowedForRunScope({

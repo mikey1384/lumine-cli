@@ -28,35 +28,25 @@ canonical structured data.
   `off`. It cannot inspect queues, conduct, logs, Builds, or Featured.
   Completion does not advance full-review windows or carry-over telemetry.
   Its distinct `/daily-runs/start/newspaper` endpoint fails closed on older APIs.
-- `--scope approvals --source-run <id>` applies what an earlier **full** run
-  prepared, after Mikey decides:
-  - its Featured plan (`featured apply` with the plan's exact hash);
-  - its Featured-comment decisions (`featured comments recommend`) and
-    `post recommend`/`reward`;
-  - its comments.
-
-  Source drafts expire after 30 minutes, so post an approved comment by
-  re-drafting it with the exact approved text (`comment draft <target> --file
-  <approved.md>`, with a fresh `builds review` receipt for an app), then
-  `comment post`. The API refuses a second published comment by that
-  identity on the same target for the same source run.
-
-  It acts as the source run's identity (named explicitly, so Bangkok midnight
-  does not end it) with the source's comment mode: a draft-mode source can
-  draft but not publish. Limits:
-  - it must start within 48 hours of the source run's start; the run itself
-    lasts the usual six hours;
-  - the source must be a completed or expired full run; an abandoned
-    (failed) run is refused;
-  - one source per approvals run.
-
-  It cannot prepare a new Featured plan, apply any plan but the source run's,
-  change Featured directly (no add, order, rotate, or single
-  feature/unfeature), edit existing comments, or do any reading duties. A
-  changed swap needs a fresh full or Featured run. It
-  never counts as a full review, so it does not move review windows. Its
-  distinct `/daily-runs/start/approvals` endpoint fails closed on older
-  APIs.
+- `--scope approvals [--source-run <id>]` acts on Mikey's decisions whenever
+  he gets to them (Mikey, 10-17: don't be trapped by the morning run). It has
+  a full run's write work: Featured plans and changes, Featured-comment and
+  generic recommendations, rewards, comments (draft, post, edit) and chat. It
+  has none of the newspaper, sponsor scan, bank seeding or reading duties, and
+  never counts as a full review, so review windows don't move.
+  - `--source-run` is optional. It lets the run use that run's prepared
+    Featured plan (same hash) and review receipts for up to 7 days, abandoned
+    runs included. A stale board is still refused at apply, so prepare a new
+    plan then.
+  - Source drafts expire after 30 minutes: re-draft an approved comment with
+    its approved text (with a fresh `builds review` receipt for an app). The
+    API refuses a second published comment by the same identity in the same
+    place for the same source run.
+  - Identity defaults to the source run's (else today's scheduled one) and
+    `--identity` overrides it. Either way it is named explicitly, so Bangkok
+    midnight doesn't end the run. `--comment-mode` defaults to `post`.
+    Its distinct `/daily-runs/start/approvals` endpoint fails closed on older
+    APIs.
 - **Complete a full run when its report is delivered** (`daily-run complete`),
   even with Mikey's decisions still pending. Do not hold it open for them: an
   expired run can never be completed, so the review would not count, its
@@ -1052,6 +1042,7 @@ lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin daily-run start --scope featured --identity auto --json
 lumine admin daily-run start --scope newspaper --identity auto --json
 lumine admin daily-run start --scope approvals --source-run 125 --json
+lumine admin daily-run start --scope approvals --identity zero --json
 lumine admin daily-run start --identity ciel --comment-mode draft \
   --run-key daily:2026-08-06:review --json
 lumine admin daily-run status --json
@@ -2805,8 +2796,8 @@ Retry the identical apply command after uncertain transport failure; it reuses
 the same idempotency key. If the final read fails or finds an intervening change,
 the error retains the canonical apply receipt and never restores old state.
 A different run requires a fresh plan and renewed approval, except an
-approvals run started from the plan's own full run (`--scope approvals
---source-run <id>`), which applies that exact plan with the same hash.
+approvals run started with `--source-run <the plan's run>`, which can apply
+that exact plan with the same hash (or prepare a new one).
 
 Use the following workflow for full daily comment review, or only when Mikey's
 Featured slice includes comment encouragement:
