@@ -13,6 +13,7 @@ import {
   parseBuildReviewReceipt,
   parseInteractionScript,
   resolveAppFrame,
+  reviewBrowserExitedCleanly,
   runInteractionSteps,
 } from "../lib/build-review.js";
 import { parseArgs } from "../lib/commands.js";
@@ -448,4 +449,14 @@ test("review receipts stay confirmed only when every listed screenshot exists an
   );
   fs.writeFileSync(after, "after-changed");
   assert.throws(() => parseBuildReviewReceipt(write("changed-shot.json", interacted)));
+});
+
+test("only our own requested close can end in Chrome's exit 2", () => {
+  const closed = { closeRequested: true, forcedTermination: false, signal: null };
+  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 0 }), true);
+  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 2 }), true);
+  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 1 }), false);
+  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 2, forcedTermination: true }), false);
+  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 2, signal: "SIGTERM" }), false);
+  assert.equal(reviewBrowserExitedCleanly({ code: 2, signal: null }), false);
 });
