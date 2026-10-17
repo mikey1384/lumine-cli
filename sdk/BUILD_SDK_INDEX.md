@@ -2,7 +2,7 @@
 
 Version: 1.67.0
 Updated: 2026-10-16
-Generated: 2026-10-16T15:37:18.409Z
+Generated: 2026-10-17T03:18:45.451Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -40,6 +40,7 @@ Generated: 2026-10-16T15:37:18.409Z
 - word-game-quiz-v1 is a completion reward proof for a correctly answered, Battery-settled Twinkle.wordMaster quiz from today in the same app/viewer/runtime mode. Pass quiz.completionToken to rewards.claim; each quiz pays once across all rules. A series of identical rules allows a bounded number of distinct daily quizzes. Normal review and publication approval still apply; a contribution preview never pays real XP or Coins.
 - word-game-entry-v1 verifies a Battery-settled missing-definition/example contribution made today in this app/runtime mode, paying each contribution once. Its platform cap is three claims per viewer/app/day. word-game-quiz-v1 is capped at five. Declare matching completion rules and normal reward review; these proofs do not approve the app themselves.
 - word-game-puzzle-v1 preserves Word Search streak bonuses using canonical puzzle reward history: daily-easy/medium/hard with optional -s10 and -s20 tiers. A learner earns each difficulty once per UTC day across every tier and release. rewards.getStatus returns wordGamePuzzle { streakDays, ruleIds, earnedLevels }; choose its ruleIds and display canonical rule amounts. Streaks count consecutive days with a puzzle reward, capped at 30. This profile checks streak eligibility and duplicate difficulty claims in addition to the approved timer; it does not simulate or prove the puzzle solve.
+- word-game-puzzle-v2 is the same daily rule and also requires a server-verified finished solve of that difficulty today (Twinkle.wordMaster.startPuzzle and sendPuzzleEvents). word-search-champion-v1 pays only the rank-1 viewer of a completed UTC month on the server-written verified:month:YYYY-MM board (score, then earliest), once per month; rewards.getStatus returns wordSearchChampion: { month, months, claimable }. Show the champion banner from that status, never from app storage.
 
 ## AI decision design
 - Twinkle.ai.decide runs JEV, a model for narrow decisions over supplied text or structured state, and it is free for viewers: decisions are covered by Twinkle and never use their AI Energy. Whenever an app makes a judgment that ordinary code can only approximate, consider JEV first. Proven patterns: an opponent or boss coach that reads the player's habits (favourite lane, repeated trick, cheese move) and picks a counter-plan from a fixed list, as in Red Square's boss and Open Football's opponent coach; NPCs that understand what a player types and choose an action; classifying or scoring user submissions; ranking supplied candidates; and picking the next exercise or difficulty from evidence about the learner. Any app with an AI opponent, NPC, or adaptive difficulty should decide explicitly whether JEV improves it. These are examples to reason from, not a keyword checklist or a requirement to add AI to every app.
@@ -761,6 +762,20 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Returns: { item: { id, itemType, usedAt, requestId, puzzleKey }, mode }
   - Consume an earned item once and return a receipt for its game effect.
   - puzzleKey starts items: and has at most 128 letters/digits/:|_-. Persist requestId and puzzleKey before sending. Retry the same IDs after a lost response; apply each receipt once and persist it with the session. Reuse on another puzzle is rejected. Item use is free of AI Battery.
+- async startPuzzle({ level, play, dayKey, revision, gridHash }) | scopes: content:write
+  - Returns: { sessionId, gridHash, words }
+  - Start a verified Word Search solve when the timer starts.
+  - Server-verified solves (Mikey 10-17): the server rebuilds the same deterministic board, checks every found word and times the solve itself; it computes the score with the same rules as the app.
+  - play: classic (Original themes board for dayKey and level), daily (Word Master mix from the packet with this revision) or items. dayKey is today or yesterday (UTC). gridHash is the board hash the app built; a mismatch returns code word_search_board_mismatch (play unranked and ask the viewer to reload).
+- async sendPuzzleEvents({ sessionId, events }) | scopes: content:write
+  - Returns: { sessionId, status, found, total, ranked, result }
+  - Report found words, misses, pauses and resumes for a verified solve.
+  - Events: { kind: "word", t, cells: [row0, col0, row1, col1] } (the selection’s end cells, either direction), { kind: "miss", t }, { kind: "pause" }, { kind: "resume" }. t is wall-clock milliseconds since the timer started; send each word right away. Pauses are timed by the server clock.
+  - When the last word arrives the server finishes the solve: status finished (result.finalScore, elapsedSeconds, hintsUsed, streakBonusPoints, ranked) or timeout. Show the server result as the official score.
+  - A word reported more than 8 seconds late still counts toward daily rewards but leaves the solve off the leaderboards (ranked: false).
+- async getPuzzleHint({ sessionId, word, t }) | scopes: content:write
+  - Returns: { sessionId, word, row, col, hintsUsed }
+  - Reveal one letter of a word in a verified Classic solve.
 - async getWord({ wordId, word }) | scopes: content:write
   - Returns: { word: { id, word, definition, example, wordLevel, canGenerate }, mode }
   - Open an existing Word Master word’s reviewed definition and example, and add it to the viewer’s book.
@@ -1287,6 +1302,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Submit only after computing the final score when a run, shift, match, or level attempt ends; do not submit every frame or every tick.
   - Only improved personal-best scores replace the existing score row.
   - meta is optional JSON object data, max 2 KB.
+  - Boards whose key starts with verified: are written by the server from checked results (Word Search verified solves: verified:day:{dayKey}:{level} for Classic, verified:day:{dayKey}:wm-{level} for Word Master mix, verified:month:YYYY-MM, verified:all, verified:all:{level}, verified:points). Read them with get; submit refuses them.
 
 ### Twinkle.sharedDb
 - async getTopics() | scopes: sharedDb:read
