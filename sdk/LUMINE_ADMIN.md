@@ -5346,17 +5346,22 @@ Study's registered `study-record-v1` checks use learner AI Energy for accepted, 
 
 For total JEV cost, include `dailyAiCosts.byProviderModel` for TypeSafe/JEV across both AI Energy and system-covered ledgers. Report serving/shadow/audit operations separately as above; the Build SDK's system-covered/failed calls use `jev_decision`, while ordinary viewer SDK checks are already counted by the AI Energy ledger. Do not add the Study report's known-cost sum on top of the canonical overall AI-cost total: it is a diagnostic breakdown of those same calls.
 
-## Bridge Builder crew reviews (no daily run required)
+## Bridge Builder crews and check-ins (no daily run required)
 
-On the website, Zero and Ciel acting for an admin can make these staff decisions too (who-are-you checks, branch corrections, crew, plan and branch reviews), through the same routes the admin's own taps use and only after the admin's yes on the approval card (Mikey, 2026-10-10). A member's Zero or Ciel still cannot.
+Since 2026-10-17 Bridge Builder unlocks from QR check-ins: 7 different people, or one meetup a grown-up witnessed. Crews no longer wait for staff approvals. On the website, Zero and Ciel acting for an admin can make the staff decisions below (who-are-you checks, branch corrections and branch reviews). They use the same routes as the admin's own taps, and only after the admin's yes on the approval card (Mikey, 2026-10-10). A member's Zero or Ciel still cannot.
 
-- `lumine admin meetup list` shows steps waiting for staff. Use `list --status active` to include crews making requested changes.
-- `lumine admin meetup show <crewId>` shows canonical progress, approval status, shared feedback, and private staff evidence.
-- `lumine admin meetup approve-crew <crewId>` and `approve-grownup <crewId>` approve the corresponding ready step.
-- `lumine admin meetup request-changes <crewId> --note <text>` holds the current crew or grown-up step, displays the note to **every crew member**, and announces it in the crew chat. The note is required (maximum 1,000 characters). Members use **Request review again** after making changes; this alerts staff and returns the step to the queue without approving it.
-- `lumine admin meetup send-back <crewId> --note <text>` is for a pending plan or video. Those steps keep their existing revise-and-submit flow.
-- `lumine admin meetup info <crewId> <userId> --decision ask|accept|ask-again|withdraw` is a **private identity check**. Its question and answer are visible only to the named member and staff. Use `request-changes`, not `info`, for instructions the whole crew needs to see.
-- `lumine admin meetup set-branch <crewId> <userId> --branch <name> [--note <text>]` corrects a member's branch instead of a database write. `--branch` must be an official branch (a registry alias such as `Busan` resolves to its official name, `Haeundae`), a name still pending in the branch registry, or `"Not a Twinkle student"`. Former Twinkle students get the branch they went to. An official branch is verified at once; a pending name waits for its branch decision. The crew's progress, tier and staff alerts follow the new branch; approvals already given stay. The same branch again changes nothing. The private note and the change history are shown only to admins (`meetup show`, the crew page's staff panel); nobody is messaged. The command refuses members who left and crews that are not active.
+- `lumine admin meetup list` shows crews whose member answered a who-are-you check. `list --status active` shows every live crew, and `list --status completed` the crews that have met up.
+- `lumine admin meetup show <crewId>` shows canonical progress, who checked in, the tier and private staff evidence.
+- `lumine admin meetup info <crewId> <userId> --decision ask|accept|ask-again|withdraw` is a **private identity check**. Its question and answer are visible only to the named member and staff. Until staff accept, that member doesn't count toward the crew's tier.
+- `lumine admin meetup set-branch <crewId> <userId> --branch <name> [--note <text>]` corrects a member's branch instead of a database write.
+  - `--branch` must be one of: an official branch (an alias such as `Busan` resolves to `Haeundae`), a name still pending in the branch registry, or `"Not a Twinkle student"`. Former Twinkle students get the branch they went to.
+  - An official branch is verified at once and the crew's tier follows; a pending name waits for its branch decision.
+  - The private note and the change history are admin-only; nobody is messaged.
+  - It refuses members who left and crews that are not active.
+- `lumine admin meetup funnel [--days <1-90>]` shows views, crews by stage, and check-ins: pairs, how many were on one network or at an academy, and refusals by reason.
+- `lumine admin meetup emails` lists parent emails held for review. Kind `witness` is a child asking a parent to be the grown-up.
+- `lumine admin meetup announce-checkins [--send] [--as zero|ciel]` is about the one-time announcement of the check-in rework in each crew chat. It posts itself when the website with check-ins is out. The messages are pre-written; without `--send` this only shows them. `--send` retries a crew whose post failed. Each crew gets it once.
+- **Held unlocks:** a member who reached 7 people when no counted check-in was on one network or at an academy gets a `meetup` approval item instead of an instant unlock (`lumine admin approvals list --type meetup`). Approving it unlocks Bridge Builder.
 
 Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { meetupAdultLine, parseAdminOperation } from "../lib/admin.js";
+import { parseAdminOperation } from "../lib/admin.js";
 import { parseArgs } from "../lib/commands.js";
 import { receiptToKeep } from "../lib/admin-receipts.js";
 
@@ -31,61 +31,25 @@ test("admin meetup operations map to the Mikey-only meetup quest routes", () => 
     "/cli/admin/meetup-quest/crews?status=completed",
   );
   assert.equal(op(["show", "12"]).path, "/cli/admin/meetup-quest/crews/12");
-  assert.deepEqual(op(["approve-plan", "12", "--note", "Have fun"]), {
-    name: "meetup.approve-plan",
-    method: "POST",
-    path: "/cli/admin/meetup-quest/crews/12/approve-plan",
-    body: { note: "Have fun" },
-    mutates: true,
-    requiresRun: false,
-  });
-  assert.deepEqual(op(["send-back", "12", "--note", "Pick a public place"]).body, {
-    note: "Pick a public place",
-  });
-  assert.deepEqual(op(["approve", "12", "--attended", "3, 4,5,5"]), {
-    name: "meetup.approve",
-    method: "POST",
-    path: "/cli/admin/meetup-quest/crews/12/approve",
-    body: { attendedUserIds: [3, 4, 5], note: "" },
-    mutates: true,
-    requiresRun: false,
-  });
+  // the retired five-step reviews are gone
+  for (const retired of ["approve-plan", "approve-grownup", "approve-crew", "send-back", "approve", "request-changes", "slot", "resend-email", "parent-reply"]) {
+    assert.throws(() => op([retired, "12", "--note", "x"]), /Usage: lumine admin meetup/, retired);
+  }
 });
 
-test("admin meetup refuses incomplete decisions before calling the API", () => {
-  assert.throws(() => op(["request-changes", "6"]), /needs --note/);
-  assert.throws(() => op(["request-changes", "6", "--note", "x".repeat(1001)]), /at most 1000/);
-  assert.throws(() => op(["send-back", "12"]), /needs --note/);
-  assert.throws(() => op(["approve", "12"]), /needs --attended/);
-  assert.throws(() => op(["approve", "12", "--attended", "3,abc"]), /--attended user ID/);
-  assert.throws(() => op(["show", "x"]), /Crew ID/);
-  assert.throws(() => op(["list", "--status", "pending"]), /--status must be/);
-  assert.throws(() => op(["delete", "12"]), /Usage: lumine admin meetup/);
-});
-
-test("shared change requests use their own audited crew endpoint without a daily run", () => {
-  assert.deepEqual(op(["request-changes", "6", "--note", "Invite one more current Twinkle student."]), {
-    name: "meetup.request-changes",
-    method: "POST",
-    path: "/cli/admin/meetup-quest/crews/6/request-changes",
-    body: { note: "Invite one more current Twinkle student." },
-    mutates: true,
+test("announce-checkins previews by default and posts only with --send", () => {
+  assert.deepEqual(op(["announce-checkins"]), {
+    name: "meetup.announce-checkins",
+    method: "GET",
+    path: "/cli/admin/meetup-quest/announce-checkins?agent=zero",
+    body: undefined,
+    mutates: false,
     requiresRun: false,
   });
-});
-
-test("admin meetup slot and resend-email map to the coordinator fallbacks", () => {
-  assert.deepEqual(op(["slot", "12", "--confirm", "1"]), {
-    name: "meetup.slot",
-    method: "POST",
-    path: "/cli/admin/meetup-quest/crews/12/slot",
-    body: { slotIndex: 1 },
-    mutates: true,
-    requiresRun: false,
-  });
-  assert.equal(op(["slot", "12", "--confirm", "0"]).body.slotIndex, 0);
-  assert.throws(() => op(["slot", "12"]), /needs --confirm/);
-  assert.equal(op(["resend-email", "12"]).path, "/cli/admin/meetup-quest/crews/12/resend-email");
+  assert.equal(op(["announce-checkins", "--send"]).method, "POST");
+  assert.equal(op(["announce-checkins", "--send"]).mutates, true);
+  assert.deepEqual(op(["announce-checkins", "--send", "--as", "Ciel"]).body, { send: true, agent: "ciel" });
+  assert.throws(() => op(["announce-checkins", "--as", "grok"]), /--as zero\|ciel/);
 });
 
 test("admin meetup story maps to the story approval routes by crew", () => {
@@ -173,7 +137,7 @@ test("meetup write receipts keep the decision, never the crew view", () => {
     memberChecks: [{ teacherName: "Teacher Jenny", className: "Wed Debate", relationship: "we are friends from camp" }],
     parentContacts: [{ email: "parent@example.test", question: "Is there an adult?" }],
   };
-  for (const name of ["meetup.request-changes", "meetup.info", "meetup.set-branch", "meetup.approve-crew", "meetup.approve-plan", "meetup.approve-grownup", "meetup.send-back", "meetup.approve", "meetup.slot", "meetup.parent-reply", "meetup.emails"]) {
+  for (const name of ["meetup.info", "meetup.set-branch", "meetup.emails", "meetup.announce-checkins"]) {
     const receipt = receiptToKeep(
       { name },
       {
@@ -197,90 +161,4 @@ test("meetup write receipts keep the decision, never the crew view", () => {
   }
   const other = { ok: true, data: { x: 1 } };
   assert.equal(receiptToKeep({ name: "teachers.revoke" }, other), other);
-});
-
-test("meetup show prints a Twinkle teacher as an approved account (username + id)", () => {
-  assert.equal(meetupAdultLine({ kind: "", name: "" }), "");
-  assert.equal(meetupAdultLine(undefined), "");
-  assert.equal(
-    meetupAdultLine({ kind: "parent", name: "Minjun's mom", teacher: null, teacherProblem: "" }),
-    "  Adult coming: parent: Minjun's mom",
-  );
-  assert.equal(
-    meetupAdultLine({
-      kind: "teacher",
-      name: "teacher6",
-      teacher: { userId: 179, username: "teacher6", profilePicUrl: "" },
-      teacherProblem: "",
-    }),
-    "  Adult coming: Twinkle teacher teacher6 (user 179, approved teacher account)",
-  );
-  const teacher = { userId: 179, username: "teacher6", profilePicUrl: "" };
-  assert.equal(
-    meetupAdultLine({
-      kind: "teacher",
-      name: "teacher6",
-      teacher,
-      confirmedAt: 1791417600,
-      display: { kind: "teacher", name: "teacher6", status: "confirmed", waitingFor: "" },
-    }),
-    "  Adult coming: Twinkle teacher teacher6 (user 179, approved teacher account), confirmed 2026-10-08",
-  );
-  assert.equal(
-    meetupAdultLine({
-      kind: "teacher",
-      name: "",
-      teacher,
-      confirmedAt: 0,
-      teacherProblem: "waiting for the teacher teacher6 to say yes to your request in their chat",
-      display: { kind: "teacher", name: "", status: "waiting", waitingFor: "teacher6" },
-      request: { status: "open", teacherUserId: 179, teacherUsername: "teacher6", sentAt: 1791417600, answeredAt: 0 },
-    }),
-    "  Adult coming: Twinkle teacher teacher6 (user 179, approved teacher account), waiting for confirmation (asked 2026-10-08)",
-  );
-  assert.equal(
-    meetupAdultLine({
-      kind: "",
-      name: "",
-      teacher: null,
-      display: { kind: "", name: "", status: "", waitingFor: "" },
-      request: { status: "declined", teacherUserId: 179, teacherUsername: "teacher6", sentAt: 1, answeredAt: 1791417600 },
-    }),
-    "  Adult coming: not named yet (Twinkle teacher teacher6 (user 179) declined 2026-10-08)",
-  );
-  assert.equal(
-    meetupAdultLine({
-      kind: "",
-      name: "",
-      request: { status: "declined", afterYes: true, teacherUserId: 179, teacherUsername: "teacher6", answeredAt: 1791417600 },
-    }),
-    "  Adult coming: not named yet (Twinkle teacher teacher6 (user 179) declined after saying yes 2026-10-08)",
-  );
-  assert.equal(
-    meetupAdultLine({ kind: "", name: "", display: { kind: "classroom", name: "", status: "arranging", waitingFor: "" } }),
-    "  Adult coming: classroom meetup, Twinkle arranges the grown-up (slot not confirmed yet)",
-  );
-  assert.equal(
-    meetupAdultLine({
-      kind: "",
-      name: "",
-      display: { kind: "classroom", name: "the Twinkle Mokdong classroom", status: "confirmed", waitingFor: "" },
-    }),
-    "  Adult coming: classroom meetup, supervised at the Twinkle Mokdong classroom (Twinkle arranges the grown-up)",
-  );
-  assert.equal(
-    meetupAdultLine({
-      kind: "teacher",
-      name: "",
-      unconfirmedName: "Teacher Kim",
-      teacher: null,
-      teacherProblem: "pick the Twinkle teacher who is coming from the list",
-    }),
-    '  Adult coming: Twinkle teacher NOT CONFIRMED (on file: "Teacher Kim"): pick the Twinkle teacher who is coming from the list',
-  );
-  // an older API still sends the typed name as `name`
-  assert.match(
-    meetupAdultLine({ kind: "teacher", name: "Teacher Kim" }),
-    /NOT CONFIRMED \(on file: "Teacher Kim"\): no approved teacher account picked$/,
-  );
 });
