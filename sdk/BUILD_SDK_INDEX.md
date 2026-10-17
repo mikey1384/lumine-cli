@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.67.0
+Version: 1.68.0
 Updated: 2026-10-16
-Generated: 2026-10-17T04:30:55.687Z
+Generated: 2026-10-17T04:41:51.966Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
