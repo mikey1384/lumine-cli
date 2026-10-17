@@ -266,6 +266,7 @@ test("approvals runs start from a source full run and allow only applying its wo
     "subject.effort.set",
     "post.skip",
     "builds.candidates",
+    "comment.edit",
   ])
     assert.throws(
       () =>

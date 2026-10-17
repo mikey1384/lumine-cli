@@ -500,3 +500,37 @@ test("Featured selected recommendations default to reward-disabled and resume lo
   });
   assert.throws(() => readFeaturedSelections(file), /anyoneCanReward=true/);
 });
+
+test("an approvals run applies its source run's approved plan, and no other run's", async (t) => {
+  const dir = fixture(t);
+  const plan = {
+    schemaVersion: 1,
+    id: 12425,
+    runId: 125,
+    expectedIds: [1, 2],
+    finalIds: [3, 1],
+  };
+  const planHash = featuredFingerprint(plan);
+  const file = path.join(dir, "plan.json");
+  write(file, { data: { plan, planHash } });
+  const calls = [];
+  const request = async ({ url, body }) => {
+    calls.push({ url, body });
+    return url.endsWith("/plan/apply")
+      ? { ok: true, data: { appliedPlanId: 12425, approvedHash: planHash } }
+      : { ok: true, data: { subjects: [{ id: 3 }, { id: 1 }] } };
+  };
+  const apply = (runId, sourceRunId) =>
+    runFeaturedWorkflow({
+      options: { ...workflowOptions(dir), adminFile: file, adminApprove: planHash },
+      operation: { featuredWorkflow: "apply" },
+      authToken: "fixture",
+      runId,
+      sourceRunId,
+      request,
+    });
+  await apply(126, 125);
+  assert.deepEqual(calls[0].body, { planId: 12425, approvedHash: planHash });
+  await assert.rejects(apply(126, 0), /different run/);
+  await assert.rejects(apply(126, 124), /different run/);
+});

@@ -29,14 +29,32 @@ canonical structured data.
   Completion does not advance full-review windows or carry-over telemetry.
   Its distinct `/daily-runs/start/newspaper` endpoint fails closed on older APIs.
 - `--scope approvals --source-run <id>` applies what an earlier **full** run
-  prepared, after Mikey decides: its Featured plan (`featured apply` with the
-  plan's exact hash), Featured-comment decisions, `post recommend`/`reward`,
-  and its comment drafts (`comment post --draft-id`, or a re-draft when he
-  asks for a change). It acts as the source run's identity with its comment
-  mode, within 48 hours of the source run's start; the source run must be
-  finished (completed, failed or expired). It has no reading duties and never
-  counts as a full review, so it does not move review windows. Its distinct
-  `/daily-runs/start/approvals` endpoint fails closed on older APIs.
+  prepared, after Mikey decides:
+  - its Featured plan (`featured apply` with the plan's exact hash);
+  - its Featured-comment decisions (`featured comments recommend`) and
+    `post recommend`/`reward`;
+  - its comments.
+
+  Source drafts expire after 30 minutes, so post an approved comment by
+  re-drafting it with the exact approved text (`comment draft <target> --file
+  <approved.md>`, with a fresh `builds review` receipt for an app), then
+  `comment post`. The API refuses a second published comment by that
+  identity on the same target for the same source run.
+
+  It acts as the source run's identity (named explicitly, so Bangkok midnight
+  does not end it). A source in draft comment mode publishes, because
+  approving its drafts means posting them. Limits:
+  - it must start within 48 hours of the source run's start; the run itself
+    lasts the usual six hours;
+  - the source must be a completed or expired full run; an abandoned
+    (failed) run is refused;
+  - one source per approvals run.
+
+  It cannot change Featured directly (no add, order, rotate, or single
+  feature/unfeature), edit existing comments, or do any reading duties. It
+  never counts as a full review, so it does not move review windows. Its
+  distinct `/daily-runs/start/approvals` endpoint fails closed on older
+  APIs.
 - **Complete a full run when its report is delivered** (`daily-run complete`),
   even with Mikey's decisions still pending. Do not hold it open for them: an
   expired run can never be completed, so the review would not count, its
