@@ -42,16 +42,18 @@ canonical structured data.
   identity on the same target for the same source run.
 
   It acts as the source run's identity (named explicitly, so Bangkok midnight
-  does not end it). A source in draft comment mode publishes, because
-  approving its drafts means posting them. Limits:
+  does not end it) with the source's comment mode: a draft-mode source can
+  draft but not publish. Limits:
   - it must start within 48 hours of the source run's start; the run itself
     lasts the usual six hours;
   - the source must be a completed or expired full run; an abandoned
     (failed) run is refused;
   - one source per approvals run.
 
-  It cannot change Featured directly (no add, order, rotate, or single
-  feature/unfeature), edit existing comments, or do any reading duties. It
+  It cannot prepare a new Featured plan, apply any plan but the source run's,
+  change Featured directly (no add, order, rotate, or single
+  feature/unfeature), edit existing comments, or do any reading duties. A
+  changed swap needs a fresh full or Featured run. It
   never counts as a full review, so it does not move review windows. Its
   distinct `/daily-runs/start/approvals` endpoint fails closed on older
   APIs.

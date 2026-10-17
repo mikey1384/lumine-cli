@@ -267,6 +267,7 @@ test("approvals runs start from a source full run and allow only applying its wo
     "post.skip",
     "builds.candidates",
     "comment.edit",
+    "featured.plan",
   ])
     assert.throws(
       () =>
@@ -276,4 +277,98 @@ test("approvals runs start from a source full run and allow only applying its wo
         }),
       name,
     );
+});
+
+test("featured apply through adminCommand uses the active approvals run's source plan", async (t) => {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lumine-approvals-apply-test-"),
+  );
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const { featuredFingerprint } = await import("../lib/admin-featured.js");
+  const plan = {
+    schemaVersion: 1,
+    id: 12425,
+    runId: 125,
+    expectedIds: [1, 2],
+    finalIds: [3, 1],
+  };
+  const planHash = featuredFingerprint(plan);
+  const planFile = path.join(directory, "plan.json");
+  fs.writeFileSync(planFile, JSON.stringify({ data: { plan, planHash } }), {
+    mode: 0o600,
+  });
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ url: req.url, run: req.headers["x-lumine-admin-run-id"] });
+    res.setHeader("Content-Type", "application/json");
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      if (req.url === "/cli/session")
+        res.end(JSON.stringify({ scopes: ["build:read", "build:write"] }));
+      else if (req.url === "/cli/admin/daily-runs/status")
+        res.end(
+          JSON.stringify({
+            ok: true,
+            data: {
+              run: {
+                id: 126,
+                runScope: "approvals",
+                sourceRunId: 125,
+                status: "active",
+                identity: { key: "ciel" },
+              },
+            },
+          }),
+        );
+      else if (req.url.endsWith("/plan/apply"))
+        res.end(
+          JSON.stringify({
+            ok: true,
+            data: { appliedPlanId: 12425, approvedHash: planHash },
+          }),
+        );
+      else if (req.url === "/cli/admin/subjects/featured")
+        res.end(
+          JSON.stringify({ ok: true, data: { subjects: [{ id: 3 }, { id: 1 }] } }),
+        );
+      else {
+        res.statusCode = 500;
+        res.end("{}");
+      }
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  );
+  const options = parseArgs([
+    "admin",
+    "featured",
+    "apply",
+    "--file",
+    planFile,
+    "--approve",
+    planHash,
+    "--json",
+  ]);
+  const originalLog = console.log;
+  try {
+    console.log = () => {};
+    await adminCommand({
+      ...options,
+      authToken: "fixture-token",
+      apiUrl: `http://127.0.0.1:${server.address().port}`,
+    });
+  } finally {
+    console.log = originalLog;
+  }
+  const apply = requests.find((item) => item.url.endsWith("/plan/apply"));
+  assert.ok(apply, JSON.stringify(requests.map((item) => item.url)));
+  assert.equal(apply.run, "126");
 });
