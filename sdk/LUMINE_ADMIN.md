@@ -28,6 +28,20 @@ canonical structured data.
   `off`. It cannot inspect queues, conduct, logs, Builds, or Featured.
   Completion does not advance full-review windows or carry-over telemetry.
   Its distinct `/daily-runs/start/newspaper` endpoint fails closed on older APIs.
+- `--scope approvals --source-run <id>` applies what an earlier **full** run
+  prepared, after Mikey decides: its Featured plan (`featured apply` with the
+  plan's exact hash), Featured-comment decisions, `post recommend`/`reward`,
+  and its comment drafts (`comment post --draft-id`, or a re-draft when he
+  asks for a change). It acts as the source run's identity with its comment
+  mode, within 48 hours of the source run's start; the source run must be
+  finished (completed, failed or expired). It has no reading duties and never
+  counts as a full review, so it does not move review windows. Its distinct
+  `/daily-runs/start/approvals` endpoint fails closed on older APIs.
+- **Complete a full run when its report is delivered** (`daily-run complete`),
+  even with Mikey's decisions still pending. Do not hold it open for them: an
+  expired run can never be completed, so the review would not count, its
+  report would be unavailable, and the next run would re-read the whole
+  window. When Mikey answers, start an approvals run on it.
 - The public content actor is Zero or Ciel. Mikey's operator ID is retained in
   private audit rows and is not embedded in public comment metadata.
 - Delegated HTTP work never authenticates as the bot, opens a bot socket, changes
@@ -1017,6 +1031,7 @@ identity, or advances rotation.
 lumine admin daily-run start --identity auto --comment-mode off --json
 lumine admin daily-run start --scope featured --identity auto --json
 lumine admin daily-run start --scope newspaper --identity auto --json
+lumine admin daily-run start --scope approvals --source-run 125 --json
 lumine admin daily-run start --identity ciel --comment-mode draft \
   --run-key daily:2026-08-06:review --json
 lumine admin daily-run status --json
@@ -2769,7 +2784,9 @@ inferred. The CLI then reads the live board and verifies exact membership/order.
 Retry the identical apply command after uncertain transport failure; it reuses
 the same idempotency key. If the final read fails or finds an intervening change,
 the error retains the canonical apply receipt and never restores old state.
-Expired/different runs require a fresh plan and renewed approval.
+A different run requires a fresh plan and renewed approval, except an
+approvals run started from the plan's own full run (`--scope approvals
+--source-run <id>`), which applies that exact plan with the same hash.
 
 Use the following workflow for full daily comment review, or only when Mikey's
 Featured slice includes comment encouragement:
