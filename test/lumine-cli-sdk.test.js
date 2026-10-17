@@ -344,3 +344,10 @@ test("CLI exposes Twinkle.rewards through the server-verified reward endpoints o
     /no published-runtime reward grant for build 884/,
   );
 });
+
+test("craft reads are callable from the CLI; hint only peeks and merge stays the player's", () => {
+  for (const name of ["craft.getState", "craft.list", "craft.item", "craft.journey", "craft.rankings"])
+    assert.deepEqual(SDK_CLI_METHODS[name].scopes, ["craft:read"]);
+  assert.deepEqual(SDK_CLI_METHODS["craft.hint"].mapArgs({ peek: false }), { peek: true });
+  assert.equal(SDK_CLI_METHODS["craft.merge"], undefined);
+});
