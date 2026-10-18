@@ -642,8 +642,8 @@ final reporting. Every full daily run reports each grade's current question,
 whether it was cleared today, uncleared published questions remaining, and
 refill status. Count distinct cleared keys across all users and the app's full
 history against the live approved sheet; the recent usage window and draft
-additions are not the live inventory. At two or fewer remaining, prepare a
-refill to at least ten, with complete interactive guides, and track it until
+additions are not the live inventory. At four or fewer remaining, prepare a
+refill to at least twenty, with complete interactive guides, and track it until
 approved publication. Report one or zero remaining prominently. Details are
 in the linked guide's **Daily queue monitoring and refill** section.
 Read this inventory with `lumine admin math-lab queue --json`. Its receipt
