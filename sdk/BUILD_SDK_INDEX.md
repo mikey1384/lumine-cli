@@ -2,7 +2,7 @@
 
 Version: 1.68.0
 Updated: 2026-10-16
-Generated: 2026-10-17T04:41:51.966Z
+Generated: 2026-10-18T00:54:57.432Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -25,6 +25,7 @@ Generated: 2026-10-17T04:41:51.966Z
 - Twinkle.ai.chat history entries must use { role, content }; map local message.text fields to content before passing history.
 - Live web search is enabled by default for Twinkle.ai.chat and for Medium/High Twinkle.ai.generateObject and Twinkle.characters.chat requests. App authors can pass webSearch: false to disable it for their app. Search uses the provider's live web-search tool and is included in AI Energy usage; structured and character Lite Mode remains tool-free.
 - Mobile long-press must not select game UI or open browser Copy/Look Up/image menus. The SDK provides no-selection/callout defaults for standard buttons, button-like ARIA controls, and canvases. Mark the entire custom gameplay wrapper data-twinkle-no-select, including HUD, labels, scores, menus, controls, and empty play space; also style it with user-select: none, -webkit-user-select: none, and -webkit-touch-callout: none for local previews. Protecting only one button or the canvas is insufficient. This behavior is independent of Twinkle.preview layout mode.
+- Played game pages block text selection, the long-press menu and page pinch-zoom everywhere except inputs, textareas, contenteditable and data-twinkle-selectable text, so text a game shows for copying (a chat log, a word to copy) needs data-twinkle-selectable. A page is a played game when the app sets data-twinkle-game on <html> or <body>, or when a play-sized canvas is on screen: rendered, not pointer-events:none, and covering at least 30% of the viewport by its layout size. Set data-twinkle-game on a game that sizes itself with Twinkle.preview; set data-twinkle-document to keep a canvas page (charts, drawing pad) an ordinary page; set data-twinkle-allow-zoom to keep page pinch-zoom on a game. Page layout is not affected by any of this.
 - Keep inputs/contenteditable usable. Mark genuinely copyable story/chat/user-written text data-twinkle-selectable and style it with user-select: text, -webkit-user-select: text, and -webkit-touch-callout: default. SDK defaults have low specificity so existing explicit copyable-text styles remain effective. Preserve document/reader selection; do not block document-wide touch/pointer events or disable scrolling/zoom to prevent selection.
 - Verify mobile long presses on controls, HUD, and empty play space in Safari and Chromium; confirm held controls still work and release/cancel correctly, and scrolling, typing, and copying still work. lumine check only detects a missing no-selection rule, not selector coverage or mobile behavior.
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
@@ -94,8 +95,9 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
 
 ### Twinkle.app
 - async getInfo() | scopes: none
-  - Returns: App info object from the parent (includes appUrl) or null
+  - Returns: App info object from the parent ({ buildId, appUrl, source, artifactVersionId }) or null
   - Cached after the first call for the iframe session.
+  - source is 'published' on the app page and 'workspace' in the editor preview; artifactVersionId is the published release this frame runs (null in the workspace). Stamp it on your own telemetry rows instead of a hand-written release label, so data can be tied to an exact version. Hosts older than website 2.3.113 omit source and artifactVersionId; treat a missing value as unknown.
 - async getShareUrl(pathSegment) | scopes: none
   - Returns: Canonical shareable deep-link URL string, or null when app info is unavailable
   - Builds a canonical shareable deep link into this app, e.g. https://www.twin-kle.com/app/884/432-the-great-gatsby.
