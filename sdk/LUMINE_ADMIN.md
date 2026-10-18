@@ -1409,7 +1409,13 @@ and answer keys from a private question sheet the creator's Lumine uploads with
 readable by every player). **Send for review** (website, or `lumine rewards review` from the workspace) freezes the code and proposes
 `rewards.json` merged with the sheet. Approval is Mikey's decision: read the
 frozen code, check that the amounts are right and that the app cannot be
-farmed, change anything that is wrong, approve. **Approval publishes** (since
+farmed, change anything that is wrong, approve. A plain `completion` rule
+checks only time: when it pays for something the app could check (a puzzle,
+a level, a win), propose a completionProof instead of approving it. For an
+app's own check (`app-check-v1`), read `/rewards.verify.js`: `check` must test
+the player's record against the dealt puzzle, never a client flag. `show`
+prints a WARNING when the server's self-test caught it paying a record that
+proves nothing. **Approval publishes** (since
 2026-09-15): the exact frozen snapshot goes live in the same transaction, with
 no Publish click by the creator; the app's previous release stays up until
 that commit lands. Instead of approving, the reviewer may **propose changes**:
