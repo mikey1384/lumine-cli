@@ -1413,7 +1413,9 @@ farmed, change anything that is wrong, approve. A plain `completion` rule
 checks only time: when it pays for something the app could check (a puzzle,
 a level, a win), propose a completionProof instead of approving it. For an
 app's own check (`app-check-v1`), read `/rewards.verify.js`: `check` must test
-the player's record against the dealt puzzle, never a client flag. `show`
+the player's record against the dealt puzzle, never a client flag, and its
+refusal `reason` (shown to players) must never reveal the answer; a hidden-answer
+quiz needs a small maxAttempts. `show`
 prints a WARNING when the server's self-test caught it paying a record that
 proves nothing. **Approval publishes** (since
 2026-09-15): the exact frozen snapshot goes live in the same transaction, with
