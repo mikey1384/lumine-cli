@@ -12,10 +12,12 @@ import {
   keyDefinition,
   parseBuildReviewReceipt,
   parseInteractionScript,
+  classifyReviewBrowserExit,
   resolveAppFrame,
-  reviewBrowserExitedCleanly,
   runInteractionSteps,
+  runManagedBuildReview,
 } from "../lib/build-review.js";
+import http from "node:http";
 import { parseArgs } from "../lib/commands.js";
 
 function fixture(t) {
@@ -451,12 +453,183 @@ test("review receipts stay confirmed only when every listed screenshot exists an
   assert.throws(() => parseBuildReviewReceipt(write("changed-shot.json", interacted)));
 });
 
-test("only our own requested close can end in Chrome's exit 2", () => {
-  const closed = { closeRequested: true, forcedTermination: false, signal: null };
-  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 0 }), true);
-  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 2 }), true);
-  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 1 }), false);
-  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 2, forcedTermination: true }), false);
-  assert.equal(reviewBrowserExitedCleanly({ ...closed, code: 2, signal: "SIGTERM" }), false);
-  assert.equal(reviewBrowserExitedCleanly({ code: 2, signal: null }), false);
+test("a nonzero exit is a teardown warning only after complete evidence and our own close", () => {
+  const closed = {
+    closeRequested: true,
+    exitedBeforeClose: false,
+    evidenceCompleteBeforeClose: true,
+    forcedTermination: false,
+    signal: null,
+    closeDurationMs: 10_300,
+    stderrAfterClose: "",
+  };
+  const watchdog =
+    "[w:1019/091614.9:WARNING:x] Init observer found at shutdown.\nTeardown watchdog expired; recording dump and terminating.\n";
+  assert.deepEqual(classifyReviewBrowserExit({ ...closed, code: 0 }), {
+    accepted: true,
+    teardownWarning: null,
+  });
+  // Exit 2 after our own close, on its own, stays accepted (with a warning).
+  const killed = classifyReviewBrowserExit({ ...closed, code: 2 });
+  assert.equal(killed.accepted, true);
+  assert.equal(killed.teardownWarning.signature, "exit_2_after_close");
+  // The 10-19 Newspaper case: close took longer than 5 s, the CLI stopped
+  // Chrome, it exited 2 and printed the teardown watchdog line.
+  const newspaper = classifyReviewBrowserExit({
+    ...closed,
+    code: 2,
+    forcedTermination: true,
+    stderrAfterClose: watchdog,
+  });
+  assert.equal(newspaper.accepted, true);
+  assert.deepEqual(newspaper.teardownWarning, {
+    exitCode: 2,
+    signal: null,
+    forcedTermination: true,
+    closeDurationMs: 10_300,
+    signature: "teardown_watchdog_expired",
+    stderrLine: "Teardown watchdog expired; recording dump and terminating.",
+  });
+  // Without a teardown signature, other exits and our forced stop still fail.
+  assert.equal(classifyReviewBrowserExit({ ...closed, code: 1 }).accepted, false);
+  assert.equal(
+    classifyReviewBrowserExit({ ...closed, code: 2, forcedTermination: true }).accepted,
+    false,
+  );
+  assert.equal(
+    classifyReviewBrowserExit({ ...closed, code: 2, signal: "SIGTERM" }).accepted,
+    false,
+  );
+  // The signature must come from after the close, never from earlier stderr.
+  assert.equal(
+    classifyReviewBrowserExit({ ...closed, code: 1, stderrAfterClose: "", stderr: watchdog })
+      .accepted,
+    false,
+  );
+  // Nothing is accepted before the evidence was complete or before our close.
+  for (const notYet of [
+    { evidenceCompleteBeforeClose: false },
+    { exitedBeforeClose: true },
+    { closeRequested: false },
+    { evidenceCompleteBeforeClose: undefined },
+  ]) {
+    assert.equal(
+      classifyReviewBrowserExit({ ...closed, code: 2, stderrAfterClose: watchdog, ...notYet })
+        .accepted,
+      false,
+    );
+  }
+  assert.equal(classifyReviewBrowserExit({ code: 2, signal: null }).accepted, false);
+});
+
+// A stand-in Chrome that speaks the CDP pipe protocol (fd 3 in, fd 4 out).
+const FAKE_CHROME = String.raw`#!/usr/bin/env node
+const net = require("node:net");
+const mode = process.env.LUMINE_FAKE_CHROME_MODE || "clean";
+const url = process.argv[process.argv.length - 1];
+const out = new net.Socket({ fd: 4, readable: false, writable: true });
+const input = new net.Socket({ fd: 3, readable: true, writable: false });
+const send = (message) => out.write(JSON.stringify(message) + "\0");
+const ready = mode !== "never-ready";
+process.on("SIGTERM", () => process.exit(2));
+let buffer = "";
+input.on("data", (chunk) => {
+  buffer += chunk.toString("utf8");
+  let at;
+  while ((at = buffer.indexOf("\0")) >= 0) {
+    const message = JSON.parse(buffer.slice(0, at));
+    buffer = buffer.slice(at + 1);
+    const reply = (result) => send({ id: message.id, result, sessionId: message.sessionId });
+    switch (message.method) {
+      case "Target.getTargets":
+        reply({ targetInfos: [{ type: "page", url, targetId: "page-1" }] });
+        break;
+      case "Target.attachToTarget":
+        reply({ sessionId: "session-1" });
+        break;
+      case "Runtime.evaluate":
+        reply({ result: { value: { documentReady: true, previewPresent: ready, previewVisible: ready, progressVisible: false, runtimeErrorVisible: false } } });
+        break;
+      case "Page.captureScreenshot":
+        reply({ data: Buffer.from("fake-png").toString("base64") });
+        break;
+      case "Browser.close":
+        reply({});
+        if (mode === "clean") setTimeout(() => process.exit(0), 20);
+        else if (mode === "watchdog-hang") {
+          // Hang past the CLI's close window, as on 10-19, until SIGTERM.
+          process.stderr.write("Teardown watchdog expired; recording dump and terminating.\n");
+          setInterval(() => {}, 1000);
+        } else {
+          process.stderr.write("Teardown watchdog expired; recording dump and terminating.\n");
+          setTimeout(() => process.exit(2), 20);
+        }
+        break;
+      default:
+        reply({});
+    }
+  }
+});
+`;
+
+async function managedReviewWithFakeChrome(t, mode) {
+  const root = fs.mkdtempSync(path.join(testWorkRoot(), "fake-chrome-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const chrome = path.join(root, "fake-chrome.cjs");
+  fs.writeFileSync(chrome, FAKE_CHROME, { mode: 0o755 });
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ publishedArtifactVersionId: 15132 }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const previousMode = process.env.LUMINE_FAKE_CHROME_MODE;
+  process.env.LUMINE_FAKE_CHROME_MODE = mode;
+  t.after(() => {
+    if (previousMode === undefined) delete process.env.LUMINE_FAKE_CHROME_MODE;
+    else process.env.LUMINE_FAKE_CHROME_MODE = previousMode;
+  });
+  return runManagedBuildReview({
+    buildId: 1929,
+    authToken: "",
+    options: {
+      adminWaitMs: 1000,
+      adminBrowserPath: chrome,
+      adminOutputDir: path.join(root, "out"),
+      siteUrl: "http://127.0.0.1:9",
+      apiUrl: `http://127.0.0.1:${server.address().port}`,
+      timeoutMs: 5000,
+    },
+  });
+}
+
+test("a managed review whose Chrome hangs in teardown and exits 2 is confirmed with a teardownWarning", { timeout: 30_000 }, async (t) => {
+  const result = await managedReviewWithFakeChrome(t, "watchdog-hang");
+  assert.equal(result.ok, true);
+  const review = result.data.review;
+  assert.equal(review.status, "confirmed");
+  assert.equal(review.browser.exitCode, 2);
+  assert.equal(review.browser.exitedCleanly, false);
+  assert.equal(review.browser.evidenceCompleteBeforeClose, true);
+  assert.equal(review.browser.exitedBeforeClose, false);
+  assert.equal(review.browser.teardownWarning.signature, "teardown_watchdog_expired");
+  assert.equal(review.browser.teardownWarning.forcedTermination, true);
+  assert.ok(review.browser.teardownWarning.closeDurationMs >= 4_900);
+  // The receipt is still one a comment or proposal can rely on.
+  assert.equal(parseBuildReviewReceipt(result.data.receiptPath).status, "confirmed");
+});
+
+test("a managed review exits cleanly without a warning, and still fails when the page never became reviewable", { timeout: 30_000 }, async (t) => {
+  const clean = await managedReviewWithFakeChrome(t, "clean");
+  assert.equal(clean.data.review.status, "confirmed");
+  assert.equal(clean.data.review.browser.teardownWarning, null);
+  assert.equal(clean.data.review.browser.exitedCleanly, true);
+  await assert.rejects(managedReviewWithFakeChrome(t, "never-ready"), (error) => {
+    assert.equal(error.code, "CLI_ADMIN_BUILD_REVIEW_FAILED");
+    const receipt = JSON.parse(fs.readFileSync(error.data.error.details.receiptPath, "utf8"));
+    assert.equal(receipt.status, "failed");
+    assert.equal(receipt.browser.evidenceCompleteBeforeClose, false);
+    assert.equal(receipt.browser.teardownWarning, null);
+    return true;
+  });
 });

@@ -148,14 +148,14 @@ test("owner-trace --perf asks only for the performance events", () => {
   );
   assert.equal(
     perf.path,
-    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load",
+    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load%2Cscroll-perf%2Cscroll-frame",
   );
   const merged = parseAdminOperation(
     parseArgs(["admin", "owner-trace", "--type", "route,stall", "--perf"]),
   );
   assert.match(
     merged.path,
-    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load$/,
+    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load%2Cscroll-perf%2Cscroll-frame$/,
   );
 });
 
@@ -208,6 +208,41 @@ test("owner-trace renders performance events one line each", () => {
       }),
       event(400, "stall", "/comments/5", { ms: 450, n: 2, total: 770, span: 786 }),
       event(500, "stall", "/", { ms: 230, n: 1, total: 230, span: 230 }),
+      event(600, "scroll-perf", "/", {
+        reason: "idle",
+        spanMs: 1200,
+        frames: 70,
+        meanFrameMs: 17.1,
+        maxFrameMs: 124,
+        over50: 2,
+        over100: 1,
+        context: { cards: [{ key: "subject-42" }, { key: "build-7" }] },
+        frameSource: { source: "loaf", loafFrames: 2, cardRenders: 9, cardMounts: 2, imgLoads: 3 },
+      }),
+      event(601, "scroll-frame", "/", {
+        source: "loaf",
+        offsetMs: 400,
+        gapMs: 124,
+        renders: { subject: 2 },
+        mounts: { build: 1 },
+        imgLoads: 1,
+        loaf: {
+          ms: 118,
+          blockingMs: 68,
+          styleLayoutShare: 0.25,
+          scripts: [
+            { ms: 60, src: "/assets/index-abc.js", fn: "HomeFeedCard", type: "event-listener", invoker: "IMG.onload", forcedLayoutMs: 12 },
+          ],
+        },
+      }),
+      event(602, "scroll-frame", "/", {
+        source: "raf",
+        offsetMs: 32,
+        gapMs: 78,
+        renders: { rewardDigest: 1 },
+        mounts: {},
+        imgLoads: 0,
+      }),
     ],
   });
   assert.deepEqual(lines.slice(2), [
@@ -218,5 +253,8 @@ test("owner-trace renders performance events one line each", () => {
     "  14:03:12.645  slow-request   /comments/5  GET /content/comments?contentId → 200 in 1834ms (queued 640ms, 2 tries)",
     "  14:03:12.745  stall          /comments/5  main thread blocked 450ms (2 stalls, 770ms blocked over 786ms)",
     "  14:03:12.845  stall          /  main thread blocked 230ms",
+    "  14:03:12.945  scroll-perf    /  70 frames over 1200ms · mean 17.1ms max 124ms · >50ms 2 >100ms 1 · cards subject-42,build-7 · LoAF 2 long frame(s) · card renders 9 mounts 2 · img loads 3 · (idle)",
+    "  14:03:12.946  scroll-frame   /  slow frame 118ms (LoAF, blocking 68ms, style/layout 25%, rAF gap 124ms) · +400ms · scripts: 60ms /assets/index-abc.js HomeFeedCard [event-listener IMG.onload] forced layout 12ms · rendered subject×2 · mounted build×1 · 1 img load(s)",
+    "  14:03:12.947  scroll-frame   /  slow frame 78ms (rAF gap, no LoAF) · +32ms · rendered rewardDigest×1",
   ]);
 });
