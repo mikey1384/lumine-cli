@@ -520,6 +520,21 @@ test("a nonzero exit is a teardown warning only after complete evidence and our 
     );
   }
   assert.equal(classifyReviewBrowserExit({ code: 2, signal: null }).accepted, false);
+  // A page console line quoting the words is not Chrome's own teardown.
+  const consoleLine =
+    '[1:2:1019/091605.8:INFO:CONSOLE:42] "Teardown watchdog expired", source: x\n';
+  assert.equal(
+    classifyReviewBrowserExit({
+      closeRequested: true,
+      exitedBeforeClose: false,
+      evidenceCompleteBeforeClose: true,
+      forcedTermination: true,
+      code: 2,
+      signal: null,
+      stderrAfterClose: consoleLine,
+    }).accepted,
+    false,
+  );
 });
 
 // A stand-in Chrome that speaks the CDP pipe protocol (fd 3 in, fd 4 out).
@@ -531,7 +546,8 @@ const out = new net.Socket({ fd: 4, readable: false, writable: true });
 const input = new net.Socket({ fd: 3, readable: true, writable: false });
 const send = (message) => out.write(JSON.stringify(message) + "\0");
 const ready = mode !== "never-ready";
-process.on("SIGTERM", () => process.exit(2));
+// "ignore-term" stands for a Chrome wedged in teardown that ignores SIGTERM.
+process.on("SIGTERM", () => { if (mode !== "ignore-term") process.exit(2); });
 let buffer = "";
 input.on("data", (chunk) => {
   buffer += chunk.toString("utf8");
@@ -556,7 +572,7 @@ input.on("data", (chunk) => {
       case "Browser.close":
         reply({});
         if (mode === "clean") setTimeout(() => process.exit(0), 20);
-        else if (mode === "watchdog-hang") {
+        else if (mode === "watchdog-hang" || mode === "ignore-term") {
           // Hang past the CLI's close window, as on 10-19, until SIGTERM.
           process.stderr.write("Teardown watchdog expired; recording dump and terminating.\n");
           setInterval(() => {}, 1000);
@@ -617,6 +633,17 @@ test("a managed review whose Chrome hangs in teardown and exits 2 is confirmed w
   assert.ok(review.browser.teardownWarning.closeDurationMs >= 4_900);
   // The receipt is still one a comment or proposal can rely on.
   assert.equal(parseBuildReviewReceipt(result.data.receiptPath).status, "confirmed");
+});
+
+test("a Chrome that ignores SIGTERM in teardown is killed, so the review never hangs", { timeout: 30_000 }, async (t) => {
+  const started = Date.now();
+  const result = await managedReviewWithFakeChrome(t, "ignore-term");
+  // 5 s close window + 3 s SIGTERM grace, then SIGKILL; never unbounded.
+  assert.ok(Date.now() - started < 20_000);
+  const browser = result.data.review.browser;
+  assert.equal(browser.signal, "SIGKILL");
+  assert.equal(browser.teardownWarning.signature, "teardown_watchdog_expired");
+  assert.equal(result.data.review.status, "confirmed");
 });
 
 test("a managed review exits cleanly without a warning, and still fails when the page never became reviewable", { timeout: 30_000 }, async (t) => {
