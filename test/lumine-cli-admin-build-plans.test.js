@@ -33,16 +33,21 @@ test("build-plans results read plainly", () => {
     coverage: { shown: 9, total: 66, omittedReferenced: 1, toolRounds: 0, toolFilesRead: 0 },
     flags: ["stalled", "over_estimate"]
   };
-  const lines = formatBuildPlansResult({ operation: { name: "build-plans.stuck" }, data: { running: 4, days: 30, rows: [row] } });
-  assert.equal(lines[0], "4 running build plan(s) updated in the last 30 days; 1 shown.");
+  const lines = formatBuildPlansResult({ operation: { name: "build-plans.stuck" }, data: { running: 4, inWindow: 2, stalled: 1, days: 30, rows: [row] } });
+  assert.equal(lines[0], "4 running build plan(s); 2 updated in the last 30 days or stalled (1 stalled); 1 shown.");
   assert.match(lines[1], /Build 863: milestone 1\/5 \(0 done\), 29 runs, Energy 2.33x of estimate, 26 gradings.*STALLED\(over_budget\).*files 9\/66, 1 referenced omitted \[stalled, over_estimate\]/);
   const done = formatBuildPlansResult({
     operation: { name: "build-plans.recheck" },
-    data: { dryRun: false, results: [
+    data: { dryRun: false, errors: [{ value: "abc", reason: "not_a_build_id" }], results: [
       { ok: true, buildId: 863, milestoneIndex: 0, verdict: "PASS", passed: 3, criteria: 3, unverified: 0, milestoneCompleted: true, fileCoverage: { shownFiles: 9, totalFiles: 66, toolFilesRead: 7, toolRounds: 3 } },
-      { ok: false, buildId: 1, reason: "no_running_plan" }
+      { ok: false, buildId: 1, reason: "no_running_plan" },
+      { ok: false, buildId: 2, reason: "run_in_progress" },
+      { ok: true, replayed: true, buildId: 3, milestoneIndex: 1, verdict: "NEEDS_WORK", passed: 1, criteria: 2, unverified: 1, usage: { energyUnits: 2400, inputTokens: 40000, outputTokens: 4000 } }
     ] }
   });
-  assert.equal(done[0], "Build 863: milestone 1 PASS, 3/3 passing, 0 unverified, milestone completed; files 9/66 + 7 read in 3 rounds");
-  assert.equal(done[1], "Build 1: not rechecked (no_running_plan)");
+  assert.equal(done[0], 'Skipped "abc": not a build id');
+  assert.equal(done[1], "Build 863: milestone 1 PASS, 3/3 passing, 0 unverified, milestone completed; files 9/66 + 7 read in 3 rounds");
+  assert.equal(done[2], "Build 1: not rechecked (no_running_plan)");
+  assert.equal(done[3], "Build 2: not rechecked (a Lumine run is in progress; try again later)");
+  assert.equal(done[4], "(already rechecked by this request) Build 3: milestone 2 NEEDS_WORK, 1/2 passing, 1 unverified; cost 2400 Energy units (40000 in / 4000 out tokens), not charged to the creator");
 });
