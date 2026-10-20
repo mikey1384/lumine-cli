@@ -342,3 +342,31 @@ test("owner-trace --wake reads sessions and wake profiles and prints them readab
   );
   assert.match(text, /RESUME after 9m · 20s · frames 1190/);
 });
+
+test("owner-trace survives wake rows the server trimmed", () => {
+  const event = (data) => ({
+    sessionId: "s1",
+    clientTime: 1_800_000_000_000,
+    serverTime: 1_800_000_000,
+    type: "wake",
+    path: "/",
+    data,
+  });
+  const lines = formatOwnerTrace({
+    since: 1_800_000_000,
+    events: [
+      event({
+        kind: "load",
+        top: "[cut 2400 chars]",
+        work: "[cut 40 chars]",
+        socket: { atStart: true, reasons: "[cut 30 chars]" },
+        _trimmed: ["top", "work"],
+      }),
+      event({ _trimmed: "all", chars: 9000, keys: ["kind", "top"] }),
+    ],
+  });
+  const text = lines.join("\n");
+  assert.match(text, /LOAD · \?/);
+  assert.match(text, /trimmed \["top","work"\]/);
+  assert.match(text, /WAKE \(kind unknown\)/);
+});
