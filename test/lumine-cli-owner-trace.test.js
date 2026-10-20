@@ -148,14 +148,14 @@ test("owner-trace --perf asks only for the performance events", () => {
   );
   assert.equal(
     perf.path,
-    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load%2Cscroll-perf%2Cscroll-frame",
+    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load%2Cscroll-perf%2Cscroll-frame%2Cwake",
   );
   const merged = parseAdminOperation(
     parseArgs(["admin", "owner-trace", "--type", "route,stall", "--perf"]),
   );
   assert.match(
     merged.path,
-    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load%2Cscroll-perf%2Cscroll-frame$/,
+    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load%2Cscroll-perf%2Cscroll-frame%2Cwake$/,
   );
 });
 
@@ -257,4 +257,88 @@ test("owner-trace renders performance events one line each", () => {
     "  14:03:12.946  scroll-frame   /  slow frame 118ms (LoAF, blocking 68ms, style/layout 25%, rAF gap 124ms) · +400ms · scripts: 60ms /assets/index-abc.js HomeFeedCard [event-listener IMG.onload] forced layout 12ms · rendered subject×2 · mounted build×1 · 1 img load(s)",
     "  14:03:12.947  scroll-frame   /  slow frame 78ms (rAF gap, no LoAF) · +32ms · rendered rewardDigest×1",
   ]);
+});
+
+test("owner-trace --wake reads sessions and wake profiles and prints them readably", () => {
+  const operation = parseAdminOperation(
+    parseArgs(["admin", "owner-trace", "--since", "3d", "--wake"]),
+  );
+  assert.equal(
+    operation.path,
+    "/cli/admin/owner-trace?since=3d&limit=300&type=session%2Cwake",
+  );
+  const lines = formatOwnerTrace({
+    since: 1_800_000_000,
+    truncated: false,
+    events: [
+      {
+        sessionId: "abcdef123456",
+        clientTime: 1_800_000_000_000,
+        serverTime: 1_800_000_000,
+        type: "session",
+        path: "/",
+        data: {
+          version: "2.3.119",
+          platform: "iPhone",
+          navType: "back_forward",
+          net: { id: "a1b2c3", v: 6 },
+        },
+      },
+      {
+        sessionId: "abcdef123456",
+        clientTime: 1_800_000_020_000,
+        serverTime: 1_800_000_020,
+        type: "wake",
+        path: "/",
+        data: {
+          kind: "load",
+          navType: "back_forward",
+          net: { id: "a1b2c3", v: 6 },
+          end: "window",
+          windowMs: 20000,
+          frames: 900,
+          over50: 12,
+          over100: 3,
+          maxFrameMs: 420,
+          jankMs: 2100,
+          stalls: 1,
+          stallMs: 420,
+          requests: 41,
+          repeats: 2,
+          top: ["GET /user/session x2", "GET /chat"],
+          images: 18,
+          socket: {
+            atStart: false,
+            connects: 2,
+            disconnects: 1,
+            attempts: 3,
+            reasons: ["transport close"],
+          },
+          work: { "session-init": 1, "chat-load": 1 },
+        },
+      },
+      {
+        sessionId: "abcdef123456",
+        clientTime: 1_800_000_600_000,
+        serverTime: 1_800_000_600,
+        type: "wake",
+        path: "/",
+        data: {
+          kind: "resume",
+          awayMs: 540_000,
+          windowMs: 20000,
+          frames: 1190,
+          socket: { atStart: true, connects: 0, disconnects: 0 },
+          work: {},
+        },
+      },
+    ],
+  });
+  const text = lines.join("\n");
+  assert.match(text, /restored \(iOS reloaded the discarded tab\) · net v6:a1b2c3/);
+  assert.match(
+    text,
+    /LOAD \(iOS restore\) · net v6:a1b2c3 · 20s · frames 900, 12 >50ms, 3 >100ms, max 420ms, jank 2100ms · 1 stall\(s\) 420ms · 41 requests \(2 repeats\) · 18 images · socket down at start, 2 connect\(s\), 1 disconnect\(s\), 3 attempt\(s\) \[transport close\] · work session-init, chat-load · top GET \/user\/session x2, GET \/chat/,
+  );
+  assert.match(text, /RESUME after 9m · 20s · frames 1190/);
 });
