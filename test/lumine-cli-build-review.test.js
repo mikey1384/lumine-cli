@@ -540,6 +540,8 @@ test("a nonzero exit is a teardown warning only after complete evidence and our 
 // A stand-in Chrome that speaks the CDP pipe protocol (fd 3 in, fd 4 out).
 const FAKE_CHROME = String.raw`#!/usr/bin/env node
 const net = require("node:net");
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
 const mode = process.env.LUMINE_FAKE_CHROME_MODE || "clean";
 const url = process.argv[process.argv.length - 1];
 const out = new net.Socket({ fd: 4, readable: false, writable: true });
@@ -571,7 +573,14 @@ input.on("data", (chunk) => {
         break;
       case "Browser.close":
         reply({});
-        if (mode === "clean") setTimeout(() => process.exit(0), 20);
+        if (mode === "inherited-stderr") {
+          const helper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], {
+            stdio: ["ignore", "ignore", process.stderr.fd], detached: true
+          });
+          fs.writeFileSync(process.env.LUMINE_FAKE_HELPER_PID_FILE, String(helper.pid));
+          helper.unref();
+          setTimeout(() => process.exit(0), 20);
+        } else if (mode === "clean") setTimeout(() => process.exit(0), 20);
         else if (mode === "watchdog-hang" || mode === "ignore-term") {
           // Hang past the CLI's close window, as on 10-19, until SIGTERM.
           process.stderr.write("Teardown watchdog expired; recording dump and terminating.\n");
@@ -590,7 +599,23 @@ input.on("data", (chunk) => {
 
 async function managedReviewWithFakeChrome(t, mode) {
   const root = fs.mkdtempSync(path.join(testWorkRoot(), "fake-chrome-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const helperPidFile = path.join(root, "helper.pid");
+  const previousPidFile = process.env.LUMINE_FAKE_HELPER_PID_FILE;
+  process.env.LUMINE_FAKE_HELPER_PID_FILE = helperPidFile;
+  t.after(async () => {
+    if (fs.existsSync(helperPidFile)) {
+      const pid = Number(fs.readFileSync(helperPidFile, "utf8"));
+      try { process.kill(pid, "SIGTERM"); } catch {}
+      for (let i = 0; i < 100; i++) {
+        try { process.kill(pid, 0); } catch { break; }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.throws(() => process.kill(pid, 0), { code: "ESRCH" }, "helper must stop before its folder is removed");
+    }
+    if (previousPidFile === undefined) delete process.env.LUMINE_FAKE_HELPER_PID_FILE;
+    else process.env.LUMINE_FAKE_HELPER_PID_FILE = previousPidFile;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   const chrome = path.join(root, "fake-chrome.cjs");
   fs.writeFileSync(chrome, FAKE_CHROME, { mode: 0o755 });
   const server = http.createServer((req, res) => {
@@ -618,6 +643,17 @@ async function managedReviewWithFakeChrome(t, mode) {
     },
   });
 }
+
+test("a crash reporter retaining stderr cannot keep a completed browser review waiting", { timeout: 15_000 }, async (t) => {
+  const started = Date.now();
+  const result = await managedReviewWithFakeChrome(t, "inherited-stderr");
+  assert.ok(Date.now() - started < 8_000);
+  assert.equal(result.data.review.status, "confirmed");
+  assert.equal(result.data.review.browser.exitCode, 0);
+  assert.equal(result.data.review.browser.forcedTermination, false);
+  assert.equal(result.data.review.browser.stdioDrainTimedOut, true);
+  assert.equal(parseBuildReviewReceipt(result.data.receiptPath).status, "confirmed");
+});
 
 test("a managed review whose Chrome hangs in teardown and exits 2 is confirmed with a teardownWarning", { timeout: 30_000 }, async (t) => {
   const result = await managedReviewWithFakeChrome(t, "watchdog-hang");
