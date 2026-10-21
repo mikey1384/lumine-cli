@@ -2,7 +2,7 @@
 
 Version: 1.68.0
 Updated: 2026-10-16
-Generated: 2026-10-19T05:26:13.264Z
+Generated: 2026-10-21T05:16:33.397Z
 
 ## Notes
 - This SDK is injected into Build iframes via the Build preview/runtime.
@@ -508,9 +508,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Template values describe types, not answers to copy. All object keys are required and extra keys are rejected, including inside nested objects; {} means an exactly empty object, not a free-form dictionary. A non-empty array uses only its first item as the template for every returned item, with no fixed length; mixed examples do not declare a union. [] allows arbitrary JSON items. A null template accepts any JSON primitive (string, number, boolean or null), but the key is still required. Use 'number' for fractional numbers; 0 and other integer examples require integers. State content requirements in prompt or instructions. GPT routes retain descriptive string examples as field guidance, not enforced enum values.
   - GPT models prefer native JSON Schema output for compatible shapes. Shapes outside the strict provider subset, such as [] with arbitrary items or deeply nested structures, use prompt-based JSON generation with the same final validation. A provider rejection specifically of the native schema triggers one prompt-based fallback; auth, quota, safety and unrelated request failures do not trigger that fallback. Validation retries preserve the original task and instructions. The returned object/result shape and streaming callbacks are unchanged.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - Omit model to use the normal Lite/Medium/High routing. Lumine Light defaults to claude-haiku-5-5; gpt-6-luna remains its second choice. Both model IDs accept Low, Medium or High thinking. Explicit claude-sonnet-5-5, gpt-6.1-sol or claude-opus-5-5 still require thinkingMode: 'high'; unknown model IDs reject instead of silently falling back. Retired IDs still work and run on their replacement: claude-sonnet-5 runs claude-sonnet-5-5; gpt-6-sol and gpt-5.6-sol run gpt-6.1-sol; gpt-6-astra, claude-opus-5 and claude-fable-5-1 run claude-opus-5-5.
-  - thinkingMode low uses Claude Haiku 5.5 with low adaptive thinking and consumes the viewer's AI Energy from confirmed provider usage. Set model: 'gpt-6-luna' to choose Luna instead.
-  - thinkingMode medium is Lumine Light: it uses Claude Haiku 5.5 with medium adaptive thinking and consumes normal AI Energy. Set model: 'gpt-6-luna' to keep Luna as the second choice.
+  - Omit model to use the normal Lite/Medium/High routing. Low and Medium use gpt-6-luna; explicit gpt-6-luna accepts Low, Medium or High thinking. Existing apps naming claude-haiku-5-5 now run on gpt-6-luna at the requested thinking level. Explicit claude-sonnet-5-5, gpt-6.1-sol or claude-opus-5-5 still require thinkingMode: 'high'; unknown model IDs reject instead of silently falling back. Retired IDs still work and run on their replacement: claude-sonnet-5 runs claude-sonnet-5-5; gpt-6-sol and gpt-5.6-sol run gpt-6.1-sol; gpt-6-astra, claude-opus-5 and claude-fable-5-1 run claude-opus-5-5.
+  - thinkingMode low uses GPT-6 Luna with low reasoning and consumes the viewer's AI Energy from confirmed provider usage.
+  - thinkingMode medium uses GPT-6 Luna with medium reasoning and consumes normal AI Energy.
   - thinkingMode high without model uses Claude Sonnet 5.5 with high adaptive thinking and consumes high AI Energy. Explicit model: 'gpt-6.1-sol' selects GPT-6.1 Sol with xhigh reasoning at the same High AI Energy tier; model: 'claude-sonnet-5-5' names Sonnet 5.5 directly.
   - claude-sonnet-5-5 and claude-opus-5-5 use Anthropic adaptive High thinking and debit confirmed provider usage at the High tier.
   - Pass onStatus, onReasoning, and/or onText to stream progress from the same structured generation. onStatus receives high-level phases such as thinking, searching_web, responding, validating, and completed.
@@ -519,7 +519,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Put a user-facing field such as producerNotes in expectedStructure when commentary must be part of the validated final object rather than transient reasoning progress.
   - When AI Energy is empty, every automatic or named model choice rejects before new provider work; there is no free fallback mode.
   - Live web search is enabled by default in Medium and High modes. Pass webSearch: false to disable it for the app. Low/Lite Mode remains tool-free; explicitly forcing webSearch: true in Low Mode returns an error.
-  - The server validates the final shape; OpenAI/xAI routes can retry malformed output, while Anthropic routes (claude-haiku-5-5, claude-sonnet-5-5 and claude-opus-5-5) use native JSON Schema output and retry one malformed or shape-invalid result. App code should still validate business-specific enum values.
+  - The server validates the final shape; OpenAI/xAI routes can retry malformed output, while Anthropic routes (claude-sonnet-5-5 and claude-opus-5-5) use native JSON Schema output and retry one malformed or shape-invalid result. App code should still validate business-specific enum values.
   - If the model declines a request, the call rejects with code ai_declined (HTTP 422). The tokens it used are charged to AI Energy like a finished call. Show the viewer a short message so they can rephrase; do not automatically retry the same prompt.
   - Example: const { object } = await Twinkle.ai.generateObject({ thinkingMode: 'high', model: 'claude-opus-5-5', prompt: 'Plan the next section from: ' + currentState, expectedStructure: { producerNotes: 'string', action: 'string', confidence: 'number' }, onStatus: (phase) => showPhase(phase), onReasoning: (summary, meta) => showReasoningProgress(summary, meta), onText: (partialJson, meta) => showStructuredProgress(partialJson, meta) });
 - onChatStatus(listener) | scopes: none
@@ -601,9 +601,9 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - The character route also accepts text or message fields for compatibility, but generated apps should use content.
   - The server keeps the latest 16 valid character history entries.
   - Pass onText/onStatus for streaming dialogue. Omit callbacks for non-streaming dialogue where the promise resolves with the final response.
-  - Inside Build character chat, thinkingMode low uses Lite Mode: Zero uses GPT-6 Luna with reasoning disabled and Ciel uses Claude Haiku 5.5 with low thinking; confirmed provider usage consumes the viewer's AI Energy and is usually cheaper than High.
-  - Inside Build character chat, thinkingMode medium uses the same normal chat model routing: Zero uses GPT-6 Luna with reasoning disabled and Ciel uses Claude Haiku 5.5 with low thinking, with normal AI Energy. If Anthropic is unavailable, Ciel's reply falls back to GPT-6 Luna.
-  - Inside Build character chat, thinkingMode high uses Think Hard chat routing and high AI Energy: Zero uses Grok 4.7 with high reasoning and Ciel uses Claude Opus 5.5 with high thinking.
+  - Inside Build character chat, thinkingMode low uses Lite Mode: Zero uses GPT-6 Luna with reasoning disabled and Ciel uses GPT-6 Luna with reasoning disabled; confirmed provider usage consumes the viewer's AI Energy and is usually cheaper than High.
+  - Inside Build character chat, thinkingMode medium uses the same normal chat model routing: Zero uses GPT-6 Luna with reasoning disabled and Ciel uses GPT-6 Luna with reasoning disabled, with normal AI Energy.
+  - Inside Build character chat, thinkingMode high uses Think Hard chat routing and high AI Energy: Zero uses Grok 4.7 with high reasoning and Ciel uses Claude Opus 5.5 with high thinking, with GPT-6 Luna at high reasoning for recovery.
   - When AI Energy is empty, Low, Medium, and High all reject before new provider work; there is no free fallback mode.
   - Pass roomContext as a short shared scene transcript so Zero and Ciel can know what happened in the same room.
   - includeWebsiteContext defaults to true. Set includeWebsiteContext: false for in-world NPC dialogue that should only use Zero/Ciel's basic character identity plus your scene/instructions.
