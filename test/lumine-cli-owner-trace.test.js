@@ -148,14 +148,14 @@ test("owner-trace --perf asks only for the performance events", () => {
   );
   assert.equal(
     perf.path,
-    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load%2Cscroll-perf%2Cscroll-frame%2Cwake",
+    "/cli/admin/owner-trace?since=1h&limit=300&type=nav-timing%2Cslow-request%2Cstall%2Cpage-load%2Cscroll-perf%2Cscroll-frame%2Cwake%2Cwake-viewport",
   );
   const merged = parseAdminOperation(
     parseArgs(["admin", "owner-trace", "--type", "route,stall", "--perf"]),
   );
   assert.match(
     merged.path,
-    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load%2Cscroll-perf%2Cscroll-frame%2Cwake$/,
+    /type=route%2Cstall%2Cnav-timing%2Cslow-request%2Cpage-load%2Cscroll-perf%2Cscroll-frame%2Cwake%2Cwake-viewport$/,
   );
 });
 
@@ -265,7 +265,7 @@ test("owner-trace --wake reads sessions and wake profiles and prints them readab
   );
   assert.equal(
     operation.path,
-    "/cli/admin/owner-trace?since=3d&limit=300&type=session%2Cwake",
+    "/cli/admin/owner-trace?since=3d&limit=300&type=session%2Cwake%2Cwake-viewport%2Ctrace-dropped",
   );
   const lines = formatOwnerTrace({
     since: 1_800_000_000,
