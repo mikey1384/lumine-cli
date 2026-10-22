@@ -5402,6 +5402,36 @@ Since 2026-10-17 Bridge Builder unlocks from QR check-ins: 7 different people, o
 Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
 
 
+## Nonogram picture collection
+
+Nonogram's `nonogram-picture-v1` proof uses a private, reviewed picture bank.
+During full daily management, inspect artwork quality and the least unseen
+supply at each size; the target reserve is 14 days at three pictures per size
+per day. This is content maintenance under Mikey's standing daily scope, not
+permission to change reward amounts or publish a creator's app.
+
+```
+lumine admin nonogram status --json
+lumine admin nonogram add --file <pictures.json> --json
+lumine admin nonogram add --file <pictures.json> --confirm --json
+lumine admin nonogram retire <key> [--confirm]
+lumine admin nonogram restore <key> [--confirm]
+```
+
+An import file is an array of 1–150 pictures: `{ key, title, category, rows,
+artReview, difficultyReview }`. `rows` is a 5×5, 10×10 or 15×15 array of binary
+strings. Titles are plain text, at most 80 characters. Draw recognizable art
+first, verify its unique no-guess solve, and visually review it at play size
+before importing. Record actual visual features and the deduction/difficulty
+review, not just a pass count. Never pad the reserve with weak art or variants.
+The server rejects ambiguous puzzles, skips mirror/rotation duplicates, and
+refuses changing the solution under an existing key. Default operations are
+dry runs; confirmed writes are audited. Retirement affects future assignments
+only, preserving started puzzles and receipt recovery. Status separates total
+active pictures from the least unseen supply for the leading live learners.
+Previews have separate assignments. Solutions stay private; catalog refills
+need no app update. Keep prepared inventory distinct from verified live stock.
+
 ## Word Search vocabulary upkeep
 
 Every full daily website-management run adds reviewed Word Master words across all five difficulty bands, with accurate definitions and natural example sentences. Use `lumine admin word-games status`, `candidates <1-5> --after <id> --limit 100`, and `import <reviewed-words.json> --dry-run` followed by the reviewed import. File shape: `{items:[{wordId,word,wordLevel,definition,example}]}` (up to 100). Candidate exports are unreviewed; use agent judgment and check the current censor table before importing. No paid batch APIs. The import is audited and preserves active generation and today's existing puzzles; future banks include the additions. The app receives all five ready banks in its normal HTML and has a bundled checked fallback, so word selection never creates a loading screen or separate word request. Report additions per difficulty and text corrections. Repository agents follow `agent-guides/word-search-vocabulary.md` for the full procedure. A scoped management request does not start this full-run duty.
