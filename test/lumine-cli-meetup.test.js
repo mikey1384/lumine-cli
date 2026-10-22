@@ -162,3 +162,17 @@ test("meetup write receipts keep the decision, never the crew view", () => {
   const other = { ok: true, data: { x: 1 } };
   assert.equal(receiptToKeep({ name: "teachers.revoke" }, other), other);
 });
+
+
+test("meetup completion decisions pin the reviewed evidence", () => {
+  assert.throws(() => op(["review-completion", "12", "--decision", "approve"]), /fingerprint/);
+  const fingerprint = "b".repeat(64);
+  const operation = op(["review-completion", "12", "--decision", "approve", "--fingerprint", fingerprint]);
+  assert.equal(operation.path, "/cli/admin/meetup-quest/crews/12/checkin-review");
+  assert.deepEqual(operation.body, { isApproved: true, fingerprint });
+});
+
+test("achievement meetup decisions carry the fingerprint supplied by the reviewer", () => {
+  const operation = parseAdminOperation(parseArgs(["admin", "approvals", "approve", "12", "--fingerprint", "c".repeat(64)]));
+  assert.equal(operation.body.fingerprint, "c".repeat(64));
+});

@@ -5482,9 +5482,9 @@ For total JEV cost, include `dailyAiCosts.byProviderModel` for TypeSafe/JEV acro
 
 ## Bridge Builder crews and check-ins (no daily run required)
 
-Since 2026-10-17 Bridge Builder unlocks from QR check-ins: 7 different people, or one meetup a grown-up witnessed. Crews no longer wait for staff approvals. On the website, Zero and Ciel acting for an admin can make the staff decisions below (who-are-you checks, branch corrections and branch reviews). They use the same routes as the admin's own taps, and only after the admin's yes on the approval card (Mikey, 2026-10-10). A member's Zero or Ciel still cannot.
+Bridge Builder qualifies from QR check-ins: 7 different people, or one meetup a grown-up witnessed. Since Mikey’s 2026-10-22 ruling, every physical meetup completion waits for his manual review before the achievement or public crew milestone. The separate recruitment route remains automatic. The retired plan/video workflow stays retired. On the website, Zero and Ciel acting for an admin can make the staff decisions below (who-are-you checks, branch corrections and branch reviews). They use the same routes as the admin's own taps, and only after the admin's yes on the approval card (Mikey, 2026-10-10). A member's Zero or Ciel still cannot.
 
-- `lumine admin meetup list` shows crews whose member answered a who-are-you check. `list --status active` shows every live crew, and `list --status completed` the crews that have met up.
+- `lumine admin meetup list` shows pending meetup completions and crews whose member answered a who-are-you check. `list --status active` shows every live crew, and `list --status completed` the crews that have met up.
 - `lumine admin meetup show <crewId>` shows canonical progress, who checked in, the tier and private staff evidence.
 - `lumine admin meetup info <crewId> <userId> --decision ask|accept|ask-again|withdraw` is a **private identity check**. Its question and answer are visible only to the named member and staff. Until staff accept, that member doesn't count toward the crew's tier.
 - `lumine admin meetup set-branch <crewId> <userId> --branch <name> [--note <text>]` corrects a member's branch instead of a database write.
@@ -5495,7 +5495,9 @@ Since 2026-10-17 Bridge Builder unlocks from QR check-ins: 7 different people, o
 - `lumine admin meetup funnel [--days <1-90>]` shows views, crews by stage, and check-ins: pairs, how many were on one network or at an academy, and refusals by reason.
 - `lumine admin meetup emails` lists parent emails held for review. Kind `witness` is a child asking a parent to be the grown-up.
 - `lumine admin meetup announce-checkins [--send] [--as zero|ciel]` is about the one-time announcement of the check-in rework in each crew chat. It posts itself when the website with check-ins is out. The messages are pre-written; without `--send` this only shows them. `--send` retries a crew whose post failed. Each crew gets it once.
-- **Held unlocks:** a member who reached 7 people when no counted check-in was on one network or at an academy gets a `meetup` approval item instead of an instant unlock (`lumine admin approvals list --type meetup`). Approving it unlocks Bridge Builder.
+- **Held unlocks:** every physical-meetup qualification gets a `meetup` approval item (`lumine admin approvals list --type meetup`). `approvals show <id> --json` includes `meetupEvidence` for all participants. After Mikey decides, use `approvals approve|reject <id> --fingerprint <meetupEvidence.fingerprint>`. Proximity never bypasses review.
+- **Crew completions:** `meetup show <crewId> --json` includes the same owner-only scan packet. After Mikey decides, use `meetup review-completion <crewId> --decision approve|reject --fingerprint <meetupEvidence.fingerprint>`. The decision fails if the shown evidence or proposed attendance changed. New attendees and tier upgrades need a new decision.
+- **Evidence:** the browser used for every scan, its first/last observed use by that account, previous browsers, other accounts seen on that browser, current account-identity overlaps, every witness attendee’s scan time and proximity, and explicit gaps/caps. History is frozen at scan time. Browser IDs can be reset/copied; shared devices and networks are clues, never a verdict. Older scans cannot recover missing device snapshots.
 
 Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
 
