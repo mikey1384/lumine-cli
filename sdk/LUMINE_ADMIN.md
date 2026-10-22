@@ -1837,6 +1837,15 @@ and seeding coverage for steps 1-3 once the app is approved.
 
 ### Reward activity report (standing duty, every full daily review; added 2026-09-12)
 
+Also inspect failed or unconfirmed payouts with `lumine admin reward-diagnostics --days 1 --json`.
+Follow `nextCursor` using `--cursor <id>`; narrow an incident with `--build <id> --user <id>`
+to see correlated request observations alongside canonical challenges and receipts.
+The trail is best effort, retained for 30 days, and has no coverage before deployment.
+Read `reward-diagnostics-coverage` runtime warnings for dropped writes or retention backlog.
+A delayed client report's reporting version is not necessarily the original request's version;
+use its request ID to find the authoritative server event. Neither an open challenge nor a
+client error proves an unpaid eligible solve. Never infer a payment repair from those alone.
+
 Completion rewards (Arcade Typing's stage clears) prove nothing but elapsed
 time, so the run reads the shape of the week's claims instead of trusting them:
 
