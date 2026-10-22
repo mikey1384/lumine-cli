@@ -351,3 +351,11 @@ test("craft reads are callable from the CLI; hint only peeks and merge stays the
   assert.deepEqual(SDK_CLI_METHODS["craft.hint"].mapArgs({ peek: false }), { peek: true });
   assert.equal(SDK_CLI_METHODS["craft.merge"], undefined);
 });
+
+
+test("collection SDK calls preserve the exact set and reject unrelated client fields", () => {
+  for (const name of ["rewards.start", "rewards.getRelatedArchive"]) {
+    assert.deepEqual(SDK_CLI_METHODS[name].mapArgs({ ruleId: "e1-daily", setKey: "e1-04", xp: 999, userId: 5 }),
+      { ruleId: "e1-daily", setKey: "e1-04" });
+  }
+});
