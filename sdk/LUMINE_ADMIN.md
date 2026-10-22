@@ -1607,6 +1607,7 @@ lumine admin owner-trace --since 30m                       # readable timeline, 
 lumine admin owner-trace --since 2026-10-06T09:00 --type route,feed-open
 lumine admin owner-trace --path /comments/123 --json        # raw rows
 lumine admin owner-trace --since 1h --perf                 # performance events only
+lumine admin owner-trace --since 24h --wake --limit 2000   # wake profiles and viewport geometry
 ```
 
 Event types: `session` (version, viewport, platform, PWA or tab), `route`
@@ -1629,6 +1630,26 @@ with query keys only, status, ms, scheduler queue time), `stall` (main-thread
 gaps over 200 ms while the page is visible, bursts within 1 s coalesced) and
 `page-load` (once per load: TTFB, DOMContentLoaded, load, first route ready,
 ms since navigation start).
+
+`--wake` includes `session`, `wake`, `wake-viewport` and `trace-dropped`.
+`wake-viewport` is bounded owner-only geometry on load/return/`pageshow`, at
+250ms/1s/3s/20s and once when backgrounded. It records viewport sizes/offsets,
+nav and shell bounds, scroll, keyboard inset and focused-control type, never
+control contents. Normal wakes are retained for comparison. `--perf` also
+includes the geometry rows. The session's `viewportTrace: 1` marks support;
+older tabs do not acquire it until they load a version containing the change.
+
+`daily-run gather` additionally saves `owner-wake.json`, the retained session
+context in `owner-wake-sessions.json`, and `owner-wake-summary.json` / `.md`.
+Include the coverage and follow-up in the daily report. A >=100px settled gap
+under a fixed bottom-anchored nav is an investigation candidate, not a diagnosis.
+The desktop top nav is excluded; repeated candidates need at least 500ms of
+actual time separation, not timers released together after a stall. No usable
+samples is unavailable, not healthy; missing measurements on another observed
+client make coverage partial. Network tags describe the upload network, which can differ from
+the capture network. Check truncation: the endpoint has no backward cursor or
+end-time filter; splitting by event type can reduce caps, but narrowing the
+start time cannot recover older omitted rows. Preserve unresolved coverage.
 
 ### Who holds which management level (any time, read-only; added 2026-10-10)
 
@@ -3897,8 +3918,10 @@ lumine admin spending --aws-profile <profile> --json
 This owner-only read needs no delegated run. With no dates, it reports the
 previous and current UTC calendar months. Use `--month` for one month, or both
 `--from` and `--to` for an inclusive range of up to 12 months. Future months
-are refused. The current month ends at today's UTC midnight; today's partial
-AI usage is returned separately and excluded from all totals.
+are refused. Current-month AI and AWS usage ends at today's UTC midnight;
+today's partial AI usage is returned separately and excluded from totals.
+Paid reimbursements include today's settled payments through the report time.
+Their separate cutoff is explicit in the table and JSON.
 
 The default output is a table separating AI costs after promotional credits,
 AWS infrastructure including tax, and reimbursements, with a combined total.
@@ -3929,8 +3952,9 @@ month's `ai`, `aws`, `reimbursements`, `providerOperatingCostUsd`, and
 sources are `null`, never zero. A partial report preserves available data,
 sets `complete: false` and receipt `status: "partial"`, saves with `--output`,
 and exits nonzero. Unknown provider attribution or AWS-billed AI can make a
-combined total unavailable until the credit/overlap is reconciled. Zero on
-the first UTC day means no completed days, not a full-month forecast.
+combined total unavailable until the credit/overlap is reconciled. Zero usage
+on the first UTC day means no completed days, not a full-month forecast;
+reimbursements paid on that day still contribute to the total.
 
 This report does not replace the existing AI run-rate projections or AWS
 remaining-period forecast required for a full daily-management review.

@@ -267,6 +267,45 @@ test("AWS-billed AI is not counted twice", async () => {
   assert.match(result.data.spending.warnings.join(" "), /overlap/);
 });
 
+test("a payment settled today appears immediately, including on the first UTC day before any usage is complete", async () => {
+  const source = fixture();
+  const report = source.data.spending;
+  report.range.startDayKey = report.range.endDayKeyExclusive = "2026-10-01";
+  report.months = [
+    {
+      ...report.months[2],
+      startDayKey: "2026-10-01",
+      endDayKeyExclusive: "2026-10-01",
+      throughDayKey: null,
+      ai: { grossUsd: 0, creditUsd: 0, estimatedCashUsd: 0 },
+      reimbursements: {
+        totalUsd: 500,
+        aiServiceUsd: 0,
+        infrastructureUsd: 500,
+      },
+    },
+  ];
+  report.sources.reimbursements = {
+    includesCurrentDay: true,
+    endAtExclusive: Date.parse("2026-10-01T05:00:00Z") / 1000 + 1,
+  };
+  const result = await completeSpendingReport(source, {}, async () => {
+    throw new Error("No completed AWS usage to query");
+  });
+  assert.equal(result.data.spending.complete, true);
+  assert.equal(
+    result.data.spending.totals.totalIncludingReimbursementsUsd,
+    500,
+  );
+  const table = formatSpending(result.data.spending);
+  assert.match(table, /AI\/AWS: no completed UTC days/);
+  assert.match(
+    table,
+    /Reimbursements include today's settled payments through 2026-10-01T05:00:00.000Z/,
+  );
+  assert.match(table, /Selected-period total: \$500.00/);
+});
+
 test("unknown credit amount cannot become a zero AI cost in the combined total", async () => {
   const source = fixture();
   source.data.spending.months[0].ai.estimatedCashUsd = null;
