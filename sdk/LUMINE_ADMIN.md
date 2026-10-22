@@ -3886,6 +3886,58 @@ input snapshots as described below.
 See `twinkle-api/JEV_PILOT.md` for configuration,
 the synthetic evaluation step and release checks.
 
+### Spending by calendar month
+
+```bash
+lumine admin spending --from 2026-08 --to 2026-10
+lumine admin spending --month 2026-09 --json --output work/spending-september.json
+lumine admin spending --aws-profile <profile> --json
+```
+
+This owner-only read needs no delegated run. With no dates, it reports the
+previous and current UTC calendar months. Use `--month` for one month, or both
+`--from` and `--to` for an inclusive range of up to 12 months. Future months
+are refused. The current month ends at today's UTC midnight; today's partial
+AI usage is returned separately and excluded from all totals.
+
+The default output is a table separating AI costs after promotional credits,
+AWS infrastructure including tax, and reimbursements, with a combined total.
+It also shows gross AI usage, credits, and AI-service versus infrastructure
+reimbursements. JSON includes provider and AWS-service details and the paid
+invoice references and dates. AI is a usage-based estimate. Credits follow
+the server's private billing policy and account for usage earlier in the same
+credit cycle, even when that usage predates the requested calendar month.
+
+The API supplies the canonical AI ledger and paid reimbursement history.
+Reimbursements use settlement dates, including old invoices paid later, and
+include all known subscription histories and invoice pages. They are gross
+paid amounts, not Stripe fee/refund or bank-payout reconciliation. Failed,
+expired and pending attempts are excluded; no payment or subscription action
+is performed. Reimbursements are a separate category included in the total;
+`providerOperatingCostUsd` also provides AI plus AWS without reimbursements.
+
+AWS reads use the installed AWS CLI and the existing billing profile, or
+`--aws-profile`. The command checks the required account and principal before
+querying Cost Explorer, paginates service groups, validates exact UTC periods
+and USD currency, and preserves provisional billing status. It never changes
+AWS credentials or infrastructure. Cost Explorer's ordinary query fees apply.
+AWS authentication stays local; it is not uploaded to Twinkle.
+
+`data.spending` is versioned with `schemaVersion: 1`. `months` contains each
+month's `ai`, `aws`, `reimbursements`, `providerOperatingCostUsd`, and
+`totalIncludingReimbursementsUsd`; `totals` sums the selected period. Missing
+sources are `null`, never zero. A partial report preserves available data,
+sets `complete: false` and receipt `status: "partial"`, saves with `--output`,
+and exits nonzero. Unknown provider attribution or AWS-billed AI can make a
+combined total unavailable until the credit/overlap is reconciled. Zero on
+the first UTC day means no completed days, not a full-month forecast.
+
+This report does not replace the existing AI run-rate projections or AWS
+remaining-period forecast required for a full daily-management review.
+Release dependency: deploy the owner-authorized `/cli/admin/spending` API
+before publishing the CLI that calls it. No new database migration, npm
+dependency or server-side AWS permission is required.
+
 ### Application AI calendar-month cost (standing duty, every full daily review)
 
 Run `lumine admin ai-costs monthly --json` during every full daily management
