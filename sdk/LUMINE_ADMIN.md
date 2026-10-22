@@ -636,20 +636,22 @@ it never authorizes unrelated daily work or generic recommendation commands.
 
 Mikey added Math Lab question design and publishing to the full daily workflow
 on 2026-09-08. Follow [Math Lab daily question publishing](../../agent-guides/math-lab-daily.md)
-for the canonical Build 2460, owner account, twelve grade queues of ordered
-until-earned puzzles, verification, repeat-run recovery, release gates, and
-final reporting. Every full daily run reports each grade's current question,
-whether it was cleared today, uncleared published questions remaining, and
-refill status. Count distinct cleared keys across all users and the app's full
-history against the live approved sheet; the recent usage window and draft
-additions are not the live inventory. At four or fewer remaining, prepare a
-refill to at least twenty, with complete interactive guides, and track it until
-approved publication. Report one or zero remaining prominently. Details are
-in the linked guide's **Daily queue monitoring and refill** section.
+for the canonical Build 2460, owner account, twelve grade collections,
+verification, repeat-run recovery, release gates, and final reporting.
+Since 2026-10-22, another member solving a puzzle does not remove it. Every full
+daily run reports each grade's collection size, 30-day active learner count,
+minimum and median fresh choices, and refill status. For each active learner,
+exclude all-history solves, attempts, practice and studied lessons, including
+rematches. At four or fewer minimum fresh choices, append enough unique
+puzzles with complete interactive guides to restore that minimum to twenty.
+Track the refill until approved publication; draft additions never count as
+live stock. Report one or zero fresh choices prominently. Legacy
+`until-earned` rules retain the global queue procedure in the linked guide.
 Read this inventory with `lumine admin math-lab queue --json`. Its receipt
 binds the published artifact and live reward review, includes all twelve
-grades, and reports incomplete coverage explicitly. Today’s cleared set stays
-current until UTC midnight, but no longer counts as unearned inventory.
+grades, and reports incomplete coverage explicitly. Read each live rule's
+progression before choosing the inventory calculation; daily bounty limits
+remain separate from access to the permanent collection.
 This is not part of Featured-only or newspaper-only work and is not a new
 scheduler, delegated API scope, or automatic extension of admin permissions.
 Use the expressly authorized owner Build workflow for Math Lab; retain the
@@ -1522,9 +1524,11 @@ Rule fields (all server-enforced, none inferred from app code):
 - Top-level `userDailyClaims`: receipts one learner may earn per site day
   across all rules. `1` is "one bounty a day".
 
-Math Lab's economy (Mikey, equal pay 2026-10-04): twelve level rules, one per grade per
-day, all paying 70,000 XP + 5,000 Coins; `retry` 50 % XP / 0 % Coins; `maxAttempts` null;
-`userDailyClaims` 1; until-earned sets authored from the Korean curriculum.
+Math Lab's economy (Mikey, equal pay 2026-10-04; persistent collection 2026-10-22):
+twelve grade rules, all paying 70,000 XP + 5,000 Coins; `retry` 50 % XP / 0 % Coins;
+`maxAttempts` null; `userDailyClaims` 1. Collection puzzles follow the Korean
+curriculum, stay available after others solve them, and pay each learner at
+most once per puzzle. The daily paid allowance remains separate from free practice.
 Arcade Typing (Mikey, 2026-09-12): XP for clearing campaign stages, up to
 10,000 XP per learner per day, no Coins. Platform ceilings: 100,000 XP /
 10,000 Coins per rule and per learner per day. No app-wide ceiling exists,
