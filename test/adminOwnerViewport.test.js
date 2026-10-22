@@ -90,7 +90,9 @@ test("daily gather collects wake/session evidence and creates an explicit report
   try {
     const result = await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
       calls.push(args);
-      const data = args[0] === "bot-output" ? { pagination: { exhausted: true } } : { events: [], truncated: false };
+      const data = args[0] === "bot-output" ? { pagination: { exhausted: true } }
+        : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
+        : { events: [], truncated: false };
       const json = { ok: true, status: "ok", data };
       fs.writeFileSync(outputFile, JSON.stringify(json));
       return { ok: true, attempts: 1, durationMs: 1, json };
@@ -116,7 +118,9 @@ test("failed wake collection is explicit and cannot reuse a previous run's succe
     fs.writeFileSync(path.join(dir, "owner-wake.json"), JSON.stringify({ ok: true, data: { events: [sample()] } }));
     const result = await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
       if (args[0] === "owner-trace" && args.includes("--wake")) return { ok: false, attempts: 1, durationMs: 1, json: { error: { code: "unavailable" } } };
-      const data = args[0] === "bot-output" ? { pagination: { exhausted: true } } : { events: [], truncated: false };
+      const data = args[0] === "bot-output" ? { pagination: { exhausted: true } }
+        : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
+        : { events: [], truncated: false };
       const json = { ok: true, status: "ok", data };
       fs.writeFileSync(outputFile, JSON.stringify(json));
       return { ok: true, attempts: 1, durationMs: 1, json };

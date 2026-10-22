@@ -1184,8 +1184,8 @@ lumine admin report serve --file <dir>/daily-management-report.md [--port <n>] [
 ```
 
 These compose the documented commands in this contract, running them as child processes, so every scope check, audit and pagination rule applies unchanged.
-- **`gather`** saves its fixed set of read-only reports into `<dir>`, including the canonical published Math Lab queue in `math-lab-queue.json`. It is not the complete daily checklist: app refills/usage, all-type Build reviews, sponsor integrity and other duties need their own steps. Repository agents follow the current full-run coverage index in `agent-guides/lumine-admin.md`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. Total/per-step `durationMs`, attempts and recovered reads make recurring slow or failing collection steps visible during the daily review. It also creates `review-state.json`: every source is fetched, not read. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
-- **`progress`** reads local review state and explicit operator acknowledgments, writes private `progress.json`, and keeps reading, canonical effort mutations, the run lease, and browser checks separate. Add all required duties for the actual run scope and its carryovers; collection alone is not a full review. A completed run lease cannot complete a pending duty. Reading acknowledgments bind to the current file bytes and are operator attestations, not proof of comprehension.
+- **`gather`** saves its fixed set of read-only reports into `<dir>`, including the canonical published Math Lab queue in `math-lab-queue.json` and all types of pending Build review requests in `build-reviews-N.json`. Build reviews follow `nextCursor` to exhaustion; `gather.json` → `buildReviews` records `complete`, attempted `pages` and collected `items`. A failed/malformed page, cursor loop or 100-page bound reports incomplete coverage, never an empty healthy queue. Read the current collection once; it replaces the rewards-only list. Older packages without `buildReviews` need a separate `review list --status pending` collection through cursor exhaustion. Previous queue receipts remain on disk as history but do not become current evidence or duplicate reading duties after a new gather. It is not the complete daily checklist: app refills/usage, individual review assessments, sponsor integrity and other duties need their own steps. Repository agents follow the current full-run coverage index in `agent-guides/lumine-admin.md`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. Total/per-step `durationMs`, attempts and recovered reads make recurring slow or failing collection steps visible during the daily review. It also creates `review-state.json`: collection never acknowledges reading. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
+- **`progress`** reads local review state and explicit operator acknowledgments, writes private `progress.json`, and keeps reading, canonical effort mutations, the run lease, and browser checks separate. `collectionFailures` includes failures without a page file, such as a cursor loop; acknowledging the available files cannot make an incomplete collection complete. A fresh successful gather clears those failures. Add all required duties for the actual run scope and its carryovers; collection alone is not a full review. A completed run lease cannot complete a pending duty. Reading acknowledgments bind to the current file bytes and are operator attestations, not proof of comprehension.
 - **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured. Each one comes with its human/bot comment counts, explicit comment truncation/completeness, and whether Mikey has viewed it. Counts from truncated context are partial. An unavailable Subject context fails the collection. Eligibility only: ranking stays editorial.
 - **`report serve`** detaches a loopback server that answers only `/`, `marked.min.js` and the report Markdown. `--open` opens Chrome and reports whether the OS accepted the request. Render, navigation and original-source verification remain pending until actually checked. Startup failures stop only the child this command started.
 
@@ -1292,20 +1292,21 @@ JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 
 Everything a creator asks Mikey to unlock is one review request with a type:
 `rewards` (XP & Coin rewards, below), `project-limit` (more project room),
-`storage-limit` (more Lumine file storage, per creator) and `cardcraft` (an AI
-Card crafting recipe). Mikey sees them in one list (Management → **Build
+`storage-limit` (more Lumine file storage, per creator), `cardcraft` (an AI
+Card crafting recipe) and `soundtrack` (soundtrack requests). Mikey sees them in one list (Management → **Build
 approvals**, or the CLI below), gets the same DM card for each, and decides
 them the same way. Each type keeps its own rules: reward approvals carry the
 earning rules and publish the frozen version; storage approvals take a size
 (500 MB / 1 GB / 2 GB tiers, any size up to the 2 GB cap, never lowering an
 existing approval); project room approvals raise Main to the fixed bounds;
 card crafting approvals make the recipe live in the published app without a
-new release. Only rewards and card crafting approvals can be revoked. The
+new release. Rewards, card crafting and soundtrack approvals can be revoked. The
 older per-type commands (`reward-review`, `cardcraft-review`, `storage
 approve|reject|list`) are aliases of these routes and keep working.
 
 ```bash
 lumine admin review list --json                       # waiting on a decision (default)
+lumine admin review list --status pending --cursor <nextCursor> --json # continue until nextCursor is null
 lumine admin review list --status queue --type storage,project --json
 lumine admin review show storage:12 --json             # <type>:<id>, or <id> --type storage
 lumine admin review approve storage:12 --size 1GB --json
@@ -1313,12 +1314,14 @@ lumine admin review reject project:4 --reason "Split the big file first" --json
 lumine admin review approve cardcraft:3 --json
 lumine admin review revoke cardcraft:3 --reason "Too strong for level 1 cards" --json
 lumine admin review approve rewards:70 --config rules.json --json
-lumine admin review propose rewards:70 --dir /private/tmp/reward-review-70 --config rules.json --json
+lumine admin review propose rewards:70 --dir work/reward-review-70 --config rules.json --json
 ```
 
 ### Management approvals and the teacher audit (any time; also a full-daily-review duty; added 2026-10-04)
 
 Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with its evidence: the account, the request, who invited them, accounts linked by verified email, exact device or a manual identity bucket (with each one's age and role), the internet addresses the account acted from (network evidence, below), activity, and flags. These are Mikey-only and need no daily run.
+
+**Cadence (Mikey, October 22):** pending approvals and the teacher watch stay in every full daily run. Run the full teacher audit weekly, or sooner for a new teacher or materially changed evidence. Record the last complete audit and next due date; if that history is unavailable, perform the audit. Do not re-submit unchanged cases for another decision. This changes the collection cadence, not who decides an account's status.
 
 ```bash
 lumine admin approvals list [--status pending|approved|rejected|all] [--type dob|mentor|meetup]
@@ -1598,7 +1601,7 @@ leaves the offered media as unused uploads in the creator's library.
 
 ### Owner client trace (any time, read-only; added 2026-10-06)
 
-When Mikey reports a UI issue from his phone, read what his browser did
+When Mikey reports a UI issue on desktop or mobile, read what his browser did
 before guessing. Only the owner's own signed-in browser records it (everyone
 else's is a no-op and the upload route refuses them); the server keeps 30 days.
 
@@ -1617,7 +1620,7 @@ triggered and the tapped element's tag, card position), `scroll-anchor` (the
 scroll-anchor diagnostics: save/restore/cancel with scroll numbers),
 `content-scroll` (scrollTop at mount, when the content is ready, and 1 s/3 s
 later), `error`/`rejection` (short message and source file), `visibility`,
-`pagehide`, `trace-dropped`. Times are the phone's clock in this machine's
+`pagehide`, `trace-dropped`. Client times come from the device's clock, displayed in this machine's
 time zone. Ids and paths only, never message text or other members' content.
 
 Performance events (`--perf` shows only these): `nav-timing` (one per
@@ -1629,8 +1632,15 @@ one committed), `slow-request` (API requests over 1 s: method, path pattern
 with query keys only, status, ms, scheduler queue time), `stall` (main-thread
 gaps over 200 ms while the page is visible, bursts within 1 s coalesced) and
 `page-load` (once per load: TTFB, DOMContentLoaded, load, first route ready,
-ms since navigation start).
+ms since navigation start). Published 0.3.55 also includes `scroll-perf`
+(bounded scrolling-frame summaries), `scroll-frame` (frame attribution) and
+`wake` (return-to-tab work) in `--perf`. Session headers and `trace-dropped`
+need separate types or the explicit daily collection request; `--perf` alone
+does not establish device context or complete coverage.
 
+CLI 0.3.57 includes the following wake-viewport additions and their daily
+coverage report. Older 0.3.55 packages do not contain them; upgrade or use
+the current repository CLI (`node lumine-cli/bin/lumine.js`).
 `--wake` includes `session`, `wake`, `wake-viewport` and `trace-dropped`.
 `wake-viewport` is bounded owner-only geometry on load/return/`pageshow`, at
 250ms/1s/3s/20s and once when backgrounded. It records viewport sizes/offsets,
@@ -1768,7 +1778,15 @@ lumine admin craft unfizzle --build 1499 --since 2026-10-13T00:00:00Z --confirm
   try the pair asks again. `--since` and `--pair` narrow it; up to 5,000
   fizzles are scanned per run.
 
-### Reward question-bank seeding (every full daily review; added 2026-09-28)
+<a id="reward-question-bank-seeding-every-full-daily-review-added-2026-09-28"></a>
+
+### Reward question-bank inspection and optional seeding
+
+**Math Studio #2655 seeding was stopped by Mikey on October 4.** Its coverage
+and learner-health report remain daily duties. The `seed` command below is a
+technical capability, not permission to run it: neither a full daily run nor
+missing bank slots resumes the stopped seeding plan. Any resumption needs
+Mikey's explicit app, scope and spending instruction.
 
 `generated-quiz` rules fill a question bank on the server: a question is
 written for one declared topic at one ladder step (GPT-6.1 Sol) and kept only
@@ -1778,7 +1796,7 @@ them so the first learner on a unit never waits or pays.
 
 ```bash
 lumine admin reward-bank coverage <buildId> [--max-step 3] [--json]   # read-only, no run
-lumine admin reward-bank seed <buildId> [--max-step 3] [--json]       # delegated full run
+lumine admin reward-bank seed <buildId> [--max-step 3] [--identity zero|ciel] [--json] # explicit seeding authority
 lumine admin reward-bank report <buildId> [--days 1] [--json]         # read-only telemetry
 lumine admin reward-bank question <buildId> --question-id <id> [--json]
 lumine admin reward-bank repair <buildId> --file <repair.json> --dry-run [--json]
@@ -1822,9 +1840,11 @@ and seeding coverage for steps 1-3 once the app is approved.
   (about 20–40 s; the CLI allows 4 minutes) and returns `seeded`
   (`questionId`, `ruleId`, `topicKey`, `step`) or `complete: true`, plus
   `coverage` (`filled` / `total`).
-- It needs the `reward:bank-seed` scope, which only full delegated runs carry.
-  The question is written as the run identity (Zero or Ciel) and billed to
-  that account's own AI Energy. It never pays anyone and opens no challenge.
+- Inside a delegated run it needs `reward:bank-seed`, carried only by full
+  runs; the approved operator can also call it without a run using a Zero/Ciel
+  identity. This route support does not override the seeding stop. The question
+  is billed to that identity's own AI Energy; it never pays anyone or opens a
+  challenge.
 - It refuses unless the app's rewards are approved and published
   (`CLI_ADMIN_BUILD_REWARD_BANK_NOT_LIVE`), and refuses to store a question
   if the approval changed while it was being written
@@ -1832,8 +1852,8 @@ and seeding coverage for steps 1-3 once the app is approved.
   `CLI_ADMIN_BUILD_REWARD_BANK_UNVERIFIED` means the two solves disagreed
   twice; nothing was stored.
 - Which apps to seed, how many steps and how many per run are Mikey's
-  decisions, recorded in the agent guide (Math Studio #2655: steps 1–3, at
-  most 20 per run).
+  decisions. The old Math Studio steps 1–3 / 20-per-run recipe is historical,
+  not current authorization.
 
 ### Reward activity report (standing duty, every full daily review; added 2026-09-12)
 
@@ -2028,6 +2048,8 @@ refused. Daily reports include pending follow-ups and their latest progress.
 Apply `add-ai-daily-followups.sql` before deploying this API/CLI capability.
 
 ### Operator carryovers
+
+Keep unresolved investigations, release dependencies and creator decisions visible with their exact next evidence trigger. Once a bug is verified closed, ordinary logs/health telemetry cover it; do not require a separate daily retest or write-up. Reopen on a recurrence, new report, contradicting evidence or a relevant code change. No new event is not proof that an unresolved item is fixed.
 
 ```bash
 lumine admin todo list --json
@@ -3842,7 +3864,8 @@ without a comparison carry `baselineStatus: not_run`; its fallback LLM spend is
 unchanged. Chat routing is also off since September 23
 (`JEV_CHAT_ROUTING_ENABLED`, default off; Jev served ~1% of chats and could not
 judge when a reply needs older history), so zero chat serving rows is expected.
-The rest of this section describes the pre-September-23 pilot.
+The current daily procedure follows. Paired reaction/emoji checks and the 5%
+served-route audit belong to the historical pilot, not new daily evidence.
 
 Read `data.jevPilot` from `lumine admin brief --json` and carry it into
 the full report for Mikey. The active `daily-run report --json` also includes
@@ -3852,37 +3875,20 @@ treat a missing section as zero traffic or a healthy pilot.
 
 State the configuration and operating status even when off/blocked/awaiting
 samples. Headline the named last completed UTC day, compare with the trailing
-seven completed days, and keep the in-progress day separate. Include paired
-decision counts, disagreements (especially Jev react / baseline respond),
-p50/p95 latency for each model, provider errors/timeouts, pending observations,
-known incremental cost, unknown-cost requests, ledger gaps and cap status.
-Separate `bySurface.comment` from `bySurface.chat`. For chat, report
-`routingFieldDisagreements`, `candidateSkippedBaselineRequired`, and missing
-routing-comparison evidence. Equal reply actions do not prove equal tool/history
-routing. Chat's baseline also extracts structured plans, while Jev compares seven
-routing choices plus reaction emoji; these latencies do not establish an end-to-end speedup.
-Mikey authorized production serving on September 20 for the tested comment and
-text-chat routing decisions. Include `serving.jevDecisions`, baseline and
-unreserved fallbacks with reasons, audit coverage, served disagreements,
-`serving.decisionLatencyMs`, chat added wait, and comment baseline calls avoided.
-Chat retains the existing full planner for outputs outside Jev's tested scope;
-comments run a 5% independent background baseline audit. Distinguish actual
-selected routes from unused comparisons and identify Turtle's deployment tests.
-Chat's `baseline_requires_reply` fallback preserves the planner's written reply
-when Jev would only react; report its frequency and review those disagreements.
-Reaction-only chat responses require both models to agree.
-Jev chooses the emoji from all 18 supported reactions in `chat-routing-v2`.
-Report `reactionChoices` usage by source, paired emoji disagreements, and missing
-legacy evidence; review whether the chosen tone fits the canonical conversation.
-Candidate and served emoji are in `reviewCandidates` routing objects. Earlier
-`chat-routing-v1` rows have no emoji comparison and must not count as agreement.
+seven completed days, and keep the in-progress day separate. Separate
+`bySurface.comment` from `bySurface.chat`. Report real selections, fallback
+rates and reasons, `serving.decisionLatencyMs` p50/p95, provider failures,
+pending observations, unknown usage and ledger gaps. Calls avoided are a count,
+not measured dollar savings. No chat selections while routing is off and no
+served-route audit comparisons are expected; do not manufacture missing-data
+findings from them. Identify synthetic deployment probes separately.
 Mikey explicitly requested all eligible requests with no daily request cap
 (`dailyLimit: 0`) and a cost report during every full website-management run.
 Run `lumine admin ai-costs day YYYY-MM-DD --json` for the last completed UTC day.
-Report the canonical `data.dailyAiCosts.byOperation` USD totals for `jev_reply_gate_serve`,
-`jev_chat_routing_serve`, any `_shadow` operations, and `jev_reply_gate_audit`.
-Separate comment/chat provider spend from background baseline-audit spend.
-Report unfinished selection/baseline-audit telemetry; synthetic probes are
+Report the canonical `data.dailyAiCosts.byOperation` USD totals for enabled serve
+and shadow operations, including Auto and its fallback. Keep any historical
+baseline-audit costs separate; new served-route audit calls are not expected.
+Report unfinished selection telemetry; synthetic probes are
 excluded from performance metrics but included in daily request and cost counts.
 If `telemetryStatus: partial` or `telemetryComplete: false`, detail metrics are a
 bounded recent sample, not full-day performance or cost; use the canonical daily
@@ -3898,8 +3904,8 @@ are evaluation findings; outages, stuck telemetry or missing ledger entries are
 operational findings. Report a recommendation to continue, adjust or stop, without
 automatically changing mode, scope or caps.
 
-Mikey's September 21 reporting requirement: include a private case-by-case
-comparison for the reviewed disagreements. For each event give the minimum
+For actual comparisons from the separate shadow families or retained historical
+pilot, preserve Mikey's September 21 case-review requirement. For each reviewed event give the minimum
 relevant excerpt/context, field name and plain-language meaning, exact baseline
 and JEV values, selected value/source and fallback, observed outcome, and your
 assessment with evidence. Explicitly allow “both defensible” or “insufficient
@@ -5431,10 +5437,10 @@ Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
 `comments get`, and `recommend` remain accepted, but the singular command forms
 shown above are the canonical interface.
 
-September 21 routing expansion: read `jevRoutingShadow` alongside `jevPilot` in
-both the admin brief and full daily report. The reviewed `chat-routing-v3` path
-is primary; report actual selection latency, chat baseline calls avoided and
-fallback reasons (no audits since September 23). New routing
+Read `jevRoutingShadow` alongside `jevPilot` in both the admin brief and full
+daily report. The September 21 primary-chat experiment is historical: chat
+routing is off by default and served-route audits were retired September 23.
+Review actual selection latency and fallback reasons on enabled routes. New routing
 families remain comparison-only until Mikey reviews each one and explicitly
 promotes it. Report every registered family, including zero-sample and skipped
 families; no traffic is not a pass. Show paired counts, exact differing fields,
@@ -5451,19 +5457,22 @@ selector immediately. Its per-choice LLM comparison was retired September 23;
 the LLM runs only as the fallback when JEV cannot decide.
 Auto is the new default; stored manual preferences remain manual. Review
 `jevRoutingShadow` / `byRoute.lumine_model` separately from the eight
-comparison-only families: selected model/effort, both decisions, exact selection
+comparison-only families: selected model/effort, available decisions, exact selection
 context, confidence, fallback, actual selection latency, missing evidence and
-observed task outcome. Report `jev_lumine_model_serve` and the fallback
+observed task outcome. A served Auto row with `baselineStatus: not_run` is expected
+after the audit retirement, not an incomplete comparison. Report `jev_lumine_model_serve` and the fallback
 `lumine_model_fallback` spend separately, using canonical AI-cost totals without
 double-counting. JEV choice confidence is not a correctness score. The other
 eight families still require review before promotion.
 
 
-### September 21 verified reward follow-up
+<a id="september-21-verified-reward-follow-up"></a>
 
-After the Study review migration is deployed, the full daily website run also reads the API-host report `node scripts/build-study-reviews-daily.cjs --days 1`. It is indexed, read-only and bounded; it reports decisions, known measured cost, unknown-usage requests, p50/p95 latency, settled checks, claims, pending rows older than 60 seconds and graded-but-unsettled rows. `--examples` includes at most 30 private full study records and their exact prompt version for administrator quality review; keep that output private. No traffic is not a quality pass. The 12 synthetic pre-release records are a small initial check, not measured real-user accuracy.
+### Study reward health (every full daily review)
 
-Study's registered `study-record-v1` checks use learner AI Energy for accepted, revise and uncertain results. Preview checks use real AI Energy but cannot award XP/Coins. The agreed proposal pays 2,000 XP + 500 Coins at most once per learner per UTC day. Breadface's `breadface-v1` uses deterministic server physics, not a model. Both creator proposals must be accepted to publish; inspect the canonical review state and acceptance/rejection events during follow-up.
+The full daily website run reads `study.json` from the operations gather, using the API-host report `node scripts/build-study-reviews-daily.cjs --days 1`. It is indexed, read-only and bounded; it reports decisions, known measured cost, unknown-usage requests, p50/p95 latency, settled checks, claims, pending rows older than 60 seconds and graded-but-unsettled rows. Report collection/migration failures as unavailable. `--examples` includes at most 30 private full study records and their exact prompt version for administrator quality review; keep that output private. No traffic is not a quality pass. The 12 synthetic pre-release records are a small initial check, not measured real-user accuracy.
+
+Study's registered `study-record-v1` checks use learner AI Energy for accepted, revise and uncertain results. Preview checks use real AI Energy but cannot award XP/Coins. The original proposal paid 2,000 XP + 500 Coins at most once per learner per UTC day; use the current approved rules for current claims. Breadface's `breadface-v1` uses deterministic server physics, not a model. Check current pending reviews and acceptance/rejection events; the original two launch proposals are not a standing pending queue.
 
 For total JEV cost, include `dailyAiCosts.byProviderModel` for TypeSafe/JEV across both AI Energy and system-covered ledgers. Report serving/shadow/audit operations separately as above; the Build SDK's system-covered/failed calls use `jev_decision`, while ordinary viewer SDK checks are already counted by the AI Energy ledger. Do not add the Study report's known-cost sum on top of the canonical overall AI-cost total: it is a diagnostic breakdown of those same calls.
 
