@@ -134,6 +134,15 @@ version, records the same save metadata, and marks public builds as having
 unpublished changes. For projects you own, run `lumine launch` to publish the
 saved changes, or `lumine save --publish` to save and publish in one step.
 
+For automation, `lumine save --json` emits one canonical JSON receipt with
+`schemaVersion`, `ok`, the saved artifact metadata, `build`, and `publication`.
+`lumine versions --json` returns the server's version history without prose.
+If `save --publish --json` saves successfully but publication fails, the receipt
+still identifies that saved version, sets `ok: false`, and reports the publication
+error; the command exits nonzero. A contribution branch reports
+`publication.published: false` with `reason: "contribution_requires_owner"`.
+Saving a branch does not publish the owner's app.
+
 Pulled workspaces include `AGENTS.md` and `CLAUDE.md` guides for local coding
 agents, `TWINKLE_BUILD_SDK.md` with the current Build SDK reference, plus
 `.twinkle/lumine-project.json` metadata that tells agents whether the checkout
