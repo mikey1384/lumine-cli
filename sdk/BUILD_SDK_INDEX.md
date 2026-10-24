@@ -2,7 +2,7 @@
 
 Version: 1.72.0
 Updated: 2026-10-25
-Generated: 2026-10-24T23:05:58.970Z
+Generated: 2026-10-24T23:34:56.464Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1042,10 +1042,11 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - cells is a flat list of [x, y, z, paletteIndex] numbers; air is left out. palette entries are block states like "oak_stairs[facing=north,half=bottom]".
   - Private designs are only returned to their designer.
   - Example: const { size, palette, cells } = await Twinkle.minecraft.getDesign({ id: 'harbor_house' }); for (let i = 0; i < cells.length; i += 4) addCube(cells[i], cells[i + 1], cells[i + 2], palette[cells[i + 3]]);
-- async saveDesign({ id, name, summary, category, tags, visibility, parts }) | scopes: content:write
+- async saveDesign({ id, name, summary, category, tags, visibility, parts, cells }) | scopes: content:write
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
-  - Save a design (or a new version of your design) from blueprint parts.
+  - Save a design (or a new version of your design) from blueprint parts, or from exact blocks (cells).
   - parts use Zero's blueprint shapes: box, hollow_box, walls, floor, line, block, cylinder, sphere, gable_roof, pyramid_roof; offsets x = east, y = up, z = south; later parts override earlier ones (carve doors/windows with "air"). Up to 60,000 blocks and 96 blocks in each direction.
+  - Exact blocks instead of parts (map art made from a picture, a block-by-block design): cells: { palette: ['white_wool', 'black_concrete', ...], cells: [x, y, z, paletteIndex, x, y, z, paletteIndex, ...] }, offsets as for parts. Up to 256 palette blocks and 60,000 blocks (Mikey 200,000), within 128 wide, 384 tall and 128 deep. Send parts or cells, not both.
   - category is building, decor, farm or path. visibility private (default) or public. Saving the same id again adds a version; only its designer can do that. Rejections come back as 400 minecraft_studio_rejected with a readable message.
   - Who may: any signed-in viewer; they own what they save (they can change or delete it). Only builders and above (access.canKeepPrivate from getDesigns) may keep a design private; for anyone else visibility must be 'public' (omitted means public) or the call fails with 403 minecraft_private_needs_builder. Builders and above save private designs when visibility is omitted. Players have a limit on how many designs they keep.
   - Example: await Twinkle.minecraft.saveDesign({ id: 'harbor_house', name: 'Harbor house', category: 'building', visibility: 'private', parts: [{ shape: 'floor', from: [0, 0, 0], to: [8, 0, 6], block: 'stone_bricks' }, { shape: 'walls', from: [0, 1, 0], to: [8, 4, 6], block: 'spruce_planks' }] });
@@ -1141,6 +1142,16 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Remove the viewer's arrival point in a world (back to the shared arrival).
   - world is a world id such as world, world1, world3, world_nether.
   - Example: await Twinkle.minecraft.clearArrivalPoint({ world: 'world3' });
+- async getMyNotices() | scopes: content:read
+  - Returns: { notices: [{ id, text, from, at, uuid, name }] }
+  - Personal news for the viewer's linked Minecraft accounts, for example that something they wanted and gave up on works now.
+  - Only unread ones. A notice is read once seen anywhere: Zero whispers it when the player joins the server, or the app marks it with markNoticesSeen. Empty when the viewer has no linked Minecraft account. uuid/name say which linked account it is for.
+  - Example: const { notices } = await Twinkle.minecraft.getMyNotices();
+- async markNoticesSeen({ uuid, ids }) | scopes: content:write
+  - Returns: { marked }
+  - Mark personal news as read after showing it (ids from getMyNotices, for that notice's uuid).
+  - Only the viewer's own linked accounts; up to 50 ids at a time.
+  - Example: await Twinkle.minecraft.markNoticesSeen({ uuid: notice.uuid, ids: [notice.id] });
 - async getPlayAreas() | scopes: content:read
   - Returns: { levels: [{ id, name, world, box: [x0,y0,z0,x1,y1,z1], spawn: [x,y,z], by, createdAt, status: 'capturing'|'ready'|'failed', chunkCount, done, blocks }] }
   - Play areas: captured Minecraft builds (a castle, a cathedral) that apps turn into first-person games, newest first.
