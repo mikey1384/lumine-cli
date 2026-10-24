@@ -15,6 +15,7 @@ test('arena import is a validation-only dry run without --confirm and carries th
   assert.equal(op.body.dryRun, true);
   assert.equal(op.body.audioPrefix, 'audio/suneung-eng/eng-08');
   assert.deepEqual(op.body.items.map((i) => i.number), [1, 2]);
+  assert.equal(op.body.paper, 'arena-paper');
   const real = parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--live', '--confirm']));
   assert.equal(real.name, 'arena.import');
   assert.equal(real.body.dryRun, false);
