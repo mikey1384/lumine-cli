@@ -20,6 +20,11 @@ test('reward diagnostics print readable lines, never "undefined"',()=>{
  assert.ok(lines.includes('  start: 1 response'));
  assert.ok(lines.includes('#10262 10-24 01:21 server build 1366 user 5 claim → refused (409, build_reward_too_fast, 42 ms)'),text);
  assert.ok(text.includes('Server records: 1 challenge(s), 2 receipt(s).'));
- assert.ok(text.includes('More: --cursor 10200'));
+ assert.ok(text.includes('More: lumine admin reward-diagnostics --cursor 10200'));
  assert.equal(formatRewardDiagnostics({}).join(''),'Reward diagnostics: 0 event(s), ? → ? UTC');
+});
+test('reward diagnostics: unavailable says why, next page keeps the filters',()=>{
+ assert.deepEqual(formatRewardDiagnostics({coverage:'unavailable',reason:'diagnostic_migration_not_applied'}),['Reward diagnostics unavailable: diagnostic_migration_not_applied']);
+ const lines=formatRewardDiagnostics({since:1,until:2,events:[],nextCursor:'77'},{buildId:'1366',userId:'5',days:'3'});
+ assert.equal(lines.at(-1),'More: lumine admin reward-diagnostics --build 1366 --user 5 --days 3 --cursor 77');
 });
