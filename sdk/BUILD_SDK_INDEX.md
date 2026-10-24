@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.71.0
-Updated: 2026-10-24
-Generated: 2026-10-24T10:03:41.930Z
+Version: 1.72.0
+Updated: 2026-10-25
+Generated: 2026-10-24T22:50:18.039Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -19,6 +19,14 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 10. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
 11. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
 12. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
+
+## Essential SDK features
+Features every app needs whenever they apply. Add them without being asked when you build an app or change one they apply to, as part of the same change, and say in one line what you added. Do not add one that does not apply.
+
+1. When: The app has a place worth keeping: a game, a level or score in play, an open document, drawing or editor, a quiz in progress, a chosen view. Use: Register Twinkle.app.lifecycle.onSuspend(() => smallState) and, at startup, restore from await Twinkle.app.lifecycle.getResumeState(). Phones unload apps that are not on screen (3D apps right away) and browsers kill tabs; without this the player starts over every time.
+2. When: The app has more than one view: a list and its details, menus, chapters, pages, settings. Use: Twinkle.app.history.push on each confirmed view change and Twinkle.app.history.subscribe to restore views, so Back and Forward move inside the app instead of leaving it.
+3. When: Progress, collections, unlocks, high scores or settings the viewer expects to still have tomorrow. Use: Twinkle.privateDb (Twinkle.sharedDb for what everyone sees), written on a user action or as an occasional snapshot, never per frame.
+4. When: The app shares or links to something inside itself (a level, a post, a result). Use: Twinkle.app.getShareUrl(pathSegment) for the link, and read the segment back at startup, instead of building twin-kle.com URLs by hand.
 
 ## Notes
 - Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
@@ -119,6 +127,25 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: Canonical shareable deep-link URL string, or null when app info is unavailable
   - Builds a canonical shareable deep link into this app, e.g. https://www.twin-kle.com/app/884/432-the-great-gatsby.
   - Example: await Twinkle.app.getShareUrl('432-the-great-gatsby');
+- lifecycle.onSuspend(getState) | scopes: none
+  - Returns: off function
+  - Keep the viewer's place: Twinkle calls getState() for a small snapshot whenever the app is hidden, goes to the background, or every so often while in use, and hands it back the next time the app starts.
+  - Phones keep few apps loaded: an app that is not on screen can be unloaded at any time (3D apps right away), and the browser can kill the whole tab. Without a snapshot the viewer starts over.
+  - getState() returns a plain JSON object of at most 1 MB and must be quick (a 1.5 s budget, sync or a promise). Save what is needed to put the viewer back: level, position, score in play, the open view, unsaved edits, a quiz in progress.
+  - One handler per app; registering again replaces it. Long-term saves (collections, completed progress) still belong in Twinkle.privateDb.
+  - Example: Twinkle.app.lifecycle.onSuspend(() => ({ level, hp, x: player.x, y: player.y, inventory }));
+- async lifecycle.getResumeState() | scopes: none
+  - Returns: { state, savedAt, reason } or null
+  - At startup, the snapshot this viewer's last session of the app left behind (after an unload, a tab reload or crash), or null.
+  - Resolves once, early; await it before drawing the first screen so the viewer does not see a fresh start flash by.
+  - Check the snapshot's shape before using it: it can come from an older version of the app. Ignore what you do not recognise.
+  - Closing the app with its Close button starts it fresh next time (no snapshot). The Build editor preview always starts fresh.
+  - Example: const saved = await Twinkle.app.lifecycle.getResumeState(); if (saved) restore(saved.state);
+- async lifecycle.saveNow() | scopes: none
+  - Returns: true once Twinkle has the snapshot, false otherwise
+  - Take a snapshot right now, e.g. at a checkpoint or after an important step.
+  - Needs an onSuspend handler. Twinkle already snapshots on hide, background and every 45 s of use, so call this only at moments worth keeping exactly.
+  - Example: await Twinkle.app.lifecycle.saveNow();
 - history.getState() | scopes: none
   - Returns: The current app-owned history state object, or null
   - Read the current Build app view state stored through Twinkle.app.history.
