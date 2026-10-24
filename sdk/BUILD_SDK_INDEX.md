@@ -2,7 +2,7 @@
 
 Version: 1.72.0
 Updated: 2026-10-25
-Generated: 2026-10-24T22:50:18.039Z
+Generated: 2026-10-24T23:05:58.970Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -21,7 +21,7 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 12. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
 
 ## Essential SDK features
-Features every app needs whenever they apply. Add them without being asked when you build an app or change one they apply to, as part of the same change, and say in one line what you added. Do not add one that does not apply.
+Features every app needs whenever they apply. When you build a new app or make a substantial change, add every one that applies as part of that change, without being asked. On a small, targeted request, add a missing one only when the request touches what it covers (a change to levels, scoring or saving: keep-place; a new screen: back-button); otherwise name it in one line so the creator can ask. Say in one line what you added. Never add one that does not apply.
 
 1. When: The app has a place worth keeping: a game, a level or score in play, an open document, drawing or editor, a quiz in progress, a chosen view. Use: Register Twinkle.app.lifecycle.onSuspend(() => smallState) and, at startup, restore from await Twinkle.app.lifecycle.getResumeState(). Phones unload apps that are not on screen (3D apps right away) and browsers kill tabs; without this the player starts over every time.
 2. When: The app has more than one view: a list and its details, menus, chapters, pages, settings. Use: Twinkle.app.history.push on each confirmed view change and Twinkle.app.history.subscribe to restore views, so Back and Forward move inside the app instead of leaving it.
