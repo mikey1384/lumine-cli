@@ -13,12 +13,36 @@ import {
   parseBuildReviewReceipt,
   parseInteractionScript,
   classifyReviewBrowserExit,
+  closeReviewBrowser,
   resolveAppFrame,
   runInteractionSteps,
   runManagedBuildReview,
 } from "../lib/build-review.js";
 import http from "node:http";
 import { parseArgs } from "../lib/commands.js";
+
+test("Chrome gets its bounded watchdog grace and no kill timer survives a completed close", async () => {
+  const kills = [];
+  let finish;
+  const closed = new Promise(resolve => { finish = resolve; });
+  const cdp = { send: async method => { assert.equal(method, 'Browser.close'); setTimeout(() => finish({ code: 2, signal: null }), 5); } };
+  const result = await closeReviewBrowser({ child: { kill: signal => kills.push(signal) }, closed, cdp, graceMs: 30 });
+  assert.equal(result.closeAcknowledged, true);
+  assert.equal(result.forcedTermination, false);
+  assert.equal(result.code, 2);
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.deepEqual(kills, []);
+});
+
+test("a browser that cannot shut down is still stopped and is not silently accepted", async () => {
+  let finish;
+  const closed = new Promise(resolve => { finish = resolve; });
+  const child = { kill: signal => finish({ code: -1, signal }) };
+  const result = await closeReviewBrowser({ child, closed, cdp: { send: async () => { throw new Error('channel unavailable'); } }, graceMs: 1 });
+  assert.equal(result.forcedTermination, true);
+  assert.equal(result.closeCommandError, 'channel unavailable');
+  assert.equal(classifyReviewBrowserExit({ ...result, closeRequested: true, evidenceCompleteBeforeClose: true, exitedBeforeClose: false }).accepted, false);
+});
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-build-review-"));

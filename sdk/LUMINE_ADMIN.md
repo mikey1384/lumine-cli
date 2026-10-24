@@ -2826,8 +2826,9 @@ never previously been Featured from canonical evidence.
 
 Keep current manual pins from the past two days (Mikey, October 13, 2026).
 Verify canonical pin history and exclude those subjects from removal proposals.
-Subject 3529, “What is special about Twinkle?”, also has an explicit keep
-instruction. An absent pin is still never restored. This supersedes the older
+Subject3529, “What is special about Twinkle?”, had an October13 keep instruction,
+but Mikey removed it on October19 at06:28:27UTC (canonical event2504).
+Do not restore it from that superseded keep note. An absent pin is still never restored. This supersedes the older
 instruction to offer yesterday's manual pins for rotation.
 
 For the daily old-to-new proposal, prepare a canonical plan without changing pins:
