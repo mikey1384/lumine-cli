@@ -2,7 +2,7 @@
 
 Version: 1.71.0
 Updated: 2026-10-24
-Generated: 2026-10-24T05:59:44.939Z
+Generated: 2026-10-24T10:03:41.930Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1500,17 +1500,19 @@ world.updatePresence({ x, y, z, facing });
 
 ### Twinkle.reflections
 - async getDailyReflections({ userIds, cursor, lastId, limit } = {}) | scopes: dailyReflections:read
-  - Returns: { reflections: [{ id, userId, response, questionId, submittedAt, sharedAt, username, profilePicUrl, question }], cursor? }
+  - Returns: { reflections: [{ id, userId, response, questionId, submittedAt, sharedAt, username, profilePicUrl, question, dayType, pictureUrl, pictureStyle }], cursor? }
   - Read only currently public Daily Reflection shares. response is the exact text the author chose to share publicly, never an unshared raw/private answer.
   - Daily reflections are Daily Question answers shown in the Twinkle feed.
   - Only currently shared public reflections are returned. The response field is the stored shared response version, which may be raw or polished depending on what the author explicitly shared.
   - submittedAt and sharedAt are Unix timestamps (seconds). Use new Date(value * 1000) to convert to JS Date.
+  - dayType is 'word' (Word Day), 'picture' (Picture Day) or null (an ordinary reflection). On a Picture Day the member described a picture instead of reflecting: pictureUrl is the picture they chose (null when they finished with words only), pictureStyle the style they asked for, and response is their description. Show the picture with the description, not the stock question.
 - async getDailyReflectionsByUser(userId, { cursor, lastId, limit } = {}) | scopes: dailyReflections:read
-  - Returns: { reflections: [{ id, userId, response, questionId, submittedAt, sharedAt, username, profilePicUrl, question }], cursor? }
+  - Returns: { reflections: [{ id, userId, response, questionId, submittedAt, sharedAt, username, profilePicUrl, question, dayType, pictureUrl, pictureStyle }], cursor? }
   - Read one user's currently public Daily Reflection shares. response is the exact text the author chose to share publicly, never an unshared raw/private answer.
   - Daily reflections are Daily Question answers shown in the Twinkle feed.
   - Only currently shared public reflections are returned. The response field is the stored shared response version, which may be raw or polished depending on what the author explicitly shared.
   - submittedAt and sharedAt are Unix timestamps (seconds). Use new Date(value * 1000) to convert to JS Date.
+  - dayType is 'word' (Word Day), 'picture' (Picture Day) or null (an ordinary reflection). On a Picture Day the member described a picture instead of reflecting: pictureUrl is the picture they chose (null when they finished with words only), pictureStyle the style they asked for, and response is their description. Show the picture with the description, not the stock question.
 
 ### Twinkle.privateDb
 - async get(key) | scopes: privateDb:read
