@@ -1721,19 +1721,22 @@ test("shared verified-email policies are explicit, reversible, and run-independe
 
 test("identity inspect keeps no copy on disk unless --output asks for a private one", async (t) => {
   const fixture = await createFixtureServer(t);
-  const receiptsBefore = listAdminReceipts();
+  // Its own working directory, so receipts other tests write into the shared
+  // package work/ folder at the same time cannot make this comparison flaky.
+  const cwd = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-inspect-cwd-"));
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
   const base = ["admin", "identity", "inspect", "Jay1216", "--reason", "Confirm the account family before updating its quota bucket.", "--json"];
-  const plain = await runCli([...base, ...fixture.cliArgs]);
+  const plain = await runCli([...base, ...fixture.cliArgs], { cwd });
   assert.equal(plain.code, 0, plain.stderr);
-  assert.deepEqual(listAdminReceipts(), receiptsBefore);
+  assert.deepEqual(listAdminReceipts(cwd), []);
   const dir = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-inspect-"));
   try {
     const file = path.join(dir, "case-evidence.json");
-    const saved = await runCli([...base, "--output", file, ...fixture.cliArgs]);
+    const saved = await runCli([...base, "--output", file, ...fixture.cliArgs], { cwd });
     assert.equal(saved.code, 0, saved.stderr);
     assert.equal(fs.statSync(file).mode & 0o777, 0o600);
     assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).ok, true);
-    assert.deepEqual(listAdminReceipts(), receiptsBefore);
+    assert.deepEqual(listAdminReceipts(cwd), []);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -1741,8 +1744,8 @@ test("identity inspect keeps no copy on disk unless --output asks for a private 
   assert.equal(network.mutates, false);
 });
 
-function listAdminReceipts() {
-  const dir = path.resolve(__dirname, "..", "work", "lumine-admin", "requests");
+function listAdminReceipts(cwd = path.resolve(__dirname, "..")) {
+  const dir = path.resolve(cwd, "work", "lumine-admin", "requests");
   try {
     return fs.readdirSync(dir).filter((name) => name.endsWith(".receipt.json")).sort();
   } catch {
@@ -4470,9 +4473,9 @@ async function readRequestBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-async function runCli(args) {
+async function runCli(args, { cwd = path.resolve(__dirname, "..") } = {}) {
   const child = spawn(process.execPath, [cliPath, ...args], {
-    cwd: path.resolve(__dirname, ".."),
+    cwd,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
   });

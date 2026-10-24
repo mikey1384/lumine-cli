@@ -1,8 +1,24 @@
 # Build SDK Index
 
-Version: 1.68.0
-Updated: 2026-10-16
-Generated: 2026-10-23T06:17:07.718Z
+Version: 1.69.0
+Updated: 2026-10-24
+Generated: 2026-10-24T02:37:05.998Z
+
+## Platform rules
+Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
+
+1. Every page that draws on a <canvas> (2D, WebGL or Three.js) says what kind of page it is on <html>: data-twinkle-game for a game that fills the screen, data-twinkle-document for a normal scrolling page with a drawing pad, chart, visualizer or background effect. Without it, unless the page lays itself out with Twinkle.preview, Twinkle guesses from the canvas, and any canvas larger than 160 px, even one hidden in a tab, locks the page to one screen so it no longer scrolls. Add the attribute together with the first canvas.
+2. Games (data-twinkle-game) size themselves from Twinkle.preview: subscribe with Twinkle.preview.subscribe(listener, { immediate: true }), size canvases and renderers from layout.stage or layout.viewport, and report the play area with Twinkle.preview.setPlayfield(). Never size a game from 100vh/100vw, window.innerWidth/innerHeight or visualViewport, and never draw a fake phone or browser frame unless the creator asks for a device mockup: those fight the host and leave the game blank, cropped or scrolling on phones. Pages marked data-twinkle-document use ordinary CSS layout instead.
+3. alert(), confirm() and prompt() are silently blocked: alert shows nothing, confirm() always returns false (so the action it guards never happens) and prompt() returns null. Use in-page UI instead: a message element, an in-page confirm step, an <input>.
+4. Apps cannot open new windows or tabs: window.open() and target="_blank" links do nothing, and neither does a download link to an uploaded file. Open Twinkle pages with Twinkle.app.openContent(url) from a tap, save files with Twinkle.files.saveAs({ url, fileName }) (or { blob, fileName } for a file the app made), and show other web addresses as plain text.
+5. Do not use <form> elements: native form submission is blocked, so a submit button inside a form does nothing. Handle inputs and buttons in JavaScript.
+6. Code loads only from project files and Twinkle's vendor paths (/build/vendor/...). Package imports, CDN scripts, external network calls and app-local /api/* routes fail at runtime; use the Twinkle SDK for data, AI and storage.
+7. Call only Twinkle.* methods documented in the SDK reference. An invented or guessed method name throws and breaks the feature.
+8. Twinkle.privateDb and Twinkle.sharedDb save on a user action or as an occasional snapshot, never per frame, tick or keystroke: fast repeated writes are refused with 429 and the data is lost. A privateDb value is at most 16 KB. Keep live state in memory, and use Twinkle.world for realtime multiplayer.
+9. Start sound and image generation inside the viewer's tap or click handler. A Web Audio AudioContext stays silent until it is created or resumed in a tap (iPhones always enforce this), and Twinkle.ai.generateImage called from load or a timer fails with USER_ACTIVATION_REQUIRED.
+10. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
+11. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
+12. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
 
 ## Notes
 - Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
@@ -312,7 +328,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Download a generated or remote file to the viewer's local device through the parent frame without opening a popup.
   - Local viewer download only; does not upload to Twinkle or consume AI Energy.
   - Use this for generated blobs/data/JSON/bytes or large/remote files that need parent-frame download handling.
-  - For URL downloads, cross-origin URLs must be fetchable by browser CORS or Twinkle's CDN proxy so the parent frame can create a local Blob download.
+  - For URL downloads, the parent frame fetches the file and saves it as a local Blob. Files uploaded to Twinkle (images, audio, PDFs and other files) work as they are; URLs on other sites must allow cross-origin fetches (CORS).
   - Simple visible same-origin images can still use normal browser anchors with href and download.
   - Example: await Twinkle.files.saveAs({ fileName: 'fashion-guide.png', dataUrl: imageUrl, mimeType: 'image/png' });
 - async uploadGenerated({ fileName, url, dataUrl, data, text, json, bytes, blob, file, mimeType } = {}) | scopes: files:write
@@ -902,11 +918,12 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 
 ### Twinkle.minecraft
 - async getWorlds() | scopes: content:read
-  - Returns: { worlds: [{ id, name, dimension, spawn: { x, z } | null, map: { tileUrlTemplate, minZoom, maxZoom, tilePixels, blocksPerTileAtMaxZoom, renderedAt } | null }], stale }
+  - Returns: { worlds: [{ id, name, dimension, spawn: { x, z } | null, map: { tileUrlTemplate, minZoom, maxZoom, tilePixels, blocksPerTileAtMaxZoom, renderedAt, heightUrlTemplate } | null }], stale }
   - List the server's worlds (world, world1, world2, world_nether, world_the_end) with squaremap tile info for drawing a top-down map.
   - Tiles are 512x512 PNGs over HTTPS from www.twinklemc.site. At maxZoom one pixel is one block; blocksPerTile = blocksPerTileAtMaxZoom * 2 ** (maxZoom - z); tile x/y = floor(block x/z / blocksPerTile). Fill {z}, {x}, {y}. map.renderedAt tells how fresh the tiles are.
   - Limited rollout: apps not enabled yet get 403 with code minecraft_sdk_not_enabled.
   - stale: true means the Minecraft server was briefly unreachable and the data is a recent cached copy.
+  - map.heightUrlTemplate (or null) gives the land's shape on the same tile grid for 3D maps (ground heights; buildings and trees narrower than about 20 blocks are left out, so draw those from getTerrainChunks): a gzipped 'THM1' file, 16-byte little-endian header (magic, uint16 samples per side, uint16 blocks per sample, float64 source time) then samples x samples int16 heights row by row (z, then x); -32768 = no ground. Images and heights are served with CORS, so WebGL can use them.
   - Example: const { worlds } = await Twinkle.minecraft.getWorlds(); const w = worlds.find((x) => x.id === 'world'); const z = w.map.maxZoom; const blocksPerTile = w.map.blocksPerTileAtMaxZoom * 2 ** (w.map.maxZoom - z); const tx = Math.floor(blockX / blocksPerTile), ty = Math.floor(blockZ / blocksPerTile); const url = w.map.tileUrlTemplate.replace('{z}', z).replace('{x}', tx).replace('{y}', ty);
 - async getOnlinePlayers() | scopes: content:read
   - Returns: { players: [{ name, world, x, y, z, isZero }], count, stale }
@@ -1109,10 +1126,18 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Example: const { level } = await Twinkle.minecraft.getPlayArea({ id: 'twinkle-keep' });
 - async getPlayAreaChunks({ id, chunks: [[cx, cz], ...] }) | scopes: content:read
   - Returns: { scenes: [{ cx, cz, scene: { origin: [x,y,z], size: [w,h,d], palette, blocks, light, biomes, count, ... } | null }] }
-  - Up to 9 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
+  - Up to 24 chunk columns of a play area in the /snap scene format (packed visible blocks with per-face light), cropped to the area's box. Stream the ones around the player.
   - Same scene format as getSnap; only blocks with a visible face inside the area are included. scene is null for a chunk that is not part of the area.
-  - At most 9 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
+  - At most 24 chunks per call; reads share the 180-per-minute build read limit, so cache chunks and load the nearest first.
   - Example: const { scenes } = await Twinkle.minecraft.getPlayAreaChunks({ id: level.id, chunks: [[64, 29], [65, 29]] });
+- async getTerrainChunks({ world, chunks: [[cx, cz], ...] }) | scopes: content:read
+  - Returns: { scenes: [{ cx, cz, scene: { origin: [x,y,z], size: [w,h,d], palette, blocks, light, biomes, count, wide? } | null }] }
+  - The visible surface blocks of any chunk columns of a world (up to 24 per call), read from the saved world, in the /snap scene format. For 3D maps: draw real blocks near the camera.
+  - Each column keeps the blocks a camera above the ground can see: the top down to the lowest neighbouring column, through water, glass and leaves to the ground. Caves are left out.
+  - scene is null where the world was never generated. A scene taller than 255 blocks has wide: true (8 bytes per block).
+  - It shows the world as last saved (the server saves every few minutes). Pair it with world.map.heightUrlTemplate for the land farther away.
+  - Reads share the 180-per-minute build read limit: ask for 24 at a time, nearest first, and keep what you loaded.
+  - Example: const { scenes } = await Twinkle.minecraft.getTerrainChunks({ world: 'world', chunks: [[71, 38], [72, 38]] });
 - async createPlayArea({ name, world, box, spawn, id }) | scopes: content:write
   - Returns: { level }
   - Capture a box of a Minecraft world as a new play area (or re-capture an existing id). Runs in the background: poll getPlayArea until status is 'ready'.

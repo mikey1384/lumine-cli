@@ -39,6 +39,30 @@ test("a rejected validation-repair scope pass restores the accepted workspace sn
   assert.match(repairScopeFailure, /throw new Error/);
 });
 
+test("a failed notice repair saves the earlier notices-only candidate instead of nothing", async () => {
+  // twinkle-da review 10-24: repairing platform-rule notices is optional, so
+  // a repair that breaks the code, oversteps its scope or fails must not cost
+  // the creator the change that only had notices.
+  const source = await fs.readFile(
+    path.resolve(__dirname, "../lib/agent.js"),
+    "utf8",
+  );
+  assert.match(source, /if \(validation\.platformRuleNoticesOnly\) \{\s*noticesOnlyFiles = candidateFiles;\s*noticesOnlyFinalText = finalText;/);
+  // The reply printed matches the restored files, not the failed repair.
+  assert.match(source, /currentFiles = noticesOnlyFiles;\s*finalText = `\$\{noticesOnlyFinalText\}/);
+  for (const reason of [
+    "the notice repair failed",
+    "the notice repair went beyond its scope",
+    "the notice repair did not pass validation",
+  ]) {
+    const at = source.indexOf(reason);
+    assert.ok(at > 0, reason);
+    assert.match(source.slice(at, at + 200), /\);\s*break;/, reason);
+  }
+  // The save after the loop runs on the restored files.
+  assert.match(source, /currentFiles = noticesOnlyFiles;/);
+});
+
 test("agent command requires an explicit provider and keeps the request intact", () => {
   const options = parseArgs([
     "agent",
