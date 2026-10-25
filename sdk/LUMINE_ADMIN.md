@@ -3708,8 +3708,12 @@ live.
 
 Preserve all downloaded evidence while any finding remains. Include the
 reviewed file set, boundary-loss notices, findings/fixes, live-verification
-result, clear result, and any remaining todo in the final run report. If any
-error-log issue remains unresolved or unverified, do not invoke `finish`.
+result, clear result, and any remaining todo in the final run report. Once
+every returned error byte is reviewed and every actionable finding is recorded,
+complete the guarded `finish --reviewed` and post-clear loop. Clearing means
+reviewed and recorded, not proved fixed; unresolved findings stay open in the
+report and carry-over todos. Never finish while returned evidence is unread or
+an actionable finding has not been recorded.
 
 **Purpose and privacy boundary:** this audits how Twinkle's bots treated
 members; it is not thought-policing or a moderation queue for members' private
