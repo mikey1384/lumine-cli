@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/commands.js';
 import { parseAdminOperation } from '../lib/admin.js';
+import { formatArenaResult } from '../lib/admin-arena.js';
 
 const paper = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/arena-paper');
 
@@ -35,4 +36,14 @@ test('arena queue reads; status needs --confirm', () => {
   const op = parseAdminOperation(parseArgs(['admin', 'arena', 'status', '--item', '5', '--to', 'retired', '--confirm']));
   assert.equal(op.path, '/cli/admin/arena/items/5/status');
   assert.deepEqual(op.body, { status: 'retired' });
+});
+test('arena queue separates low stock without demand from an active refill', () => {
+  const lines = formatArenaResult({ operation: { name: 'arena.queue' }, data: { types: [
+    { examFamily: 'english', difficulty: 'normal', itemType: 'reading', live: 4, activeLearners: 0, minFresh: 4, stockLow: true, refillDue: false, toWrite: 0 },
+    { examFamily: 'english', difficulty: 'hard', itemType: 'listening', live: 25, activeLearners: 1, minFresh: 3, stockLow: false, refillDue: true, toWrite: 17 }
+  ] } });
+  assert.match(lines[0], /0 active learner\(s\).*low stock; no active demand/);
+  assert.ok(!lines[0].includes('write'));
+  assert.match(lines[1], /1 active learner\(s\).*3 unseen -> write 17/);
+  assert.equal(lines[2], '1 type(s) due for a refill.');
 });
