@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.72.0
+Version: 1.73.0
 Updated: 2026-10-25
-Generated: 2026-10-24T23:34:56.464Z
+Generated: 2026-10-25T00:59:10.277Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -133,6 +133,7 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Phones keep few apps loaded: an app that is not on screen can be unloaded at any time (3D apps right away), and the browser can kill the whole tab. Without a snapshot the viewer starts over.
   - getState() returns a plain JSON object of at most 1 MB and must be quick (a 1.5 s budget, sync or a promise). Save what is needed to put the viewer back: level, position, score in play, the open view, unsaved edits, a quiz in progress.
   - One handler per app; registering again replaces it. Long-term saves (collections, completed progress) still belong in Twinkle.privateDb.
+  - After a restart with a saved place, Twinkle keeps that place until the viewer does something in the app (a tap or key): snapshots taken while the app is still loading or waiting on a CONTINUE screen are not sent. Call saveNow() if the app changes the place on its own before that.
   - Example: Twinkle.app.lifecycle.onSuspend(() => ({ level, hp, x: player.x, y: player.y, inventory }));
 - async lifecycle.getResumeState() | scopes: none
   - Returns: { state, savedAt, reason } or null
