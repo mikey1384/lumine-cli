@@ -285,3 +285,38 @@ test("a chat report update's receipt keeps the decision, never the reported chat
   });
   assert.doesNotMatch(JSON.stringify(receipt), /private|reporter's words/);
 });
+
+test("chat-report formatters name a cover photo report as a cover, without chat context", async () => {
+  const { formatChatReportResult } = await import("../lib/admin-chat-reports.js");
+  const cover = {
+    id: 91,
+    status: "open",
+    reason: "sexual",
+    reasonLabel: "Sexual content",
+    createdAt: 1792800000,
+    reporter: { id: 9, username: "kid" },
+    reported: { id: 42, username: "shiny" },
+    subjectType: "profile_cover",
+    messageId: 0,
+    channelId: 0,
+    channelKind: "profile_cover",
+    reportsOfThisMessage: 2,
+    message: {
+      id: 0,
+      userId: 42,
+      username: "shiny",
+      content: "[profile cover photo] https://cdn/profile/42/cover.jpg (focal point 30,60)",
+      timeStamp: 1792800000,
+    },
+    context: { before: [], after: [] },
+  };
+  const text = formatChatReportResult({ operation: { name: "chat-reports.show" }, data: { report: cover } }).join("\n");
+  assert.match(text, /^Cover photo report #91: OPEN/);
+  assert.match(text, /Where: their profile cover photo \(only Mikey can take it down\)/);
+  assert.match(text, /This cover photo has 2 reports\./);
+  assert.match(text, /Reported cover photo:\n> .* shiny: \[profile cover photo\] https:\/\/cdn\/profile\/42\/cover\.jpg/);
+  assert.doesNotMatch(text, /message|Context/);
+  const list = formatChatReportResult({ operation: { name: "chat-reports.list" }, data: { filter: "pending", reports: [cover] } }).join("\n");
+  assert.match(list, /2 reports of this cover photo/);
+});
+
