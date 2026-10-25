@@ -22,6 +22,13 @@ test('arena import is a validation-only dry run without --confirm and carries th
   assert.equal(real.body.live, true);
 });
 
+test('explicit --live=false imports checked items without serving them to members', () => {
+  const op = parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--live=false', '--confirm']));
+  assert.equal(op.body.dryRun, false);
+  assert.equal(op.body.live, false);
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--confirm=false'])));
+});
+
 test('arena queue reads; status needs --confirm', () => {
   assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'queue'])).method, 'GET');
   assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'status', '--item', '5', '--to', 'retired'])));
