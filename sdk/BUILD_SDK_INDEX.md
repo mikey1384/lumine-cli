@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.71.0
-Updated: 2026-10-24
-Generated: 2026-10-24T10:03:41.930Z
+Version: 1.72.0
+Updated: 2026-10-25
+Generated: 2026-10-24T23:34:56.464Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -19,6 +19,14 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 10. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
 11. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
 12. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
+
+## Essential SDK features
+Features every app needs whenever they apply. When you build a new app or make a substantial change, add every one that applies as part of that change, without being asked. On a small, targeted request, add a missing one only when the request touches what it covers (a change to levels, scoring or saving: keep-place; a new screen: back-button); otherwise name it in one line so the creator can ask. Say in one line what you added. Never add one that does not apply.
+
+1. When: The app has a place worth keeping: a game, a level or score in play, an open document, drawing or editor, a quiz in progress, a chosen view. Use: Register Twinkle.app.lifecycle.onSuspend(() => smallState) and, at startup, restore from await Twinkle.app.lifecycle.getResumeState(). Phones unload apps that are not on screen (3D apps right away) and browsers kill tabs; without this the player starts over every time.
+2. When: The app has more than one view: a list and its details, menus, chapters, pages, settings. Use: Twinkle.app.history.push on each confirmed view change and Twinkle.app.history.subscribe to restore views, so Back and Forward move inside the app instead of leaving it.
+3. When: Progress, collections, unlocks, high scores or settings the viewer expects to still have tomorrow. Use: Twinkle.privateDb (Twinkle.sharedDb for what everyone sees), written on a user action or as an occasional snapshot, never per frame.
+4. When: The app shares or links to something inside itself (a level, a post, a result). Use: Twinkle.app.getShareUrl(pathSegment) for the link, and read the segment back at startup, instead of building twin-kle.com URLs by hand.
 
 ## Notes
 - Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
@@ -119,6 +127,25 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: Canonical shareable deep-link URL string, or null when app info is unavailable
   - Builds a canonical shareable deep link into this app, e.g. https://www.twin-kle.com/app/884/432-the-great-gatsby.
   - Example: await Twinkle.app.getShareUrl('432-the-great-gatsby');
+- lifecycle.onSuspend(getState) | scopes: none
+  - Returns: off function
+  - Keep the viewer's place: Twinkle calls getState() for a small snapshot whenever the app is hidden, goes to the background, or every so often while in use, and hands it back the next time the app starts.
+  - Phones keep few apps loaded: an app that is not on screen can be unloaded at any time (3D apps right away), and the browser can kill the whole tab. Without a snapshot the viewer starts over.
+  - getState() returns a plain JSON object of at most 1 MB and must be quick (a 1.5 s budget, sync or a promise). Save what is needed to put the viewer back: level, position, score in play, the open view, unsaved edits, a quiz in progress.
+  - One handler per app; registering again replaces it. Long-term saves (collections, completed progress) still belong in Twinkle.privateDb.
+  - Example: Twinkle.app.lifecycle.onSuspend(() => ({ level, hp, x: player.x, y: player.y, inventory }));
+- async lifecycle.getResumeState() | scopes: none
+  - Returns: { state, savedAt, reason } or null
+  - At startup, the snapshot this viewer's last session of the app left behind (after an unload, a tab reload or crash), or null.
+  - Resolves once, early; await it before drawing the first screen so the viewer does not see a fresh start flash by.
+  - Check the snapshot's shape before using it: it can come from an older version of the app. Ignore what you do not recognise.
+  - Closing the app with its Close button starts it fresh next time (no snapshot). The Build editor preview always starts fresh.
+  - Example: const saved = await Twinkle.app.lifecycle.getResumeState(); if (saved) restore(saved.state);
+- async lifecycle.saveNow() | scopes: none
+  - Returns: true once Twinkle has the snapshot, false otherwise
+  - Take a snapshot right now, e.g. at a checkpoint or after an important step.
+  - Needs an onSuspend handler. Twinkle already snapshots on hide, background and every 45 s of use, so call this only at moments worth keeping exactly.
+  - Example: await Twinkle.app.lifecycle.saveNow();
 - history.getState() | scopes: none
   - Returns: The current app-owned history state object, or null
   - Read the current Build app view state stored through Twinkle.app.history.
@@ -1015,10 +1042,11 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - cells is a flat list of [x, y, z, paletteIndex] numbers; air is left out. palette entries are block states like "oak_stairs[facing=north,half=bottom]".
   - Private designs are only returned to their designer.
   - Example: const { size, palette, cells } = await Twinkle.minecraft.getDesign({ id: 'harbor_house' }); for (let i = 0; i < cells.length; i += 4) addCube(cells[i], cells[i + 1], cells[i + 2], palette[cells[i + 3]]);
-- async saveDesign({ id, name, summary, category, tags, visibility, parts }) | scopes: content:write
+- async saveDesign({ id, name, summary, category, tags, visibility, parts, cells }) | scopes: content:write
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt } }
-  - Save a design (or a new version of your design) from blueprint parts.
+  - Save a design (or a new version of your design) from blueprint parts, or from exact blocks (cells).
   - parts use Zero's blueprint shapes: box, hollow_box, walls, floor, line, block, cylinder, sphere, gable_roof, pyramid_roof; offsets x = east, y = up, z = south; later parts override earlier ones (carve doors/windows with "air"). Up to 60,000 blocks and 96 blocks in each direction.
+  - Exact blocks instead of parts (map art made from a picture, a block-by-block design): cells: { palette: ['white_wool', 'black_concrete', ...], cells: [x, y, z, paletteIndex, x, y, z, paletteIndex, ...] }, offsets as for parts. Up to 256 palette blocks and 60,000 blocks (Mikey 200,000), within 128 wide, 384 tall and 128 deep. Send parts or cells, not both.
   - category is building, decor, farm or path. visibility private (default) or public. Saving the same id again adds a version; only its designer can do that. Rejections come back as 400 minecraft_studio_rejected with a readable message.
   - Who may: any signed-in viewer; they own what they save (they can change or delete it). Only builders and above (access.canKeepPrivate from getDesigns) may keep a design private; for anyone else visibility must be 'public' (omitted means public) or the call fails with 403 minecraft_private_needs_builder. Builders and above save private designs when visibility is omitted. Players have a limit on how many designs they keep.
   - Example: await Twinkle.minecraft.saveDesign({ id: 'harbor_house', name: 'Harbor house', category: 'building', visibility: 'private', parts: [{ shape: 'floor', from: [0, 0, 0], to: [8, 0, 6], block: 'stone_bricks' }, { shape: 'walls', from: [0, 1, 0], to: [8, 4, 6], block: 'spruce_planks' }] });
@@ -1114,6 +1142,16 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Remove the viewer's arrival point in a world (back to the shared arrival).
   - world is a world id such as world, world1, world3, world_nether.
   - Example: await Twinkle.minecraft.clearArrivalPoint({ world: 'world3' });
+- async getMyNotices() | scopes: content:read
+  - Returns: { notices: [{ id, text, from, at, uuid, name }] }
+  - Personal news for the viewer's linked Minecraft accounts, for example that something they wanted and gave up on works now.
+  - Only unread ones. A notice is read once seen anywhere: Zero whispers it when the player joins the server, or the app marks it with markNoticesSeen. Empty when the viewer has no linked Minecraft account. uuid/name say which linked account it is for.
+  - Example: const { notices } = await Twinkle.minecraft.getMyNotices();
+- async markNoticesSeen({ uuid, ids }) | scopes: content:write
+  - Returns: { marked }
+  - Mark personal news as read after showing it (ids from getMyNotices, for that notice's uuid).
+  - Only the viewer's own linked accounts; up to 50 ids at a time.
+  - Example: await Twinkle.minecraft.markNoticesSeen({ uuid: notice.uuid, ids: [notice.id] });
 - async getPlayAreas() | scopes: content:read
   - Returns: { levels: [{ id, name, world, box: [x0,y0,z0,x1,y1,z1], spawn: [x,y,z], by, createdAt, status: 'capturing'|'ready'|'failed', chunkCount, done, blocks }] }
   - Play areas: captured Minecraft builds (a castle, a cathedral) that apps turn into first-person games, newest first.
