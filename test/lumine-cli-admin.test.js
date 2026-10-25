@@ -7176,6 +7176,25 @@ test("lumine admin approvals and teachers build Mikey-only requests", () => {
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "approvals", "approve", "abc"])), /lumine admin approvals/);
 });
 
+test("lumine admin approvals lists Arena items and sends a blurred paper page", () => {
+  assert.equal(
+    parseAdminOperation(parseArgs(["admin", "approvals", "list", "--type", "arenaPaper"])).path,
+    "/cli/admin/approvals?status=pending&type=arenaPaper",
+  );
+  const file = fileURLToPath(new URL("../package.json", import.meta.url));
+  const redact = parseAdminOperation(parseArgs(["admin", "approvals", "redact", "approval:31", "--page", "2", "--file", file]));
+  assert.deepEqual([redact.name, redact.method, redact.path, redact.mutates, redact.body.page], [
+    "approvals.redact",
+    "POST",
+    "/cli/admin/approvals/31/redact",
+    true,
+    2,
+  ]);
+  assert.equal(Buffer.from(redact.body.data, "base64").toString("utf8"), fs.readFileSync(file, "utf8"));
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "approvals", "redact", "31", "--file", file])), /--page/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "approvals", "redact", "31", "--page", "1"])), /lumine admin approvals/);
+});
+
 test("lumine admin teachers review records the owner's decision, one or all flagged", () => {
   const FP = "a".repeat(64);
   const legit = parseAdminOperation(parseArgs(["admin", "teachers", "review", "77", "--decision", "legit", "--note", "real academy teacher"]));
