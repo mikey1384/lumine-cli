@@ -37,6 +37,18 @@ test('arena queue reads; status needs --confirm', () => {
   assert.equal(op.path, '/cli/admin/arena/items/5/status');
   assert.deepEqual(op.body, { status: 'retired' });
 });
+
+test('arena marking is read-only and preserves a cursor even when a page has no issues', () => {
+  const op = parseAdminOperation(parseArgs(['admin', 'arena', 'marking', '--cursor', '123', '--limit', '50', '--json']));
+  assert.equal(op.path, '/cli/admin/arena/marking?cursor=123&limit=50');
+  assert.equal(op.method, 'GET');
+  assert.equal(op.mutates, false);
+  assert.equal(op.requiresRun, false);
+  const lines = formatArenaResult({ operation: op, data: { scannedBattles: 50, entries: [], nextCursor: '200' } });
+  assert.match(lines.at(-1), /--cursor 200/);
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'marking', '--limit', '201'])));
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'marking', '--cursor', '-1'])));
+});
 test('arena queue separates low stock without demand from an active refill', () => {
   const lines = formatArenaResult({ operation: { name: 'arena.queue' }, data: { types: [
     { examFamily: 'english', difficulty: 'normal', itemType: 'reading', live: 4, activeLearners: 0, minFresh: 4, stockLow: true, refillDue: false, toWrite: 0 },
