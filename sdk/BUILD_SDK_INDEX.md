@@ -1,8 +1,8 @@
 # Build SDK Index
 
 Version: 1.73.0
-Updated: 2026-10-25
-Generated: 2026-10-25T00:59:10.277Z
+Updated: 2026-10-27
+Generated: 2026-10-26T22:37:17.385Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -828,6 +828,21 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Returns: { word: { id, word, definition, example, wordLevel, canGenerate }, mode }
   - Open an existing Word Master word’s reviewed definition and example, and add it to the viewer’s book.
   - Pass wordId or the exact word. Reuses reviewed existing definitions and suitable public AI Card examples. Blank definition/example means missing. Adds this encounter to the book but awards nothing; this is a write for CLI/capture permission purposes. No viewer AI Battery is used.
+- async lookupWord({ wordId, word }) | scopes: content:read
+  - Returns: { word: { id, word, wordLevel, definitions: [{ partOfSpeech, definition }], koreanDefinition, koreanDefinitionRevision, koreanDefinitionStatus } }
+  - Read an exact word from the shared dictionary without spending Battery or changing the viewer’s book.
+  - Pass wordId or an exact English headword (1–64 characters; internal spaces, apostrophes and hyphens supported). Only existing, uncensored word-bank entries are eligible; an unknown spelling returns dictionary_word_not_found (404). This does not create words or perform reverse Korean search.
+  - koreanDefinitionStatus is missing, generated (awaiting daily review), or reviewed. definitions contains up to 12 existing English meanings. Reads never generate or charge. Always use current canonical text: daily corrections replace earlier generated text.
+- async generateKoreanDefinition({ wordId, requestId, useAiBattery }) | scopes: content:write
+  - Returns: { entry?: { id, wordId, requestId, status, failureCode }, word?, pending?, alreadyComplete?, aiUsagePolicy? }
+  - Fill a missing shared Korean definition using the searching member’s AI Battery.
+  - Before the intentional search, clearly disclose that a missing Korean definition uses the viewer’s AI Battery; pass useAiBattery:true. Do not generate on page load, resume, keystrokes or background refresh. Cached content costs no Battery. This is shared canonical dictionary content in BOTH preview and live, across all apps; it grants no XP, Coins, mastery or completion receipt.
+  - Persist a stable 16–64 character requestId before calling. One reservation per word prevents concurrent duplicate generations. pending:true means another request owns that reservation: use free lookupWord checks, then allow an explicit retry if it remains missing. Never invent a payment or definition from local state.
+  - entry.status is pending, generated, ready, failed or superseded. Recover unknown transport outcomes with getKoreanDefinition and the SAME requestId; retrying generate with that same ID is idempotent. A confirmed failed job may be deliberately retried with a new ID. Only successful saved definitions charge Battery, atomically with publication. At most 20 generation attempts per member per UTC day and one active generation per member.
+- async getKoreanDefinition({ requestId }) | scopes: content:write
+  - Returns: { entry: { id, wordId, requestId, status, failureCode } | null, word?, aiUsagePolicy? }
+  - Recover a Korean-definition request after a lost response without another model call.
+  - Scoped to this build and viewer. A generated result is saved and charged once; status never launches another model call. entry:null means no job was found: an explicit retry must reuse the saved requestId. Return values include the current shared definition, including subsequent reviewer corrections.
 - async generateEntry({ wordId, requestId, useAiBattery }) | scopes: content:write
   - Returns: { entry?, word?, alreadyComplete?, aiUsagePolicy, mode }
   - Use viewer AI Battery to fill a missing meaning/example once, with a server-verified contribution receipt.
