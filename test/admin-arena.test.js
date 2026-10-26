@@ -5,8 +5,29 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/commands.js';
 import { parseAdminOperation } from '../lib/admin.js';
 import { formatArenaResult } from '../lib/admin-arena.js';
+import fs from 'node:fs';
+import { testWorkRoot } from './helpers/work-directory.js';
 
 const paper = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/arena-paper');
+
+test('Today’s Q queue/member reads paginate; publication needs explicit confirmation and overrides file dryRun', () => {
+  const op = parseAdminOperation(parseArgs(['admin', 'arena', 'today-queue', '--cursor', '123', '--limit', '25']));
+  assert.equal(op.path, '/cli/admin/arena/today/queue?cursor=123&limit=25');
+  assert.equal(op.mutates, false);
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'today-queue', '--limit', '101'])));
+  assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'today-member', '--user', '123'])).path, '/cli/admin/arena/today/member/123');
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'today-member', '--user', '-1'])));
+  const file = path.join(testWorkRoot(), `arena-today-${process.pid}.json`);
+  try {
+    fs.writeFileSync(file, JSON.stringify({ userId: 123, revision: 2, items: [], dryRun: false }));
+    const args = ['admin', 'arena', 'today-import', '--file', file];
+    const preview = parseAdminOperation(parseArgs(args));
+    assert.equal(preview.body.dryRun, true); assert.equal(preview.mutates, false);
+    const real = parseAdminOperation(parseArgs([...args, '--confirm']));
+    assert.equal(real.body.dryRun, false); assert.equal(real.mutates, true);
+    assert.equal(real.path, '/cli/admin/arena/today/import');
+  } finally { fs.unlinkSync(file); }
+});
 
 test('arena import is a validation-only dry run without --confirm and carries the audio prefix', () => {
   const op = parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--audio', 'audio/suneung-eng/eng-08']));
