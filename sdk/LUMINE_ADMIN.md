@@ -1653,6 +1653,27 @@ control contents. Normal wakes are retained for comparison. `--perf` also
 includes the geometry rows. The session's `viewportTrace: 1` marks support;
 older tabs do not acquire it until they load a version containing the change.
 
+The October 26 expanded recorder keeps that v1 event compatible and adds
+`layout.v: 2` (`viewportDetail: 2` on the session): body/root bounds, nav padding,
+orientation and bounded ancestor CSS-effect flags. Mobile load/return cycles
+also capture one first-touch/300ms pair and at most four debounced
+resize/scroll/orientation bursts. `signals` and `activity` retain event counts,
+the cap and skipped/pending events; optional context can explicitly report
+`omitted: "payload-budget"`. No page content, screenshot or automatic correction
+is included. Check `work/mobile-bottom-gap-20261026/telemetry/STATUS.md` for
+actual release status; use the workspace CLI for this expanded summary until
+an npm release containing it is recorded there.
+
+The daily summary's `detail` reports expanded coverage, capped/omitted samples,
+boundary changes, comparable first-touch pairs and ancestor effects, with raw
+sequence numbers for follow-up. These are comparison leads, never proof of a
+rendering defect or repair. Normal toolbar movement changes heights too. A
+normal DOM rectangle cannot disprove a visible compositor-only gap, and reads
+may flush pending layout. Review new evidence and keep the original roughly
+108px gap open until its cause and fix are established. Follow the owner-wake
+section in `agent-guides/lumine-admin.md`; do not restart the stopped physical
+phone/Simulator investigation without Mikey's instruction.
+
 `daily-run gather` additionally saves `owner-wake.json`, the retained session
 context in `owner-wake-sessions.json`, and `owner-wake-summary.json` / `.md`.
 Include the coverage and follow-up in the daily report. A >=100px settled gap

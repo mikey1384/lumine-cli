@@ -132,3 +132,150 @@ test("failed wake collection is explicit and cannot reuse a previous run's succe
     assert.deepEqual(summary.collectionFailures, ["owner-wake"]);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+function detailSample({ height = 669, elapsed = 1000, signals = {}, ...overrides } = {}) {
+  const event = sample({
+    phase: "interaction", elapsedMs: elapsed,
+    window: { width: 390, height }, root: { height },
+    visual: { height, offsetTop: 0, scale: 1 },
+    nav: { ...sample().data.nav, bottom: height },
+    layout: { v: 2, orientation: 0, ancestors: [], body: { top: 0 } },
+    activity: { changes: 0, limit: 4, skippedEvents: 0 }, signals, ...overrides,
+  });
+  event.seq = elapsed; event.clientTime = 1800000000000 + elapsed;
+  return event;
+}
+
+test("expanded report finds same-page touch boundary changes without calling them confirmed gaps", () => {
+  const before = detailSample({ signals: { "first-touch": 1 } });
+  const after = detailSample({ height: 777, elapsed: 1300, signals: { "after-first-touch": 1 } });
+  const summary = summarizeOwnerViewport({ events: [after, before] }, sessions);
+  assert.equal(summary.detail.coverage, "observed");
+  assert.equal(summary.detail.firstTouchPairs, 1);
+  assert.equal(summary.detail.firstTouchChanges, 1);
+  assert.equal(summary.detail.boundaryChanges, 1);
+  assert.equal(summary.detail.examples[0].maximum, 108);
+  assert.equal(summary.largeGapCycles, 0);
+  assert.match(formatOwnerViewportReport(summary), /These are not diagnoses/);
+  // A phone clock adjustment must not reverse the same session's touch pair.
+  after.clientTime = before.clientTime - 5000;
+  assert.equal(summarizeOwnerViewport({ events: [after, before] }, sessions).detail.firstTouchChanges, 1);
+});
+
+test("navigation, keyboards, rotation, zoom and stalled touch samples cannot become repair evidence", () => {
+  const before = detailSample({ signals: { "first-touch": 1 } });
+  for (const override of [
+    { focus: { tag: "textarea" } }, { inset: 300 },
+    { visual: { height: 777, offsetTop: 0, scale: 2 } },
+    { window: { width: 844, height: 777 } },
+    { layout: { v: 2, orientation: 90, ancestors: [] } },
+    { elapsedMs: undefined },
+  ]) {
+    const after = detailSample({ height: 777, elapsed: 1300, signals: { "after-first-touch": 1 }, ...override });
+    const detail = summarizeOwnerViewport({ events: [before, after] }, sessions).detail;
+    assert.equal(detail.firstTouchPairs, 0); assert.equal(detail.boundaryChanges, 0);
+  }
+  const navigated = detailSample({ height: 777, elapsed: 1300, signals: { "after-first-touch": 1 } });
+  navigated.path = "/chat";
+  assert.equal(summarizeOwnerViewport({ events: [before, navigated] }, sessions).detail.firstTouchPairs, 0);
+  const late = detailSample({ height: 777, elapsed: 6000, signals: { "after-first-touch": 1 } });
+  assert.equal(summarizeOwnerViewport({ events: [before, late] }, sessions).detail.firstTouchPairs, 0);
+});
+
+test("expanded coverage distinguishes old clients, omitted context, capped activity and unchanged DOM", () => {
+  const old = summarizeOwnerViewport({ events: [sample()] }, sessions);
+  assert.equal(old.detail.coverage, "unavailable");
+  const events = [
+    sample(),
+    detailSample({ signals: { "first-touch": 1 } }),
+    detailSample({ elapsed: 1300, signals: { "after-first-touch": 1 }, activity: { changes: 4, limit: 4 } }),
+    detailSample({ elapsed: 2000, layout: { v: 2, omitted: "payload-budget" } }),
+  ];
+  const summary = summarizeOwnerViewport({ events }, sessions);
+  assert.equal(summary.detail.coverage, "partial");
+  assert.equal(summary.detail.omittedSamples, 1);
+  assert.equal(summary.detail.activityCappedCycles, 1);
+  assert.equal(summary.detail.firstTouchPairs, 1);
+  assert.equal(summary.detail.firstTouchChanges, 0);
+  assert.match(summary.detail.note, /Unchanged DOM measurements cannot rule out/);
+});
+
+test("ancestor layout effects and activity signals are retained in the daily report and readable timeline", () => {
+  const event = detailSample({ phase: "change", signals: { "window-resize": 3 },
+    layout: { v: 2, orientation: 0, ancestors: [{ depth: 1, effects: ["transform"] }], body: { top: -108 } },
+  });
+  const summary = summarizeOwnerViewport({ events: [event] }, sessions);
+  assert.equal(summary.detail.ancestorSamples, 1);
+  assert.equal(summary.detail.examples[0].kind, "ancestor-layout-effects");
+  const text = formatOwnerTrace({ events: [event] }).join("\n");
+  assert.match(text, /window-resize:3/); assert.match(text, /body top -108/);
+  assert.match(text, /changes 0\/4/);
+});
+
+test("bounded ancestor scans are partial and repeated CSS flags cannot crowd out touch examples", () => {
+  const layout = { v: 2, orientation: 0, ancestorLimit: true, ancestors: [{ depth: 1, effects: ["transform"] }] };
+  const events = Array.from({ length: 12 }, (_, i) => detailSample({ elapsed: 100 + i * 50, layout }));
+  events.push(detailSample({ elapsed: 1000, layout, signals: { "first-touch": 1 } }));
+  events.push(detailSample({ elapsed: 1300, height: 777, layout, signals: { "after-first-touch": 1 } }));
+  const detail = summarizeOwnerViewport({ events }, sessions).detail;
+  assert.equal(detail.coverage, "partial");
+  assert.equal(detail.limitedAncestorSamples, 14);
+  assert.equal(detail.examples.filter(e => e.kind === "ancestor-layout-effects").length, 3);
+  assert.equal(detail.examples.filter(e => e.kind === "first-touch-boundary-change").length, 1);
+});
+
+test("late activity cannot stand in for a missing scheduled 20-second observation", () => {
+  const late = detailSample({ phase: "change", scheduledMs: 90000, elapsed: 90000 });
+  const summary = summarizeOwnerViewport({ events: [late] }, sessions);
+  assert.equal(summary.cyclesReaching20s, 0);
+  assert.equal(summary.cycles[0].lastScheduledMs, 0);
+  const baseline = detailSample({ phase: "settle", scheduledMs: 20000, elapsed: 20005 });
+  assert.equal(summarizeOwnerViewport({ events: [baseline, late] }, sessions).cyclesReaching20s, 1);
+});
+
+test("daily gather automatically carries new diagnostic evidence into its saved review report", async () => {
+  const root = path.resolve("../work/mobile-bottom-gap-20261026/telemetry");
+  const dir = fs.mkdtempSync(path.join(root, "gather-test-"));
+  const events = [
+    detailSample({ signals: { "first-touch": 1 } }),
+    detailSample({ height: 777, elapsed: 1300, signals: { "after-first-touch": 1 } }),
+  ];
+  try {
+    await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
+      const data = args[0] === "owner-trace" ? args.includes("--wake") ? { events, truncated: false } : sessions
+        : args[0] === "bot-output" ? { pagination: { exhausted: true } }
+        : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
+        : { events: [], truncated: false };
+      const json = { ok: true, status: "ok", data };
+      fs.writeFileSync(outputFile, JSON.stringify(json));
+      return { ok: true, attempts: 1, durationMs: 1, json };
+    } });
+    const summary = JSON.parse(fs.readFileSync(path.join(dir, "owner-wake-summary.json"), "utf8"));
+    const report = fs.readFileSync(path.join(dir, "owner-wake-summary.md"), "utf8");
+    assert.equal(summary.detail.firstTouchChanges, 1);
+    assert.match(report, /1 comparable first-touch pairs \(1 changed >=40px\)/);
+    assert.match(report, /These are not diagnoses/);
+    const review = JSON.parse(fs.readFileSync(path.join(dir, "review-state.json"), "utf8"));
+    assert.equal(review.sources.find(s => s.file === "owner-wake-summary.json").read, false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a failed session-history fetch keeps expanded daily coverage partial even with fresh inline headers", async () => {
+  const dir = fs.mkdtempSync(path.resolve("../work/mobile-bottom-gap-20261026/telemetry/gather-failure-"));
+  try {
+    await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
+      if (args[0] === "owner-trace" && args.includes("30d")) return { ok: false, attempts: 1, durationMs: 1, json: { error: { code: "unavailable" } } };
+      const data = args[0] === "owner-trace" ? { events: [...sessions.events, detailSample()], truncated: false }
+        : args[0] === "bot-output" ? { pagination: { exhausted: true } }
+        : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
+        : { events: [], truncated: false };
+      const json = { ok: true, status: "ok", data };
+      fs.writeFileSync(outputFile, JSON.stringify(json));
+      return { ok: true, attempts: 1, durationMs: 1, json };
+    } });
+    const summary = JSON.parse(fs.readFileSync(path.join(dir, "owner-wake-summary.json"), "utf8"));
+    assert.equal(summary.coverage, "partial");
+    assert.equal(summary.detail.coverage, "partial");
+    assert.deepEqual(summary.collectionFailures, ["owner-wake-sessions"]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
