@@ -23,7 +23,8 @@ function runner(reviewPage) {
       calls.push(args);
       assert.equal(retryRead, true);
       const data = args[0] === "review" ? reviewPage(args)
-        : args[0] === "bot-output" ? { pagination: { exhausted: true } }
+        : args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
+        : args[0] === "arena" && args[1] === "today-queue" ? { members: [], nextCursor: null }
         : { events: [], truncated: false };
       if (data instanceof Error) {
         // Failed children may leave an earlier successful receipt in place.
@@ -58,7 +59,7 @@ test("gather exhausts one unified pending queue for all Build types without a re
 
 test("an explicitly exhausted empty queue replaces old page duties but preserves their files", async (t) => {
   const dir = fixture(t);
-  const oldFiles = ["rr-pending.json", "build-reviews-2.json", "manual-evidence.json"];
+  const oldFiles = ["rr-pending.json", "build-reviews-2.json", "arena-today-queue-2.json", "bot-output-2.json", "manual-evidence.json"];
   for (const file of oldFiles) fs.writeFileSync(path.join(dir, file), "{}");
   fs.writeFileSync(path.join(dir, "review-state.json"), JSON.stringify({
     protocol: 1, sources: oldFiles.map(file => ({ file, fetched: true, read: true })),
@@ -67,7 +68,8 @@ test("an explicitly exhausted empty queue replaces old page duties but preserves
   assert.equal(result.ok, true);
   assert.deepEqual(result.data.buildReviews, { complete: true, pages: 1, items: 0 });
   const sources = read(dir, "review-state.json").sources;
-  assert.ok(!sources.some(source => oldFiles.slice(0, 2).includes(source.file)));
+  assert.ok(!sources.some(source => oldFiles.slice(0, -1).includes(source.file)));
+  assert.deepEqual(result.data.personalQueue, { complete: true, pages: 1, members: 0 });
   assert.equal(sources.find(source => source.file === "manual-evidence.json").retained, true);
   assert.ok(oldFiles.every(file => fs.existsSync(path.join(dir, file))));
 });
@@ -144,4 +146,92 @@ test("unconfirmed review reads retry once; review mutations never auto-retry", (
     assert.equal(calls, command === "list" ? 2 : 1);
     assert.equal(result.ok, command === "list");
   }
+});
+
+test("priority collection defers evidence honestly; resume reuses verified receipts without acknowledging reading", async (t) => {
+  const dir = fixture(t);
+  const first = runner(() => page());
+  const result = await dailyRunGather({ adminOutputDir: dir, adminPhase: "priority" }, first);
+  assert.equal(result.status, "deferred");
+  assert.equal(result.data.failed.length, 0);
+  assert.ok(result.data.deferred.some(s => s.name === "bot-output-page-1"));
+  assert.ok(!first.calls.some(args => args[0] === "bot-output"));
+  assert.ok(first.calls.some(args => args[0] === "arena" && args[1] === "today-queue"));
+  assert.ok(first.calls.some(args => args[0] === "nonogram"));
+  const second = runner(() => page());
+  const resumed = await dailyRunGather({ adminOutputDir: dir, adminPhase: "evidence", adminResume: true }, second);
+  assert.equal(resumed.status, "success");
+  assert.ok(!second.calls.some(args => args[0] === "energy-budget"));
+  assert.ok(second.calls.some(args => args[0] === "bot-output"));
+  assert.equal(resumed.data.collection.id, result.data.collection.id);
+  const energy = resumed.data.steps.find(s => s.name === "energy-budget");
+  assert.equal(energy.reused, true);
+  assert.equal(energy.capturedAt, result.data.steps.find(s => s.name === "energy-budget").capturedAt);
+  assert.ok(read(dir, "review-state.json").sources.every(s => !s.read));
+});
+
+test("bounded interruption resumes from persisted receipts, and modified or failed receipts are fetched again", async (t) => {
+  const dir = fixture(t);
+  const result = await dailyRunGather({ adminOutputDir: dir, adminMaxSteps: 2 }, runner(() => page()));
+  assert.equal(result.status, "deferred");
+  assert.equal(result.data.steps.filter(s => s.capturedAt).length, 2);
+  fs.writeFileSync(path.join(dir, "energy-budget.json"), JSON.stringify({ ok: true, status: "ok", data: { wrong: true } }));
+  const second = runner(() => page());
+  const resumed = await dailyRunGather({ adminOutputDir: dir, adminResume: true }, second);
+  assert.equal(resumed.status, "success");
+  assert.ok(second.calls.some(args => args[0] === "energy-budget"));
+  assert.ok(!second.calls.some(args => args[0] === "news"));
+  const progress = summarizeDailyProgress(dir, read(dir, "review-state.json"), {});
+  assert.equal(progress.complete, false);
+  assert.ok(progress.reading.pending.length > 0);
+});
+
+test("closed UTC cost-day validation distinguishes run dates, rejects impossible dates and binds resumes", async (t) => {
+  const now = () => Date.parse("2026-10-27T12:00:00Z");
+  for (const date of ["2026-10-27", "2026-10-28", "2026-02-30", "2026-1-2"]) {
+    const stub = runner(() => page());
+    await assert.rejects(dailyRunGather({ adminOutputDir: fixture(t), adminCostDate: date }, { ...stub, now }), /completed UTC day/);
+    assert.equal(stub.calls.length, 0);
+  }
+  const dir = fixture(t);
+  const stub = runner(() => page());
+  const result = await dailyRunGather({ adminOutputDir: dir, adminDate: "2026-10-26" }, { ...stub, now });
+  assert.equal(result.data.costDateUtc, "2026-10-26");
+  assert.match(result.data.collection.warnings[0], /legacy alias/);
+  assert.ok(stub.calls.some(args => args[0] === "ai-costs" && args[2] === "2026-10-26"));
+  await assert.rejects(dailyRunGather({ adminOutputDir: dir, adminResume: true, adminCostDate: "2026-10-25" }, { ...stub, now }), /different cost day/);
+});
+
+test("time budget leaves an explicit continuation instead of launching more child commands", async (t) => {
+  let elapsed = 0;
+  const stub = runner(() => page());
+  const result = await dailyRunGather({ adminOutputDir: fixture(t), adminMaxSeconds: 1 }, {
+    clock: () => elapsed,
+    run(args, opts) { assert.ok(opts.timeoutMs <= 1000); const r = stub.run(args, opts); elapsed += 1000; return r; },
+  });
+  assert.equal(stub.calls.length, 1);
+  assert.equal(result.status, "deferred");
+  assert.ok(result.data.deferred.every(s => s.reason === "time-budget"));
+});
+
+test("a resumable page boundary follows the saved cursor, while semantic failures must be fetched again", async (t) => {
+  const dir = fixture(t);
+  let pageReads = 0;
+  const first = runner(args => { pageReads++; return args.includes("--cursor") ? page([{ id: 2 }]) : page([{ id: 1 }], "100"); });
+  // Stop immediately after the first review page; do not depend on the plan's length.
+  let elapsed = 0;
+  await dailyRunGather({ adminOutputDir: dir, adminMaxSeconds: 1 }, {
+    clock: () => elapsed,
+    run(args, opts) { const r = first.run(args, opts); if (args[0] === "review") elapsed = 1000; return r; },
+  });
+  assert.equal(pageReads, 1);
+  const second = runner(args => { assert.ok(args.includes("--cursor")); return {}; });
+  const failed = await dailyRunGather({ adminOutputDir: dir, adminResume: true }, second);
+  assert.equal(failed.status, "partial_failure");
+  assert.equal(read(dir, "gather-checkpoint.json").entries["build-reviews-page-2"].ok, false);
+  const third = runner(args => { assert.ok(args.includes("--cursor")); return page([{ id: 2 }]); });
+  const finished = await dailyRunGather({ adminOutputDir: dir, adminResume: true }, third);
+  assert.equal(finished.status, "success");
+  assert.deepEqual(finished.data.buildReviews, { complete: true, pages: 2, items: 2 });
+  assert.equal(third.calls.length, 1);
 });

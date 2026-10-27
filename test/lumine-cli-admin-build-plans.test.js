@@ -51,3 +51,21 @@ test("build-plans results read plainly", () => {
   assert.equal(done[3], "Build 2: not rechecked (a Lumine run is in progress; try again later)");
   assert.equal(done[4], "(already rechecked by this request) Build 3: milestone 2 NEEDS_WORK, 1/2 passing, 1 unverified; cost 2400 Energy units (40000 in / 4000 out tokens), not charged to the creator");
 });
+
+test("build-plan output separates criterion success from promised-step coverage, including legacy unknowns", () => {
+  const row = {
+    buildId: 1696, milestoneIndex: 1, milestones: 5, milestonesDone: 1, runs: 1,
+    energyRatio: 0.1, evaluations: 1, consecutiveNonPass: 0, passed: 3, criteria: 3,
+    unverified: 0, steps: 4, stepsPassed: 3, stepsUnverified: 0, stepsNeedWork: 1,
+    stalled: false, wouldStall: null, flags: ["criteria_pass_steps_open"]
+  };
+  const operation = { name: "build-plans.stuck" };
+  const text = formatBuildPlansResult({ operation, data: { rows: [row], days: 7 } }).join("\n");
+  assert.match(text, /3\/3 passing, 0 unverified; steps 3\/4 verified, 0 unverified, 1 need work/);
+  assert.match(text, /criteria_pass_steps_open/);
+  const legacy = formatBuildPlansResult({ operation, data: { rows: [{ ...row, stepsPassed: null, stepsUnverified: null, stepsNeedWork: null }] } }).join("\n");
+  assert.match(legacy, /steps \?\/4 verified \(no step grading yet\)/);
+  const recheck = formatBuildPlansResult({ operation: { name: "build-plans.recheck" }, data: { results: [{ ...row, ok: true, verdict: "NEEDS_WORK" }] } }).join("\n");
+  assert.match(recheck, /steps 3\/4 verified, 0 unverified, 1 need work/);
+  assert.doesNotMatch(recheck, /milestone completed/);
+});

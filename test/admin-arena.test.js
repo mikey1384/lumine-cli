@@ -51,6 +51,37 @@ test('explicit --live=false imports checked items without serving them to member
   assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--confirm=false'])));
 });
 
+test('additive refill preserves repeated blueprint slots and never replaces a complete paper', () => {
+  const file = path.join(testWorkRoot(), `arena-additive-${process.pid}.json`);
+  const items = [
+    { number: 20, sourceId: 'refill-a', stem: 'First reviewed question' },
+    { number: 20, sourceId: 'refill-b', stem: 'Second reviewed question' },
+  ];
+  try {
+    fs.writeFileSync(file, JSON.stringify(items));
+    const args = ['admin', 'arena', 'import', '--additive', '--file', file, '--live'];
+    const preview = parseAdminOperation(parseArgs(args));
+    assert.deepEqual(preview.body.items, items);
+    assert.equal(Object.hasOwn(preview.body, 'paper'), false);
+    assert.equal(preview.body.dryRun, true);
+    assert.equal(preview.mutates, false);
+    const real = parseAdminOperation(parseArgs([...args, '--confirm']));
+    assert.equal(real.body.dryRun, false);
+    assert.equal(real.body.live, true);
+    assert.equal(real.mutates, true);
+    assert.equal(Object.hasOwn(real.body, 'paper'), false);
+    assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--file', file])));
+    assert.throws(() => parseAdminOperation(parseArgs([...args, '--dir', paper])));
+    assert.throws(() => parseAdminOperation(parseArgs([...args, '--additive=false'])));
+    fs.writeFileSync(file, JSON.stringify({ items }));
+    assert.throws(() => parseAdminOperation(parseArgs(args)));
+    fs.writeFileSync(file, '[]');
+    assert.throws(() => parseAdminOperation(parseArgs(args)));
+    const folder = parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--additive', '--dir', paper]));
+    assert.equal(Object.hasOwn(folder.body, 'paper'), false);
+  } finally { fs.unlinkSync(file); }
+});
+
 test('arena queue reads; status needs --confirm', () => {
   assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'queue'])).method, 'GET');
   assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'status', '--item', '5', '--to', 'retired'])));
