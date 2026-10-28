@@ -32,6 +32,35 @@ test("all reward pages keep their exact boundary and source receipts, deduplicat
   assert.equal(compact.rows, 4);
 });
 
+test("production BIGINT strings collect across pages without changing evidence or counting mixed IDs twice", () => {
+  const rows = [{ id: "38405", details: { stage: "response" } }, { id: "38404" }];
+  const before = JSON.stringify(rows);
+  const { result, failures } = collect([
+    { events: rows, nextCursor: 38404 },
+    { events: [{ id: 38404 }, { id: "38403" }], nextCursor: null },
+  ]);
+  assert.equal(result.complete, true);
+  assert.equal(result.duplicateRows, 1);
+  assert.deepEqual(result.events.map(row => row.id), ["38405", "38404", "38403"]);
+  assert.equal(result.events[0], rows[0]);
+  assert.equal(JSON.stringify(rows), before);
+  assert.deepEqual(failures, []);
+});
+
+test("diagnostic ID compatibility still rejects lossy, noncanonical and malformed IDs", () => {
+  for (const id of [null, undefined, true, {}, [], 0, -1, 1.5, NaN, Infinity,
+    Number.MAX_SAFE_INTEGER + 1, "9007199254740992", "9007199254740993", "0", "01",
+    "-1", "1.5", "1e3", "0x10", " 1", "1 ", "", "1\n"]) {
+    const { result, failures } = collect([{ events: [{ id }], nextCursor: null }]);
+    assert.equal(result.complete, false, `accepted ${String(id)}`);
+    assert.match(failures[0], /invalid event ID/);
+  }
+  const { result } = collect([{ events: [{ id: String(Number.MAX_SAFE_INTEGER) }], nextCursor: null }]);
+  assert.equal(result.complete, true);
+  const malformed = collect([{ events: [null], nextCursor: null }]);
+  assert.equal(malformed.result.complete, false);
+});
+
 const jevCursor = (id, createdAt = 15) => Buffer.from(JSON.stringify({ version: 1,
   kind: "jev-routing-review", since: 10, until: 20, includeSynthetic: false, createdAt, id })).toString("base64url");
 const jevPage = (items, nextCursor = null, after = null) => ({ items, nextCursor, after,
@@ -86,6 +115,24 @@ test("wake pages preserve same-second rows and return a chronological aggregate"
   assert.equal(result.complete, true);
   assert.deepEqual(result.events.map(e => e.id), [7, 8, 9, 10]);
   assert.deepEqual(failures, []);
+});
+
+test("the same BIGINT compatibility applies to wake and JEV IDs", () => {
+  const wake = collect([
+    { events: [{ id: "9", serverTime: 19 }, { id: "10", serverTime: 19 }], nextCursor: "19:9", truncated: true },
+    { events: [{ id: 9, serverTime: 19 }, { id: "8", serverTime: 18 }], nextCursor: null, truncated: false },
+  ], true);
+  assert.equal(wake.result.complete, true);
+  assert.equal(wake.result.duplicateRows, 1);
+  assert.deepEqual(wake.result.events.map(row => row.id), ["8", "9", "10"]);
+  const cursor = jevCursor(2);
+  const jev = collect([
+    jevPage([{ eventId: "1" }, { eventId: "2" }], cursor),
+    jevPage([{ eventId: 2 }, { eventId: "3" }], null, cursor),
+  ], false, true);
+  assert.equal(jev.result.complete, true);
+  assert.equal(jev.result.duplicateRows, 1);
+  assert.deepEqual(jev.result.events.map(row => row.eventId), ["1", "2", "3"]);
 });
 
 test("a later failure/deferment retains observed rows but cannot become complete coverage", () => {
