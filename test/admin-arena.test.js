@@ -10,6 +10,14 @@ import { testWorkRoot } from './helpers/work-directory.js';
 
 const paper = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/arena-paper');
 
+test('waiting-member paper queue is a bounded read and shows continuation without pretending an empty page is exhausted', () => {
+  const op = parseAdminOperation(parseArgs(['admin', 'arena', 'paper-queue', '--cursor', '12', '--limit', '25']));
+  assert.equal(op.path, '/cli/admin/arena/paper-queue?cursor=12&limit=25');
+  assert.equal(op.mutates, false);
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'paper-queue', '--limit', '101'])));
+  assert.match(formatArenaResult({ operation: op, data: { scannedMembers: 25, entries: [], nextCursor: 37 } }).join('\n'), /--cursor 37/);
+});
+
 test('Today’s Q queue/member reads paginate; publication needs explicit confirmation and overrides file dryRun', () => {
   const op = parseAdminOperation(parseArgs(['admin', 'arena', 'today-queue', '--cursor', '123', '--limit', '25']));
   assert.equal(op.path, '/cli/admin/arena/today/queue?cursor=123&limit=25');

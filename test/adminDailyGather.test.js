@@ -24,6 +24,7 @@ function runner(reviewPage) {
       assert.equal(retryRead, true);
       const data = args[0] === "review" ? reviewPage(args)
         : args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
+        : args[0] === "arena" && args[1] === "paper-queue" ? { demandBasis: "waiting-published-papers-v1", entries: [], nextCursor: null }
         : args[0] === "arena" && args[1] === "today-queue" ? { members: [], nextCursor: null }
         : { events: [], truncated: false };
       if (data instanceof Error) {
@@ -55,6 +56,24 @@ test("gather exhausts one unified pending queue for all Build types without a re
   assert.equal(sources.length, 2);
   assert.ok(sources.every(source => source.fetched && source.sha256 && !source.read));
   assert.deepEqual(read(dir, "build-reviews-2.json").data.items, items.slice(3));
+});
+
+test("gather identifies waiting exam members before generic inventory and follows empty pages with a cursor", async (t) => {
+  const dir = fixture(t);
+  const stub = runner(() => page());
+  const base = stub.run;
+  stub.run = (args, options) => {
+    if (args[0] !== "arena" || args[1] !== "paper-queue") return base(args, options);
+    stub.calls.push(args);
+    const first = args[args.indexOf("--cursor") + 1] === "0";
+    const json = { ok: true, data: { demandBasis: "waiting-published-papers-v1", entries: first ? [] : [{ userId: 42 }], nextCursor: first ? 40 : null } };
+    fs.writeFileSync(options.outputFile, JSON.stringify(json));
+    return { ok: true, json, attempts: 1, durationMs: 1 };
+  };
+  const result = await dailyRunGather({ adminOutputDir: dir }, stub);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.paperQueue, { complete: true, pages: 2, waitingTracks: 1 });
+  assert.ok(stub.calls.findIndex(args => args[1] === "paper-queue") < stub.calls.findIndex(args => args[0] === "math-lab"));
 });
 
 test("an explicitly exhausted empty queue replaces old page duties but preserves their files", async (t) => {
