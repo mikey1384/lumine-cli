@@ -26,6 +26,9 @@ function runner(reviewPage) {
         : args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
         : args[0] === "arena" && args[1] === "paper-queue" ? { demandBasis: "waiting-published-papers-v1", entries: [], nextCursor: null }
         : args[0] === "arena" && args[1] === "today-queue" ? { members: [], nextCursor: null }
+        : args[0] === "reward-diagnostics" ? { coverage: "best_effort", since: Number(args[args.indexOf("--until") + 1]) - 86400, until: Number(args[args.indexOf("--until") + 1]), events: [], nextCursor: null }
+        : args[0] === "owner-trace" ? { since: Number(args[args.indexOf("--since") + 1]), until: Number(args[args.indexOf("--until") + 1]), events: [], nextCursor: null, truncated: false }
+        : args[0] === "jev-routing" ? { collectionWindow: { since: Number(args[args.indexOf("--since") + 1]), until: Number(args[args.indexOf("--until") + 1]), includeSynthetic: false }, items: [], nextCursor: null, after: null, hasMore: false, coverage: { scope: "page", status: "exhausted" } }
         : { events: [], truncated: false };
       if (data instanceof Error) {
         // Failed children may leave an earlier successful receipt in place.
@@ -175,6 +178,7 @@ test("priority collection defers evidence honestly; resume reuses verified recei
   assert.equal(result.data.failed.length, 0);
   assert.ok(result.data.deferred.some(s => s.name === "bot-output-page-1"));
   assert.ok(!first.calls.some(args => args[0] === "bot-output"));
+  assert.ok(!first.calls.some(args => args[0] === "jev-routing"));
   assert.ok(first.calls.some(args => args[0] === "arena" && args[1] === "today-queue"));
   assert.ok(first.calls.some(args => args[0] === "nonogram"));
   const second = runner(() => page());
@@ -182,6 +186,7 @@ test("priority collection defers evidence honestly; resume reuses verified recei
   assert.equal(resumed.status, "success");
   assert.ok(!second.calls.some(args => args[0] === "energy-budget"));
   assert.ok(second.calls.some(args => args[0] === "bot-output"));
+  assert.ok(second.calls.some(args => args[0] === "jev-routing"));
   assert.equal(resumed.data.collection.id, result.data.collection.id);
   const energy = resumed.data.steps.find(s => s.name === "energy-budget");
   assert.equal(energy.reused, true);

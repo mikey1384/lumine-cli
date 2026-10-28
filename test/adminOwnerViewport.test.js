@@ -16,6 +16,16 @@ function sample(overrides = {}) {
 }
 const sessions = { events: [{ type: "session", sessionId: "phone-session", data: { version: "test", platform: "iPhone", ua: "test Safari" } }] };
 
+function emptyGatherData(args) {
+  const until = Number(args[args.indexOf("--until") + 1]);
+  if (args[0] === "reward-diagnostics") return { coverage: "best_effort", since: until - 86400, until, events: [], nextCursor: null };
+  if (args[0] === "owner-trace") return { since: Number(args[args.indexOf("--since") + 1]), until, events: [], nextCursor: null, truncated: false };
+  if (args[0] === "jev-routing") return { collectionWindow: { since: Number(args[args.indexOf("--since") + 1]), until, includeSynthetic: false }, items: [], nextCursor: null, after: null, hasMore: false, coverage: { scope: "page", status: "exhausted" } };
+  if (args[0] === "arena" && args[1] === "paper-queue") return { demandBasis: "waiting-published-papers-v1", entries: [], nextCursor: null };
+  if (args[0] === "arena" && args[1] === "today-queue") return { members: [], nextCursor: null };
+  return { events: [], truncated: false };
+}
+
 test("reports repeated settled displacement separately from missing coverage", () => {
   const summary = summarizeOwnerViewport({ since: 123, events: [sample(), sample({ scheduledMs: 3000, elapsedMs: 3005 }), sample({ phase: "background" })] }, sessions);
   assert.equal(summary.coverage, "observed");
@@ -90,17 +100,18 @@ test("daily gather collects wake/session evidence and creates an explicit report
   try {
     const result = await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
       calls.push(args);
-      const data = args[0] === "bot-output" ? { pagination: { exhausted: true } }
+      const data = args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
         : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
-        : { events: [], truncated: false };
+        : emptyGatherData(args);
       const json = { ok: true, status: "ok", data };
       fs.writeFileSync(outputFile, JSON.stringify(json));
       return { ok: true, attempts: 1, durationMs: 1, json };
     } });
     assert.equal(result.ok, true);
+    const end = String(Math.floor(Date.parse(result.data.collection.startedAt) / 1000));
     assert.deepEqual(calls.filter(a => a[0] === "owner-trace"), [
-      ["owner-trace", "--since", "24h", "--wake", "--limit", "2000"],
-      ["owner-trace", "--since", "30d", "--type", "session", "--limit", "2000"],
+      ["owner-trace", "--since", String(Number(end) - 86400), "--wake", "--limit", "2000", "--until", end],
+      ["owner-trace", "--since", String(Number(end) - 30 * 86400), "--type", "session", "--limit", "2000", "--until", end],
     ]);
     assert.equal(result.data.ownerWake.coverage, "unavailable");
     const report = fs.readFileSync(path.join(dir, "owner-wake-summary.md"), "utf8");
@@ -118,9 +129,9 @@ test("failed wake collection is explicit and cannot reuse a previous run's succe
     fs.writeFileSync(path.join(dir, "owner-wake.json"), JSON.stringify({ ok: true, data: { events: [sample()] } }));
     const result = await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
       if (args[0] === "owner-trace" && args.includes("--wake")) return { ok: false, attempts: 1, durationMs: 1, json: { error: { code: "unavailable" } } };
-      const data = args[0] === "bot-output" ? { pagination: { exhausted: true } }
+      const data = args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
         : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
-        : { events: [], truncated: false };
+        : emptyGatherData(args);
       const json = { ok: true, status: "ok", data };
       fs.writeFileSync(outputFile, JSON.stringify(json));
       return { ok: true, attempts: 1, durationMs: 1, json };
@@ -242,10 +253,10 @@ test("daily gather automatically carries new diagnostic evidence into its saved 
   ];
   try {
     await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
-      const data = args[0] === "owner-trace" ? args.includes("--wake") ? { events, truncated: false } : sessions
-        : args[0] === "bot-output" ? { pagination: { exhausted: true } }
+      const data = args[0] === "owner-trace" ? { ...emptyGatherData(args), events: (args.includes("--wake") ? events : sessions.events).map((e, i) => ({ ...e, id: i + 1 })) }
+        : args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
         : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
-        : { events: [], truncated: false };
+        : emptyGatherData(args);
       const json = { ok: true, status: "ok", data };
       fs.writeFileSync(outputFile, JSON.stringify(json));
       return { ok: true, attempts: 1, durationMs: 1, json };
@@ -264,11 +275,11 @@ test("a failed session-history fetch keeps expanded daily coverage partial even 
   const dir = fs.mkdtempSync(path.resolve("../work/mobile-bottom-gap-20261026/telemetry/gather-failure-"));
   try {
     await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
-      if (args[0] === "owner-trace" && args.includes("30d")) return { ok: false, attempts: 1, durationMs: 1, json: { error: { code: "unavailable" } } };
-      const data = args[0] === "owner-trace" ? { events: [...sessions.events, detailSample()], truncated: false }
-        : args[0] === "bot-output" ? { pagination: { exhausted: true } }
+      if (args[0] === "owner-trace" && args.includes("session")) return { ok: false, attempts: 1, durationMs: 1, json: { error: { code: "unavailable" } } };
+      const data = args[0] === "owner-trace" ? { ...emptyGatherData(args), events: [...sessions.events, detailSample()].map((e, i) => ({ ...e, id: i + 1 })) }
+        : args[0] === "bot-output" ? { chatMessages: [], comments: [], pagination: { exhausted: true } }
         : args[0] === "review" ? { filter: "pending", items: [], nextCursor: null }
-        : { events: [], truncated: false };
+        : emptyGatherData(args);
       const json = { ok: true, status: "ok", data };
       fs.writeFileSync(outputFile, JSON.stringify(json));
       return { ok: true, attempts: 1, durationMs: 1, json };

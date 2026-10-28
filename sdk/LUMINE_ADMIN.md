@@ -1881,6 +1881,10 @@ and seeding coverage for steps 1-3 once the app is approved.
   decisions. The old Math Studio steps 1–3 / 20-per-run recipe is historical,
   not current authorization.
 
+### Game diagnostic delivery
+
+For retained game delivery evidence, `lumine admin game-diagnostics summarize --file <envelope.json> --json` is local-only and requires no login. The envelope is `{buildId,topic,entries,coverage:{complete,since,until}}`; keep the canonical sharedDb `id`, `userId`, `topicId` and parsed `data` on every row. The command deduplicates stable event/batch IDs within their canonical user/topic/artifact scope, flags conflicting copies, and reports legacy/unknown-version coverage. Raw evidence is still required for judgment. Cumulative delivery snapshots are not summed; server collection completeness does not prove complete client delivery. The reviewed October28 producers and CLI are not live until their release receipts confirm them. See `work/games-followup-20261028/` and the repository's daily guide.
+
 ### Reward activity report (standing duty, every full daily review; added 2026-09-12)
 
 Also inspect failed or unconfirmed payouts with `lumine admin reward-diagnostics --days 1 --json`.
@@ -3155,6 +3159,46 @@ type PostSkip = Success<{
 ```
 
 ## Twinkle Newspaper
+
+**Daily website-code update article (Mikey, 2026-10-28):** before claiming an
+edition, the duty bot (Zero/Ciel) publishes a real Subject at reward/effort level
+**2** about member-relevant website code changes shipped since the previous
+paper. Check Git/push history against successful production deployments and the
+actual live revision, then explain the useful changes in plain language; a push
+or a proposed fix is not a release. This is website development news, not a
+roundup of member posts or internal tooling. Cite that Subject's actual event
+from the claim digest and include the linked article on every front page; use
+it as the lead only when its significance warrants it. Verify author, level,
+source link and printed placement, and avoid duplicate posts or repeated release
+coverage. If no relevant changes shipped, say so briefly without inventing news.
+The standing instruction authorizes this scoped post and coverage; it grants no
+unrelated release authority. Keep release evidence and private diagnostics out
+of the public article. Follow the repository's daily website-code update
+procedure and the existing dated-revision contract for an approved correction.
+
+Use the scoped posting command after composing and reviewing the article:
+
+```bash
+lumine admin subject post-update --file article.json --json
+lumine admin subject post-update --file article.json --confirm --json
+```
+
+The first command is a read-only preview. The second publishes as the selected
+run's duty bot at level 2; `newspaper` or `full` run scope is required. The file
+contains `title`, `description`, `coverageStart` and `coverageEnd` (Unix seconds),
+and `releaseEvidence`: an array of `{repository, commit, deployedAt, summary}`.
+Use full Git commit hashes and verified deployment times inside the completed
+coverage interval. The evidence stays private; put only useful member-facing
+information in the article. An empty evidence array is allowed when no relevant
+changes shipped, and the article should say that briefly. The command does not
+independently verify GitHub/Vercel receipts: the operator must do that first.
+
+One canonical article is permitted per scheduled editorial day. An identical
+retry returns its existing Subject instead of notifying members again; a
+changed payload, changed duty bot or edited/deleted post requires inspection
+and is not silently overwritten or recreated. Preview reports any existing
+Subject. The already-published October28 article is reserved as a legacy post;
+reuse Subject37265 rather than trying to republish it with this new command.
 
 **Audience (Mikey, 2026-09-15): children and young Twinkle users aged 10–15.**
 Choose and write stories for what these readers would voluntarily spend time
@@ -5467,6 +5511,10 @@ contracts.
 Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
 `comments get`, and `recommend` remain accepted, but the singular command forms
 shown above are the canonical interface.
+
+For bounded case evidence, use `lumine admin jev-routing review --since <UTC-day> --until <next-UTC-day> --json` and follow every cursor, or `--all --checkpoint <persistent-file>`. Daily gather retains every20-event source page for the preceding complete UTC day. The reader covers paired disagreements and Auto fallbacks once per event; synthetic traffic is excluded unless `--include-synthetic` is explicit. It returns only currently unexpired frozen input and labels absent/expired input. A missing endpoint is unavailable coverage, not an empty healthy day. Collection never acknowledges reading or proves classification accuracy. This October28 reader and independent Auto-input capture are local until the matching release is verified.
+
+Before calling a reply unrelated, check its original generation trigger and the bounded `askedAbout` descriptor. A member may have edited the visible turn or asked about linked content. The descriptor explicitly represents current stored metadata, not a separately frozen generation snapshot; never bypass deleted context.
 
 Read `jevRoutingShadow` alongside `jevPilot` in both the admin brief and full
 daily report. The September 21 primary-chat experiment is historical: chat
