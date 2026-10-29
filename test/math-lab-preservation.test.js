@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { serializeMathLabSets } from "../lib/math-lab-build-sheet.js";
 import {
   LEVELS,
   verifyApprovedPrefix,
@@ -114,4 +115,33 @@ test("refilling questions cannot silently change budgets, rewards or other rules
       /preserve the approved reward/,
     );
   }
+});
+
+test("building a refill preserves approved rematches and their ordinary parents", () => {
+  const { sheet, response } = fixture();
+  const variant = {
+    key: "e1-01-v1",
+    variantOf: "e1-01",
+    questions: [{ prompt: "Another puzzle", answer: 0 }],
+  };
+  response.data.review.config.rules[0].sets.push(variant);
+  sheet.rules["e1-daily"].sets.push(structuredClone(variant));
+  sheet.rules["e1-daily"].sets = serializeMathLabSets(sheet.rules["e1-daily"].sets);
+  assert.equal(verifyApprovedPrefix(sheet, response).preservedExact, true);
+  assert.equal(Object.hasOwn(sheet.rules["e1-daily"].sets[0], "variantOf"), false);
+});
+
+test("new variants retain rematch eligibility as well as ordinary collection membership", () => {
+  const { sheet, response } = fixture();
+  sheet.rules["e3-daily"].sets.push({
+    key: "e3-01-v1",
+    variantOf: "e3-01",
+    questions: [{ prompt: "A different transfer puzzle", answer: 2 }],
+  });
+  sheet.rules["e3-daily"].sets = serializeMathLabSets(sheet.rules["e3-daily"].sets);
+  const unlinked = sheet.rules["e3-daily"].sets.filter((set) => set.variantOf === undefined);
+  const rematches = sheet.rules["e3-daily"].sets.filter((set) => set.variantOf === "e3-01");
+  assert.equal(unlinked.length, 1);
+  assert.equal(rematches.length, 1);
+  assert.equal(verifyApprovedPrefix(sheet, response).rules.find((r) => r.rule === "e3-daily").added, 1);
 });

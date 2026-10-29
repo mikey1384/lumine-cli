@@ -119,3 +119,16 @@ test('arena queue separates low stock without demand from an active refill', () 
   assert.match(lines[1], /1 active learner\(s\).*3 unseen -> write 17/);
   assert.equal(lines[2], '1 type(s) due for a refill.');
 });
+
+test('paper-only stock is not described as no demand or as a completed paper refill', () => {
+  const lines = formatArenaResult({ operation: { name: 'arena.queue' }, data: { types: [
+    { examFamily: 'ssat-elementary-3', difficulty: 'hard', itemType: 'ssat.e3.writing', live: 4,
+      activeLearners: 2, minFresh: 0, stockLow: true, refillDue: false, toWrite: 0, refillUse: 'complete-paper-only' },
+    { examFamily: 'historical', itemType: 'unknown', live: 0, activeLearners: 1, minFresh: 0,
+      stockLow: true, refillDue: false, toWrite: 0, refillUse: 'unknown-type' }
+  ] } });
+  assert.match(lines[0], /2 active learner\(s\).*complete paper required; check paper-queue/);
+  assert.match(lines[1], /unknown current type; review before authoring/);
+  assert.ok(lines.every(line => !line.includes('no active demand') && !line.includes('-> write')));
+  assert.match(lines.at(-1), /check paper-queue for waiting exams/);
+});

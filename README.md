@@ -305,10 +305,11 @@ viewer sees (by default the MCP client's own name).
 ## Inspecting Build SDK data
 
 `lumine sdk call <namespace.method> '<jsonArgs>'` calls a build's data SDK
-endpoint with your login and prints the response, so you can inspect real data
+endpoint and prints the response, so you can inspect real data
 and measure latency while building. Run `lumine sdk list` to see callable
-methods. The JSON args are sent as the request body (shapes follow
-`TWINKLE_BUILD_SDK.md`).
+methods. Most methods use your login and send JSON args as the request body
+(shapes follow `TWINKLE_BUILD_SDK.md`). Newspaper reads use the same public
+GET routes as the app and send no login or Build API token.
 
 ```bash
 lumine sdk call aiStories.chapters '{"limit": 5}'
@@ -317,6 +318,9 @@ lumine sdk call live.list '{}'
 lumine sdk call live.get '{"sessionId": "..."}'
 lumine sdk call live.listReplays '{"limit": 20}'
 lumine sdk call live.getReplay '{"replayId": "..."}'
+lumine sdk call news.getCurrentEdition '{}' --build 1929
+lumine sdk call news.listEditions '{"limit": 12}' --build 1929
+lumine sdk call news.getEdition '{"dayIndex": 1762, "revisionNumber": 1}' --build 1929
 ```
 
 It targets the build in the current workspace, or pass `--build <id>`. Add
@@ -324,6 +328,10 @@ It targets the build in the current workspace, or pass `--build <id>`. Add
 which can differ from a method's `Twinkle.*` SDK return shape — check
 `TWINKLE_BUILD_SDK.md` for SDK return shapes. Methods that change data require
 `--allow-write`.
+For newspaper reads, omit `revisionNumber` to read the day's canonical revision;
+pass the archive's `cursor` to `news.listEditions` for the next page. These reads
+never queue generation or refresh an edition; publication uses the separate
+authorized newspaper workflow.
 Stopping a hosted stream is available as
 `lumine sdk call live.stop '{"sessionId":"..."}' --allow-write`; the command
 prints canonical server state and refuses to mint `live:write` without the
