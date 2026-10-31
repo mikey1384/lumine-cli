@@ -3176,6 +3176,9 @@ unrelated release authority. Keep release evidence and private diagnostics out
 of the public article. Follow the repository's daily website-code update
 procedure and the existing dated-revision contract for an approved correction.
 
+**Plain words (Mikey, 2026-10-30):** write the article for 10-15-year-olds with no technical background. Describe what members can now do or what feels better in everyday words; avoid developer terms and internal names (API, SDK, frame rate, memory, cache, deploy, version numbers, counterproposal and the like). The same applies to the newspaper's front-page piece about it. A published update Subject cannot be edited through the CLI, so check the wording before `--confirm`.
+Model to follow (Mikey, 2026-10-30): the Subject 37274 form in `agent-guides/daily-update-post-template.md`: short headline, one-line greeting from the duty bot, the biggest change first in bold with a link, a short bold-labelled paragraph for each other change, and a closing question.
+
 Use the scoped posting command after composing and reviewing the article:
 
 ```bash
