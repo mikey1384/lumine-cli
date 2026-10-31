@@ -2,7 +2,7 @@
 
 Version: 1.74.0
 Updated: 2026-10-29
-Generated: 2026-10-28T20:08:43.889Z
+Generated: 2026-10-31T01:37:07.482Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1403,17 +1403,18 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - For oldest-first chronological reads, pass order: 'asc' or order: 'oldest'. sort and direction are accepted as aliases.
   - Supports cursor-based pagination. Newest-first cursors page toward older entries; oldest-first cursors page toward newer entries.
 - async queryEntries(topicName, { limit, pageSize, cursor, order, authorUserId, fields, where, countBy, includeAuthor } = {}) | scopes: sharedDb:read
-  - Returns: { entries?, groups?, cursor, hasMore, queryVersion: 1 }
+  - Returns: { entries?, groups?, cursor, hasMore, queryVersion: 1, truncated? }
   - Read selected shared data fields with server-side creator filtering, scalar matching and grouped counts.
   - Returns the same paginated entries as getEntries, plus queryVersion: 1.
   - authorUserId filters to one entry creator on the server. It does not change read or write permissions.
   - fields selects at most 24 top-level data field names; missing selected fields are null. Omit fields for complete data; [] returns only row metadata.
   - where: { field, equals } filters one top-level data field by exact JSON scalar equality (string, number, boolean or null).
   - Alternatively where: { field, truthy: true } requires a present JSON value other than null, false, zero or an empty string.
-  - countBy groups matching entries by one top-level data field and returns { groups: [{ value, count }], cursor, hasMore, queryVersion: 1 } instead of entries. This avoids transferring documents just to count comments. Groups page in first-entry order; use the returned cursor with the same query. Per-viewer hidden entries are excluded before counting.
+  - countBy groups matching entries by one top-level data field and returns { groups: [{ value, count }], cursor, hasMore, queryVersion: 1 } instead of entries. This avoids transferring documents just to count comments. Groups page in first-entry order; use the returned cursor with the same query. Per-viewer hidden entries are excluded before counting. Counts cover at most the newest 4000 entries of the topic (or of authorUserId's entries in it); when the topic is larger the result has truncated: true, so keep a running tally field instead of recounting a huge topic.
   - includeAuthor: false skips username/profile-photo enrichment for count/index reads; id, topicId, userId and timestamps remain available.
   - Field names use letters, digits and underscores, starting with a letter or underscore, at most 64 characters. No SQL or nested paths.
-  - Keep the same filters/fields/order when passing a cursor. Reads retain app/topic boundaries, published guest opt-ins and per-viewer content visibility. Signed-in queries read canonical writer state.
+  - Keep the same filters/fields/order when passing a cursor. Reads retain app/topic boundaries, published guest opt-ins and per-viewer content visibility. Signed-in entry queries read canonical writer state; grouped counts may trail a just-saved entry by a moment.
+  - queryEntries calls are limited to 60 a minute per viewer (per IP for guests) and 600 a minute per app; a busy app gets HTTP 429 and should retry later rather than loop.
   - Use metadata lists for browsing and getEntriesByIds only when a member opens a full recording/document.
 - async loadMoreEntries(topicName, { limit, pageSize, cursor, order, sort, direction } = {}) | scopes: sharedDb:read
   - Returns: { entries: [{ id, topicId, userId, username, profilePicUrl, data, createdAt, updatedAt }], cursor?, hasMore }
