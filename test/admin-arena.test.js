@@ -90,6 +90,21 @@ test('additive refill preserves repeated blueprint slots and never replaces a co
   } finally { fs.unlinkSync(file); }
 });
 
+test('additive import with neither --file nor --dir refuses instead of reading the current folder', () => {
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--additive'])), /never reads the current folder/);
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--additive', '--confirm'])), /--file/);
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'import'])), /Usage/);
+});
+
+test('a switch followed by a spaced off value is refused rather than turned on', () => {
+  for (const value of ['false', 'no', 'off', '0', 'FALSE']) {
+    assert.throws(() => parseArgs(['admin', 'arena', 'import', '--dir', paper, '--live', value]), /--live is a switch[\s\S]*--live=false/);
+  }
+  assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--live=false'])).body.live, false);
+  assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--live'])).body.live, true);
+  assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--live', '--dir', paper])).body.live, true);
+});
+
 test('arena queue reads; status needs --confirm', () => {
   assert.equal(parseAdminOperation(parseArgs(['admin', 'arena', 'queue'])).method, 'GET');
   assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'status', '--item', '5', '--to', 'retired'])));

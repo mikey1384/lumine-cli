@@ -105,6 +105,10 @@ test("CLI wires the bounded JEV review command and explicit synthetic flag", () 
   assert.equal(op.name, "jevRouting.review");
   assert.equal(op.mutates, false);
   assert.match(op.path, /includeSynthetic=true/);
+  for (const off of ["--include-synthetic=false", "--include-synthetic=0", "--include-synthetic=no"]) {
+    const offOp = parseAdminOperation(parseArgs(["admin", "jev-routing", "review", "--since", "2026-10-27", "--until", "2026-10-28", off]));
+    assert.doesNotMatch(offOp.path, /includeSynthetic=true/);
+  }
 });
 
 test("wake pages preserve same-second rows and return a chronological aggregate", () => {
