@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.74.0
-Updated: 2026-10-29
-Generated: 2026-10-31T01:37:07.482Z
+Version: 1.75.0
+Updated: 2026-10-31
+Generated: 2026-10-31T07:54:50.319Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -32,6 +32,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 - Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
 - This SDK is injected into Build iframes via the Build preview/runtime.
 - Widgets call SDK methods; the parent proxies to the API.
+- When an SDK request never got a reply from Twinkle's server (the device went offline, the network dropped, or the connection was cut first), its rejected error has error.details.isTransportError === true. Its error.status is 500 for older apps, so check this flag before treating a 500 as a server failure. The request may or may not have been applied: retry a write only with the same operationId or requestId, and only after a later user action or decision point, never in a loop. Errors that came back from the server never carry the flag.
 - Data API methods require scoped tokens handled by the parent; some namespaces include write methods.
 - Use Twinkle.privateDb for LOW-frequency durable private per-user state such as preferences, drafts, settings, inventory checkpoints, and saved progress. It is NOT for high-frequency or per-frame/per-tick writes; the server rate-limits writes and returns 429.
 - Match storage to update frequency: privateDb and sharedDb are for LOW-frequency durable state that changes on a user action. NEVER write per-frame/per-tick state to them (camera or cursor position, animation, live movement, presence, autosave every frame/tick). Keep live state in client memory, broadcast realtime/presence via Twinkle.world, and flush only occasional durable snapshots (on an interval or on exit, never per frame). The server enforces per-key write rate limits and returns 429 on excess; never retry-loop a 429.
