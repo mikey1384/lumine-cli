@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.75.0
-Updated: 2026-10-31
-Generated: 2026-10-31T07:54:50.319Z
+Version: 1.76.0
+Updated: 2026-11-01
+Generated: 2026-11-01T11:22:03.891Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -554,7 +554,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Template values describe types, not answers to copy. All object keys are required and extra keys are rejected, including inside nested objects; {} means an exactly empty object, not a free-form dictionary. A non-empty array uses only its first item as the template for every returned item, with no fixed length; mixed examples do not declare a union. [] allows arbitrary JSON items. A null template accepts any JSON primitive (string, number, boolean or null), but the key is still required. Use 'number' for fractional numbers; 0 and other integer examples require integers. State content requirements in prompt or instructions. GPT routes retain descriptive string examples as field guidance, not enforced enum values.
   - GPT models prefer native JSON Schema output for compatible shapes. Shapes outside the strict provider subset, such as [] with arbitrary items or deeply nested structures, use prompt-based JSON generation with the same final validation. A provider rejection specifically of the native schema triggers one prompt-based fallback; auth, quota, safety and unrelated request failures do not trigger that fallback. Validation retries preserve the original task and instructions. The returned object/result shape and streaming callbacks are unchanged.
   - mode is accepted as an alias for thinkingMode, and mid is accepted as an alias for medium.
-  - Omit model to use the normal Lite/Medium/High routing. Low and Medium use gpt-6-luna; explicit gpt-6-luna accepts Low, Medium or High thinking. Existing apps naming claude-haiku-5-5 now run on gpt-6-luna at the requested thinking level. Explicit claude-sonnet-5-5, gpt-6.1-sol or claude-opus-5-5 still require thinkingMode: 'high'; unknown model IDs reject instead of silently falling back. Retired IDs still work and run on their replacement: claude-sonnet-5 runs claude-sonnet-5-5; gpt-6-sol and gpt-5.6-sol run gpt-6.1-sol; gpt-6-astra, claude-opus-5 and claude-fable-5-1 run claude-opus-5-5.
+  - Omit model to use the normal Lite/Medium/High routing. Low and Medium use gpt-6-luna; explicit gpt-6-luna accepts Low, Medium or High thinking. Existing apps naming claude-haiku-5-5 now run on gpt-6-luna at the requested thinking level. Explicit gpt-6.1-sol requires thinkingMode: 'high' (it reasons at xhigh). Explicit claude-sonnet-5-5 or claude-opus-5-5 think at the requested level (low, medium or high; Opus 5.5's own default is medium). A Claude model's thinking shares one reply with the object, so if a large object fails with code build_ai_output_too_long (cut off at the length limit), offer the player a retry at a lower thinkingMode or a smaller request; a cut-off reply is not charged to the player's AI Energy. Unknown model IDs reject instead of silently falling back. Retired IDs still work and run on their replacement: claude-sonnet-5 runs claude-sonnet-5-5; gpt-6-sol and gpt-5.6-sol run gpt-6.1-sol; gpt-6-astra, claude-opus-5 and claude-fable-5-1 run claude-opus-5-5.
   - thinkingMode low uses GPT-6 Luna with low reasoning and consumes the viewer's AI Energy from confirmed provider usage.
   - thinkingMode medium uses GPT-6 Luna with medium reasoning and consumes normal AI Energy.
   - thinkingMode high without model uses Claude Sonnet 5.5 with high adaptive thinking and consumes high AI Energy. Explicit model: 'gpt-6.1-sol' selects GPT-6.1 Sol with xhigh reasoning at the same High AI Energy tier; model: 'claude-sonnet-5-5' names Sonnet 5.5 directly.
@@ -1574,14 +1574,14 @@ world.updatePresence({ x, y, z, facing });
   - Daily reflections are Daily Question answers shown in the Twinkle feed.
   - Only currently shared public reflections are returned. The response field is the stored shared response version, which may be raw or polished depending on what the author explicitly shared.
   - submittedAt and sharedAt are Unix timestamps (seconds). Use new Date(value * 1000) to convert to JS Date.
-  - dayType is 'word' (Word Day), 'picture' (Picture Day) or null (an ordinary reflection). On a Picture Day the member described a picture instead of reflecting: pictureUrl is the picture they chose (null when they finished with words only), pictureStyle the style they asked for, and response is their description. Show the picture with the description, not the stock question.
+  - dayType is 'word' (Word Day), 'advice' (Advice Day: a Word Day that asks for a piece of advice; response is the advice, or whatever they chose to write instead), 'picture' (Picture Day) or null (an ordinary reflection). On a Picture Day the member described a picture instead of reflecting: pictureUrl is the picture they chose (null when they finished with words only), pictureStyle the style they asked for, and response is their description. Show the picture with the description, not the stock question.
 - async getDailyReflectionsByUser(userId, { cursor, lastId, limit } = {}) | scopes: dailyReflections:read
   - Returns: { reflections: [{ id, userId, response, questionId, submittedAt, sharedAt, username, profilePicUrl, question, dayType, pictureUrl, pictureStyle }], cursor? }
   - Read one user's currently public Daily Reflection shares. response is the exact text the author chose to share publicly, never an unshared raw/private answer.
   - Daily reflections are Daily Question answers shown in the Twinkle feed.
   - Only currently shared public reflections are returned. The response field is the stored shared response version, which may be raw or polished depending on what the author explicitly shared.
   - submittedAt and sharedAt are Unix timestamps (seconds). Use new Date(value * 1000) to convert to JS Date.
-  - dayType is 'word' (Word Day), 'picture' (Picture Day) or null (an ordinary reflection). On a Picture Day the member described a picture instead of reflecting: pictureUrl is the picture they chose (null when they finished with words only), pictureStyle the style they asked for, and response is their description. Show the picture with the description, not the stock question.
+  - dayType is 'word' (Word Day), 'advice' (Advice Day: a Word Day that asks for a piece of advice; response is the advice, or whatever they chose to write instead), 'picture' (Picture Day) or null (an ordinary reflection). On a Picture Day the member described a picture instead of reflecting: pictureUrl is the picture they chose (null when they finished with words only), pictureStyle the style they asked for, and response is their description. Show the picture with the description, not the stock question.
 
 ### Twinkle.privateDb
 - async get(key) | scopes: privateDb:read
