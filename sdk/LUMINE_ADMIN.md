@@ -4008,6 +4008,9 @@ lumine admin jev-images switch --area all --mode off  # owner kill switch, no de
 lumine admin jev-images switch --area arena_picture --mode on --daily-cap 100
 lumine admin jev-images decide --area arena_picture --key arenaItem:10176 --decision keep|fix|retired
 lumine admin arena picture-audit [--items <id,...> | --cursor <id>] [--limit 1-20] [--renders <dir>] --output <review-list.json> --json
+lumine admin jev-images thumbnails --targets subject:<id>,build:<id>,... | --featured [--saved-only] --json
+lumine admin jev-images decide --area thumbnail --key subject:37265 --decision keep|replace
+lumine admin jev-images switch --area sdk_decide --build <id> --mode on|off   # one app's image decisions (no per-app cap)
 ```
 
 JEV image checks (Mikey, November 1) send pictures to JEV (`jev-1.13.0`,
@@ -4015,8 +4018,11 @@ pinned) with the `TypeSafe-Danger-Zone-Images` opt-in. The vendor marks images
 experimental. **Every answer is advisory:** never the only gate, never a
 child-safety decision and never a reason to pay or withhold a reward (standing
 ruling 11-01). Areas: `arena_paper` (paper-upload pre-screen notes in
-`approvals show`), `arena_picture` (picture-bank audit). `study_record`,
-`thumbnail` and `sdk_decide` are reserved for later steps and stay off.
+`approvals show`), `arena_picture` (picture-bank audit), `thumbnail` (Featured
+thumbnail notes, on by default, cap 2000/day) and `sdk_decide`
+(`Twinkle.ai.decide` with images, a preview, **off** until Mikey turns it on).
+`study_record` has no caller: study-record-v1 records are text only, so there
+are no photos to check, and the area stays off.
 
 Each check carries a small coloured square and asks its colour. A wrong or
 unsure colour, or an answer from a different model, means the pictures were
@@ -4065,6 +4071,37 @@ listed under `needsRender`. The command never retires or edits an item. Read
 each `review` item yourself. Record `keep`, `fix` or `retired` with
 `jev-images decide`. Retiring an item through `arena status` records `retired`
 automatically. Fixing or retiring live items needs the usual authorization.
+
+**Featured thumbnails.** `featured candidates` adds a `thumbnailCheck` to each
+eligible candidate and a `thumbnailChecks` summary; `jev-images thumbnails
+--featured` does the same for the current board. Each card's picture (the post's
+own picture, or the cover of the app it is about) gets notes: blank, error or
+loading screen, placeholder, mostly empty at card size, garbled or interface
+text, a watermark, and for an app whether it shows the app. Only
+Twinkle-hosted pictures are read; link previews and videos say
+`external_thumbnail`, and a secret attachment is never looked at. Answers are
+saved per picture, so a re-run makes no new call. The notes are never a ranking
+or eligibility input and nothing is replaced or unfeatured because of them.
+When you look at a flagged picture, record `keep` or `replace` with
+`jev-images decide --area thumbnail --key subject:<id>` (or `build:<id>`).
+Pilot (11-01, app covers only): 43/45 on a held-out set, every good cover
+passed, 2 of 4 bad ones caught. A pass does not mean the picture is fine.
+
+**Image decisions in apps (preview).** `Twinkle.ai.decide({ state, questions,
+images })` lets an app ask about up to four pictures (its own uploads or a
+canvas). Pictures are bounded: an upload at most 5 MB, a snapshot at most 3 MB
+(5 MB of snapshots), and 10 MB for all pictures of one decision; a larger call
+is refused with a plain "Image too large" message before it is fully read. It
+is free for viewers like text decisions. There are no per-app or
+per-viewer daily caps (a decision costs a fraction of a cent); the area's daily
+cap and the cost alarm in the daily report are the spending guard. Bursts are
+limited instead: one image decision in flight per viewer, eight per app, and
+600 a minute per app (per API instance, so up to about twice that across the
+cluster; a class of 30 deciding every ~20 s is about 90 a minute). A throttled call is refused at once as `ai_decision_unavailable` with
+reason `rate_limited`. It never falls back to a text-only answer: when off,
+throttled or failing it returns `ai_decision_unavailable` with a reason.
+`switch --area sdk_decide --build <id> --mode off` switches one app off (or
+`on` to undo it). The report shows its use under `sdk_decide`.
 
 ### Spending by calendar month
 
