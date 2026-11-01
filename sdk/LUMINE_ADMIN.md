@@ -1328,7 +1328,7 @@ Birthdate, teacher-signup (`mentor`) and meetup-achievement requests, each with 
 
 ```bash
 lumine admin approvals list [--status pending|approved|rejected|all] [--type dob|mentor|meetup]
-lumine admin approvals show <id>
+lumine admin approvals show <id>            # an Arena paper also gets advisory JEV pre-screen notes (see JEV images)
 lumine admin approvals approve|reject <id> [--reason <text>]
 lumine admin teachers audit [--limit 1-100] [--cursor <c>] [--all]
 lumine admin teachers revoke <userId> --reason <text>
@@ -3999,6 +3999,72 @@ deleted or missing. The September 21 expansion adds bounded, expiring private
 input snapshots as described below.
 See `twinkle-api/JEV_PILOT.md` for configuration,
 the synthetic evaluation step and release checks.
+
+### JEV images (standing duty, every full daily review; added 2026-11-01)
+
+```bash
+lumine admin jev-images report --json                 # last 24 h; --days 1..30
+lumine admin jev-images switch --area all --mode off  # owner kill switch, no deploy
+lumine admin jev-images switch --area arena_picture --mode on --daily-cap 100
+lumine admin jev-images decide --area arena_picture --key arenaItem:10176 --decision keep|fix|retired
+lumine admin arena picture-audit [--items <id,...> | --cursor <id>] [--limit 1-20] [--renders <dir>] --output <review-list.json> --json
+```
+
+JEV image checks (Mikey, November 1) send pictures to JEV (`jev-1.13.0`,
+pinned) with the `TypeSafe-Danger-Zone-Images` opt-in. The vendor marks images
+experimental. **Every answer is advisory:** never the only gate, never a
+child-safety decision and never a reason to pay or withhold a reward (standing
+ruling 11-01). Areas: `arena_paper` (paper-upload pre-screen notes in
+`approvals show`), `arena_picture` (picture-bank audit). `study_record`,
+`thumbnail` and `sdk_decide` are reserved for later steps and stay off.
+
+Each check carries a small coloured square and asks its colour. A wrong or
+unsure colour, or an answer from a different model, means the pictures were
+dropped. The check is retried once (`droppedRetries`), then returns
+`images_dropped`. An unavailable check (off, capped, timeout, provider error,
+dropped images, tables missing) leaves the caller exactly as it was before.
+
+`daily-run gather` saves the report as `jev-images.json`. Give the full report a
+**JEV images** section:
+- per area: mode and source, daily cap and today's use, checks, errors,
+  timeouts, dropped-image retries and give-ups, latency p50/p95, tokens and cost;
+- agreement between advisories and final decisions (`agreed/scored`), every
+  listed disagreement and the flagged items still awaiting a decision;
+- every `escalations` entry. Thresholds (`thresholds` in the JSON): error rate
+  above 20% or timeouts above 10% (at least 5 sent checks), dropped-image retries
+  above 5% of requests or any give-up, daily cost above $0.10 and 3x the previous
+  7-day average, daily cost above $2, agreement below 80% over at least 10
+  decided items, and any check skipped at the cap.
+
+`coverage.status: store_unavailable` means the tables are not migrated: report
+"not deployed", not a quiet day. A failed gather step is unavailable evidence.
+JEV image spend is also in the AI ledger (`surface: jev_images`), so never add
+it to the AI cost total a second time. Agreement is not accuracy: a
+disagreement can be JEV's mistake or the reviewer's, so read the item before
+saying which.
+
+**Paper pre-screen.** For a pending `arenaPaper`, `approvals show <id>` adds a
+`prescreen` block: per page, whether it looks like a test page, legibility, a
+guess at the exam family and printed year, whether it fits its tags, plus
+blank-looking and duplicate pages (plain image arithmetic). Results are saved
+per page, so a second `show` makes no new call (`(saved)`). Add
+`?prescreen=off` to the API read to skip it. The approval criterion is
+unchanged (a real exam paper matching its tags, ruling 10-29): read every page
+yourself. Approve/reject records the final decision for agreement.
+
+**Picture-bank audit.** `arena picture-audit` reads live items with a picture
+and asks fixed questions. For 수능 listening #4 it asks which labelled object
+mismatches the script, whether the keyed object is drawn as briefed, whether
+the ① to ⑤ labels are present, and whether there is stray text. For picture
+choices it asks which picture matches the heard sentence and whether every
+picture is readable. For other single pictures it asks whether the picture is
+readable and whether there is stray text. Picture choices are drawn by the web,
+so pass `--renders <dir>` containing `<itemId>.png` renders of the item as
+printed, for example from an Arena render script. Without one, the item is
+listed under `needsRender`. The command never retires or edits an item. Read
+each `review` item yourself. Record `keep`, `fix` or `retired` with
+`jev-images decide`. Retiring an item through `arena status` records `retired`
+automatically. Fixing or retiring live items needs the usual authorization.
 
 ### Spending by calendar month
 
