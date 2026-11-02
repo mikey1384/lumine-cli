@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.77.0
+Version: 1.78.0
 Updated: 2026-11-01
-Generated: 2026-11-01T12:15:43.879Z
+Generated: 2026-11-02T01:19:13.071Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -971,10 +971,11 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - map.heightUrlTemplate (or null) gives the land's shape on the same tile grid for 3D maps (ground heights; buildings and trees narrower than about 20 blocks are left out, so draw those from getTerrainChunks): a gzipped 'THM1' file, 16-byte little-endian header (magic, uint16 samples per side, uint16 blocks per sample, float64 source time) then samples x samples int16 heights row by row (z, then x); -32768 = no ground. Images and heights are served with CORS, so WebGL can use them.
   - Example: const { worlds } = await Twinkle.minecraft.getWorlds(); const w = worlds.find((x) => x.id === 'world'); const z = w.map.maxZoom; const blocksPerTile = w.map.blocksPerTileAtMaxZoom * 2 ** (w.map.maxZoom - z); const tx = Math.floor(blockX / blocksPerTile), ty = Math.floor(blockZ / blocksPerTile); const url = w.map.tileUrlTemplate.replace('{z}', z).replace('{x}', tx).replace('{y}', ty);
 - async getOnlinePlayers() | scopes: content:read
-  - Returns: { players: [{ name, world, x, y, z, isZero }], count, stale }
+  - Returns: { players: [{ name, world, x, y, z, isZero }], count, visitors: [{ userId, username, world, x, y, z, since }], visitorCount, stale }
   - List players currently online with their world and block coordinates. Zero appears with isZero: true and is not counted in count.
   - Cached for about 5 seconds; poll no faster than every 5 seconds.
   - Names are Minecraft usernames, not Twinkle usernames.
+  - visitors are website members walking the world from Twinkle MC Explorers (Twinkle usernames, not Minecraft names). They are online and visible in game but are not players on the server; count counts players only.
   - Example: const { players, count } = await Twinkle.minecraft.getOnlinePlayers();
 - async getZero() | scopes: content:read
   - Returns: { zero: { online, world, position: { x, y, z } | null, activity: 'idle'|'thinking'|'building'|'workshop', currentBuild: { id, title, status, placed, total, requester, world, bounds } | null, queue: [build], workshop: { world, min, max } | null, updatedAt }, stale }
@@ -1005,21 +1006,22 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Every change is logged on the server and emailed to the owner; the player is told in game.
   - Example: await Twinkle.minecraft.setPlayerRole({ uuid: person.uuid, role: 'builder' });
 - async getChat({ since } = {}) | scopes: content:read
-  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death', name, text, userId, archived }], latestSeq, online, archiveReady, viewer: { canSend, muted, canModerate }, mutedUserIds }
+  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, archived }], latestSeq, online, visitorCount, archiveReady, viewer: { canSend, muted, canModerate }, mutedUserIds }
   - Live server chat after a sequence number: player chat, Zero, messages sent from the web, joins, leaves and deaths.
   - Without since (or 0) it returns the newest 50 events, oldest first. Pass since = latestSeq from the previous response to get only new events. Poll every 2-3 seconds while the chat is visible; stop when hidden.
-  - kind: chat (a player), zero (Zero, the AI builder), web (someone chatting from the Twinkle app; userId is their Twinkle user id), join, leave, death. Private messages are never included.
+  - kind: chat (a player), zero (Zero, the AI builder), web (someone chatting from the Twinkle app; userId is their Twinkle user id), join, leave, death, visit (a website visitor arrived in the world; userId is their Twinkle user id), unvisit (they left). Private messages are never included.
   - name is a Minecraft username for chat/join/leave/death, and a Twinkle username for web.
   - viewer.canModerate is true only for the server owner; mutedUserIds is filled only for them.
+  - online counts players on the server; visitorCount counts website visitors walking the world (Twinkle MC Explorers).
   - Example: let since = 0; async function poll() { const { events, latestSeq } = await Twinkle.minecraft.getChat({ since }); since = latestSeq; render(events); } setInterval(poll, 2500);
 - async getChatHistory({ before, limit, query, includeArchived } = {}) | scopes: content:read
-  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death', name, text, userId, archived }], hasMore, nextBefore: { at, seq } | null, includesArchived }
+  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, archived }], hasMore, nextBefore: { at, seq } | null, includesArchived }
   - Older server chat, newest first, for scrolling back or searching past days.
   - before is the nextBefore cursor from the previous page; omit it to start from the newest. limit 1-100 (default 50). query searches message text and names (60 chars).
   - Chat from before the web chat bridge existed (imported from server logs) is archived: only the server owner can include it with includeArchived: true; others never receive it.
   - Example: const page = await Twinkle.minecraft.getChatHistory({ limit: 50 }); const older = await Twinkle.minecraft.getChatHistory({ before: page.nextBefore });
 - async sendChat({ text }) | scopes: content:write
-  - Returns: { event: { seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death', name, text, userId, archived } }
+  - Returns: { event: { seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, archived } }
   - Send a chat message from the app into the Minecraft server; players see it as [Web] <your Twinkle username>.
   - Signed-in viewers only. text is trimmed to 200 characters. About one message per 2.5 seconds and 10 per minute per person: 429 with code minecraft_chat_rate_limited and retryAfterMs.
   - 403 minecraft_chat_forbidden for accounts banned from chat; 400 minecraft_muted when the server owner muted them from web chat.
@@ -1053,6 +1055,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Built-in designs (redstone devices and so on) have no author and are public.
   - previewUrl is an image set with updateDesign, or null.
   - access says what this viewer may do: canOrder shows placement tools (builders, moderators, the owner).
+  - access.web is true for a website member with no Minecraft account (a visitor): they may ask Zero for builds (the first is reviewed) and their designs are always public.
   - Example: const { designs } = await Twinkle.minecraft.getDesigns({ query: 'castle' });
 - async getDesign({ id }) | scopes: content:read
   - Returns: { design: { id, version, name, category, summary, size: { width, height, depth }, blocks, status, author, authorUserId, visibility: 'private'|'public', previewUrl, createdAt }, size: [w, h, d], palette: [blockState], cells: number[] }
@@ -1083,27 +1086,50 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 - async checkPlacement({ designId, world, x, z, y?, facing?: 'north'|'east'|'south'|'west' }) | scopes: content:read
   - Returns: { check: { clear, reasons, world, facing, anchor, bounds: { min, max }, ground: { y, min, max, water }, builtBlocks, builtSamples, placedBy: [{ name, blocks }], design } }
   - Check a building site for a design: where it would sit and whether it would touch anyone's builds.
-  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Website members with no Minecraft account (visitors) may too; a visitor not approved yet has no builds to stop or undo. Others get 403 minecraft_not_linked or minecraft_rank_too_low.
   - The footprint is centred on x/z and turned to face facing; without y it sits on the ground. clear is false when built (non-natural) blocks stand in the footprint or 3 blocks around it, the ground is very uneven, or it would leave the world; reasons explains. placedBy lists players CoreProtect recorded placing blocks there.
   - Call on a user action (drop or rotate), not while dragging.
+  - Visitors (no Minecraft account) may only check or order a site within about 64 blocks of where they stand in Twinkle World (Twinkle.minecraft.visit): 403 minecraft_visit_closer otherwise; and about 10 checks or orders a minute (429 minecraft_web_order_rate_limited with retryAfterMs).
   - Example: const { check } = await Twinkle.minecraft.checkPlacement({ designId: 'harbor_house', world: 'world', x: 1200, z: 700, facing: 'south' }); outline.color = check.clear ? 'green' : 'red';
 - async buildDesign({ ...placement, force }) | scopes: content:write
-  - Returns: { jobId, check, priority }
+  - Returns: { jobId, check, priority, pending?, requestId? }
   - Order Zero to build a design at a site; he switches to creative and builds it before other work.
-  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
+  - Who may: the server owner; builders and moderators by their linked Minecraft account (createLinkCode + /link); and website members with no Minecraft account (visitors). A visitor's FIRST order is held for the server owner's review: the answer is { jobId: null, pending: true, requestId, check } and nothing is built yet; once approved (getVisitorRequests().mine.approved) they order like builders. Linked players below builder get 403 minecraft_rank_too_low.
   - Follow progress with getZero() (currentBuild) and getZeroBuilds().
   - Builders: one order waiting or building at a time, published designs or their own, and orders wait in the normal queue (priority false). Moderators: up to 3 orders, ahead of other work. The owner: no limit. force (build on a site that isn't clear) is owner-only.
+  - Visitors (no Minecraft account) may only check or order a site within about 64 blocks of where they stand in Twinkle World (Twinkle.minecraft.visit): 403 minecraft_visit_closer otherwise; and about 10 checks or orders a minute (429 minecraft_web_order_rate_limited with retryAfterMs).
   - Example: const { jobId } = await Twinkle.minecraft.buildDesign({ designId: 'harbor_house', world: 'world', x: 1200, z: 700, facing: 'south' });
+- async getVisitorRequests() | scopes: content:read
+  - Returns: { canReview, requests: [{ id, userId, username, uuid, designId, designName, blocks, world, anchor, facing, bounds, createdAt }], approved: [{ userId, username, approvedAt, approvedBy }], recent: [{ id, userId, username, decision, by, at, note }], mine: { approved, request, lastDecision } }
+  - Website visitors' first Zero build requests, waiting for review like a builder request; and the viewer's own status.
+  - Only the server owner, in an app they own, gets canReview: true and the full lists; everyone else gets empty lists and only mine (their own open request, whether they are approved, and their last decision).
+  - Example: const { canReview, requests, mine } = await Twinkle.minecraft.getVisitorRequests(); if (mine.request) showWaiting(mine.request);
+- async decideVisitorRequest({ id, approve, note }) | scopes: content:write
+  - Returns: { approved, built, jobId, check, message }
+  - Approve or reject a website visitor's first Zero build request. Approving makes them a visitor who may order like a builder from then on and places the held build.
+  - Server owner only, in an app they own; others get 403 minecraft_roles_forbidden.
+  - built is false (with check and message) when the site is no longer clear: they stay approved and can order again elsewhere.
+  - Example: await Twinkle.minecraft.decideVisitorRequest({ id: request.id, approve: true });
+- async withdrawVisitorRequest() | scopes: content:write
+  - Returns: { withdrawn }
+  - A visitor takes back their own build request that is still waiting for review.
+  - withdrawn is false when there was nothing waiting (or the viewer has a linked Minecraft account).
+  - Example: await Twinkle.minecraft.withdrawVisitorRequest();
+- async revokeVisitorBuilder({ userId }) | scopes: content:write
+  - Returns: { revoked }
+  - Take back a visitor's approval: their next Zero order is held for review again.
+  - Server owner only, in an app they own; others get 403 minecraft_roles_forbidden.
+  - Example: await Twinkle.minecraft.revokeVisitorBuilder({ userId: 101 });
 - async stopZero() | scopes: content:write
   - Returns: { stopped, message }
   - Stop the build Zero is doing right now (placed blocks stay).
-  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Website members with no Minecraft account (visitors) may too; a visitor not approved yet has no builds to stop or undo. Others get 403 minecraft_not_linked or minecraft_rank_too_low.
   - Anyone may stop or undo their own builds; moderators also builders' and members' builds and Zero's own projects; the owner anything.
   - Example: await Twinkle.minecraft.stopZero();
 - async undoBuild({ jobId }) | scopes: content:write
   - Returns: { undone, title, message }
   - Undo one of Zero's builds, putting back what was there before.
-  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Others get 403 minecraft_not_linked or minecraft_rank_too_low.
+  - Who may: the server owner, and builders or moderators identified by their linked Minecraft account (Twinkle.minecraft.createLinkCode + /link). Website members with no Minecraft account (visitors) may too; a visitor not approved yet has no builds to stop or undo. Others get 403 minecraft_not_linked or minecraft_rank_too_low.
   - Anyone may stop or undo their own builds; moderators also builders' and members' builds and Zero's own projects; the owner anything.
   - Example: await Twinkle.minecraft.undoBuild({ jobId });
 - async getSnaps({ before, limit, uuid } = {}) | scopes: content:read
@@ -1194,6 +1220,28 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - It shows the world as last saved (the server saves every few minutes). Pair it with world.map.heightUrlTemplate for the land farther away.
   - Reads share the 180-per-minute build read limit: ask for 24 at a time, nearest first, and keep what you loaded.
   - Example: const { scenes } = await Twinkle.minecraft.getTerrainChunks({ world: 'world', chunks: [[71, 38], [72, 38]] });
+- async getFullChunks({ world, chunks: [[cx, cz], ...] }) | scopes: content:read
+  - Returns: { scenes: [{ cx, cz, scene: { origin: [x,y,z], size: [w,h,d], palette, blocks, light, biomes, count, wide? } | null }] }
+  - Every block with a visible face in chunk columns of a world (up to 24 per call): roofed interiors and caves too, unlike getTerrainChunks. For walking inside buildings near the viewer.
+  - Same scene format as getTerrainChunks and getPlayAreaChunks; larger, so ask only for the few columns around the viewer and use getTerrainChunks farther out.
+  - It shows the world as last saved (the server saves every few minutes) and is cached for about a minute.
+  - Reads share the 180-per-minute build read limit: keep what you loaded, nearest first.
+  - Only the land around the viewer's own visit spot: call visit first; chunks more than 4 columns from where they stand in that world get 403 minecraft_visit_closer (use getTerrainChunks there).
+  - Example: const { scenes } = await Twinkle.minecraft.getFullChunks({ world: 'world', chunks: [[71, 38]] });
+- async visit({ world, x, y, z, yaw, pitch, moving }) | scopes: content:write
+  - Returns: { players: [{ name, uuid, world, x, y, z, yaw, pitch, sneaking, isZero }], visitors: [{ userId, username, world, x, y, z, yaw, pitch, moving }], stale, full, serverTime, intervalMs }
+  - Visit the real Minecraft world from the app: report where the viewer is standing and get back where the players and the other visitors in that world are. In game, the visitor shows as a figure with their Twinkle username.
+  - Signed-in viewers only. Call it about every intervalMs (500 ms) while the viewer is in the world; faster calls get 429 minecraft_visit_rate_limited with retryAfterMs. Interpolate avatars between answers.
+  - A visitor is not a player on the server: they cannot break, place or use anything there. Members who own Minecraft play at twinklemc.site.
+  - The viewer is never in visitors. stale: true means player positions could not be refreshed (show the last ones).
+  - The figure disappears about 5 seconds after the last call; call leaveVisit when the viewer leaves or switches worlds. 403 minecraft_visit_forbidden for accounts banned from chat.
+  - full: true means the world already shows the most visitors it can (40): this viewer can look around but is not shown in game yet.
+  - Example: const view = await Twinkle.minecraft.visit({ world: 'world', x: 1146.5, y: 64, z: 618.5, yaw: 90, pitch: 0, moving: true }); drawAvatars(view.players, view.visitors);
+- async leaveVisit() | scopes: content:write
+  - Returns: { left }
+  - Stop visiting: the viewer's figure leaves the Minecraft world right away.
+  - Call it when the viewer leaves the world, switches worlds or closes the app; left is false when they were not visiting.
+  - Example: await Twinkle.minecraft.leaveVisit();
 - async createPlayArea({ name, world, box, spawn, id }) | scopes: content:write
   - Returns: { level }
   - Capture a box of a Minecraft world as a new play area (or re-capture an existing id). Runs in the background: poll getPlayArea until status is 'ready'.
@@ -1205,6 +1253,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Zero's build queue: the build he is on, the orders waiting (in the order he will take them) and the campaign steps he works through when no order waits. For an RTS-style build panel and for drawing queued footprints on a map.
   - Everyone can read it; mine marks the viewer's own orders (linked account). Orders always run before campaign steps.
   - noBuildWorlds lists worlds Zero never builds in (World 3, World 4): don't offer placement there.
+  - access.web is true for a website member with no Minecraft account (a visitor): they may ask Zero for builds (the first is reviewed) and their designs are always public.
   - Example: const { active, queue, campaign, access } = await Twinkle.minecraft.getBuildQueue();
 - async moveQueuedBuild({ jobId, to }) | scopes: content:write
   - Returns: same as getBuildQueue
