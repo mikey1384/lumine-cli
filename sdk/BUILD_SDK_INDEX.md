@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.78.0
-Updated: 2026-11-01
-Generated: 2026-11-02T01:19:13.071Z
+Version: 1.80.0
+Updated: 2026-11-02
+Generated: 2026-11-02T01:36:03.543Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -23,7 +23,7 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 ## Essential SDK features
 Features every app needs whenever they apply. When you build a new app or make a substantial change, add every one that applies as part of that change, without being asked. On a small, targeted request, add a missing one only when the request touches what it covers (a change to levels, scoring or saving: keep-place; a new screen: back-button); otherwise name it in one line so the creator can ask. Say in one line what you added. Never add one that does not apply.
 
-1. When: The app has a place worth keeping: a game, a level or score in play, an open document, drawing or editor, a quiz in progress, a chosen view. Use: Register Twinkle.app.lifecycle.onSuspend(() => smallState) and, at startup, restore from await Twinkle.app.lifecycle.getResumeState(). Phones unload apps that are not on screen (3D apps right away) and browsers kill tabs; without this the player starts over every time.
+1. When: The app has a place worth keeping: a game, a level or score in play, an open document, drawing or editor, a quiz in progress, a chosen view or tab, a long page the viewer scrolls. Use: Register Twinkle.app.lifecycle.onSuspend(() => smallState, { work: [...] }) and, at startup, restore from await Twinkle.app.lifecycle.getResumeState(). The snapshot holds where the viewer is looking (scroll, open tab or view, selected item) and unfinished work (a game or level in play, a half-written answer, an unsaved drawing, a quiz in progress); list the work keys in { work }. A return (the phone unloaded the app, a reload, a quick switch away) gets everything back; a new visit (the next day, a new tab) starts at the app's start and gets only the work keys. Phones unload apps that are not on screen (3D apps right away) and browsers kill tabs; without this the player starts over every time.
 2. When: The app has more than one view: a list and its details, menus, chapters, pages, settings. Use: Twinkle.app.history.push on each confirmed view change and Twinkle.app.history.subscribe to restore views, so Back and Forward move inside the app instead of leaving it.
 3. When: Progress, collections, unlocks, high scores or settings the viewer expects to still have tomorrow. Use: Twinkle.privateDb (Twinkle.sharedDb for what everyone sees), written on a user action or as an occasional snapshot, never per frame.
 4. When: The app shares or links to something inside itself (a level, a post, a result). Use: Twinkle.app.getShareUrl(pathSegment) for the link, and read the segment back at startup, instead of building twin-kle.com URLs by hand.
@@ -128,21 +128,32 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: Canonical shareable deep-link URL string, or null when app info is unavailable
   - Builds a canonical shareable deep link into this app, e.g. https://www.twin-kle.com/app/884/432-the-great-gatsby.
   - Example: await Twinkle.app.getShareUrl('432-the-great-gatsby');
-- lifecycle.onSuspend(getState) | scopes: none
+- lifecycle.onSuspend(getState, { work }) | scopes: none
   - Returns: off function
-  - Keep the viewer's place: Twinkle calls getState() for a small snapshot whenever the app is hidden, goes to the background, or every so often while in use, and hands it back the next time the app starts.
+  - Keep the viewer's place: Twinkle calls getState() for a small snapshot whenever the app is hidden, goes to the background, or every so often while in use. A return gets all of it back; a new visit gets only the keys listed in work.
   - Phones keep few apps loaded: an app that is not on screen can be unloaded at any time (3D apps right away), and the browser can kill the whole tab. Without a snapshot the viewer starts over.
-  - getState() returns a plain JSON object of at most 1 MB and must be quick (a 1.5 s budget, sync or a promise). Save what is needed to put the viewer back: level, position, score in play, the open view, unsaved edits, a quiz in progress.
-  - One handler per app; registering again replaces it. Long-term saves (collections, completed progress) still belong in Twinkle.privateDb.
-  - After a restart with a saved place, Twinkle keeps that place until the viewer does something in the app (a tap or key): snapshots taken while the app is still loading or waiting on a CONTINUE screen are not sent. Call saveNow() if the app changes the place on its own before that.
-  - Example: Twinkle.app.lifecycle.onSuspend(() => ({ level, hp, x: player.x, y: player.y, inventory }));
+  - Return or new visit: a start is a RETURN when the snapshot was taken in the same browser tab less than 30 minutes before (the phone unloaded the app, a reload, a quick switch away) and gets the whole snapshot back. Anything else is a NEW VISIT (the next day, after a long gap, a new tab): the app opens at its start, at the top, and gets back only the keys listed in work.
+  - work: the top-level snapshot keys that are unfinished work the viewer would be sorry to lose: a game or level in play, a half-written answer or draft, an unsaved drawing, a quiz in progress. Use work: true when the whole snapshot is that. Leave out where the viewer was looking (scroll position, open tab or view, selected article): it only comes back on a return. With no work option a new visit starts fresh.
+  - When the work is done (level won, answer sent, drawing saved) return that key as null: the next visit then starts fresh.
+  - getState() returns a plain JSON object of at most 1 MB and must be quick (a 1.5 s budget, sync or a promise). Save ids and small values, not whole data sets.
+  - One handler per app; registering again replaces it (with its work option). Long-term saves (collections, completed progress, settings) still belong in Twinkle.privateDb.
+  - After a restart with a saved place, Twinkle keeps that place until the viewer does something in the app (a tap, key or wheel scroll): snapshots taken while the app is still loading or waiting on a CONTINUE screen are not sent. Call saveNow() if the app changes the place on its own before that.
+  - Example: Twinkle.app.lifecycle.onSuspend(() => ({ scrollY: Math.round(window.scrollY), tab, game: inPlay ? { level, hp, x: player.x, y: player.y } : null }), { work: ['game'] });
 - async lifecycle.getResumeState() | scopes: none
-  - Returns: { state, savedAt, reason } or null
-  - At startup, the snapshot this viewer's last session of the app left behind (after an unload, a tab reload or crash), or null.
+  - Returns: { kind: 'return' | 'new_visit', state, savedAt, ageMs, reason } or null
+  - At startup, what the viewer's last session of the app left: on a return the whole snapshot, on a new visit only its work keys, or null to start fresh.
   - Resolves once, early; await it before drawing the first screen so the viewer does not see a fresh start flash by.
-  - Check the snapshot's shape before using it: it can come from an older version of the app. Ignore what you do not recognise.
+  - kind 'return': the same browser tab within 30 minutes (unloaded, reloaded, quick switch): state is the whole snapshot, so put the viewer back exactly, scroll included. kind 'new_visit': state holds only the work keys; open at the start (top of the page, first tab) and bring the unfinished work back. null: nothing to restore, start fresh.
+  - Restore from whatever saved.state contains: Twinkle has already left the scroll and view out on a new visit, so the usual if (saved) restore(saved.state) is right for both kinds. Check kind only to show something different, such as a 'Continue your game?' card on a new visit.
+  - Check the snapshot's shape before using it: it can come from an older version of the app, and on a new visit only work keys are there. Ignore what you do not recognise.
   - Closing the app with its Close button starts it fresh next time (no snapshot). The Build editor preview always starts fresh.
-  - Example: const saved = await Twinkle.app.lifecycle.getResumeState(); if (saved) restore(saved.state);
+  - Example: const saved = await Twinkle.app.lifecycle.getResumeState(); if (saved) restore(saved.state); // scroll and view are only in state on a return
+- lifecycle.onResume(handler) | scopes: none
+  - Returns: off function
+  - Hear when the app comes back on screen without restarting (Twinkle kept it loaded, or the browser froze the page and thawed it): handler({ kind: 'return' | 'new_visit', awayMs }).
+  - Same rule as a restart: away less than 30 minutes is a return (leave everything as it is); longer is a new visit, so do what a fresh start would: back to the start and the top, unfinished work kept.
+  - Called each time the app is back on screen after being hidden or in the background; not at startup (use getResumeState() there).
+  - Example: Twinkle.app.lifecycle.onResume(({ kind }) => { if (kind === 'new_visit') { openFrontPage(); window.scrollTo(0, 0); } });
 - async lifecycle.saveNow() | scopes: none
   - Returns: true once Twinkle has the snapshot, false otherwise
   - Take a snapshot right now, e.g. at a checkpoint or after an important step.
@@ -1006,26 +1017,29 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Every change is logged on the server and emailed to the owner; the player is told in game.
   - Example: await Twinkle.minecraft.setPlayerRole({ uuid: person.uuid, role: 'builder' });
 - async getChat({ since } = {}) | scopes: content:read
-  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, archived }], latestSeq, online, visitorCount, archiveReady, viewer: { canSend, muted, canModerate }, mutedUserIds }
+  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, tag, archived }], latestSeq, online, visitorCount, archiveReady, viewer: { canSend, muted, canModerate }, mutedUserIds }
   - Live server chat after a sequence number: player chat, Zero, messages sent from the web, joins, leaves and deaths.
   - Without since (or 0) it returns the newest 50 events, oldest first. Pass since = latestSeq from the previous response to get only new events. Poll every 2-3 seconds while the chat is visible; stop when hidden.
   - kind: chat (a player), zero (Zero, the AI builder), web (someone chatting from the Twinkle app; userId is their Twinkle user id), join, leave, death, visit (a website visitor arrived in the world; userId is their Twinkle user id), unvisit (they left). Private messages are never included.
   - name is a Minecraft username for chat/join/leave/death, and a Twinkle username for web.
   - viewer.canModerate is true only for the server owner; mutedUserIds is filled only for them.
   - online counts players on the server; visitorCount counts website visitors walking the world (Twinkle MC Explorers).
+  - tag is 'explorer' on web chat from someone walking Twinkle World right now (Twinkle MC Explorers): show them as Explorer instead of Web (in game: [Explorer] name). Otherwise null.
   - Example: let since = 0; async function poll() { const { events, latestSeq } = await Twinkle.minecraft.getChat({ since }); since = latestSeq; render(events); } setInterval(poll, 2500);
 - async getChatHistory({ before, limit, query, includeArchived } = {}) | scopes: content:read
-  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, archived }], hasMore, nextBefore: { at, seq } | null, includesArchived }
+  - Returns: { events: [{ seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, tag, archived }], hasMore, nextBefore: { at, seq } | null, includesArchived }
   - Older server chat, newest first, for scrolling back or searching past days.
   - before is the nextBefore cursor from the previous page; omit it to start from the newest. limit 1-100 (default 50). query searches message text and names (60 chars).
   - Chat from before the web chat bridge existed (imported from server logs) is archived: only the server owner can include it with includeArchived: true; others never receive it.
+  - tag is 'explorer' on web chat from someone walking Twinkle World right now (Twinkle MC Explorers): show them as Explorer instead of Web (in game: [Explorer] name). Otherwise null.
   - Example: const page = await Twinkle.minecraft.getChatHistory({ limit: 50 }); const older = await Twinkle.minecraft.getChatHistory({ before: page.nextBefore });
 - async sendChat({ text }) | scopes: content:write
-  - Returns: { event: { seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, archived } }
+  - Returns: { event: { seq, at, kind: 'chat'|'zero'|'web'|'join'|'leave'|'death'|'visit'|'unvisit', name, text, userId, tag, archived } }
   - Send a chat message from the app into the Minecraft server; players see it as [Web] <your Twinkle username>.
   - Signed-in viewers only. text is trimmed to 200 characters. About one message per 2.5 seconds and 10 per minute per person: 429 with code minecraft_chat_rate_limited and retryAfterMs.
   - 403 minecraft_chat_forbidden for accounts banned from chat; 400 minecraft_muted when the server owner muted them from web chat.
   - Send only on a user action (Enter or Send); never automatically.
+  - tag is 'explorer' on web chat from someone walking Twinkle World right now (Twinkle MC Explorers): show them as Explorer instead of Web (in game: [Explorer] name). Otherwise null.
   - Example: await Twinkle.minecraft.sendChat({ text: 'Hi from the website!' });
 - async muteChatUser({ userId, muted }) | scopes: content:write
   - Returns: { userId, muted }
