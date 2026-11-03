@@ -37,6 +37,47 @@ test('Today’s Q queue/member reads paginate; publication needs explicit confir
   } finally { fs.unlinkSync(file); }
 });
 
+test('today-withdraw previews by default, takes --keys or a withdrawal file, and needs a reason', () => {
+  const reason = 'Options-only blind check failed (absolute-word giveaways)';
+  const base = ['admin', 'arena', 'today-withdraw', '--user', '5', '--reason', reason];
+  const preview = parseAdminOperation(parseArgs([...base, '--keys', 'kor-a, kor-b']));
+  assert.equal(preview.name, 'arena.today.withdraw.preview');
+  assert.equal(preview.path, '/cli/admin/arena/today/withdraw');
+  assert.equal(preview.mutates, false);
+  assert.deepEqual(preview.body, { userId: 5, keys: ['kor-a', 'kor-b'], reason, dryRun: true });
+  const real = parseAdminOperation(parseArgs([...base, '--keys', 'kor-a', '--confirm']));
+  assert.equal(real.name, 'arena.today.withdraw');
+  assert.equal(real.mutates, true);
+  assert.equal(real.body.dryRun, false);
+  for (const bad of [
+    ['admin', 'arena', 'today-withdraw', '--keys', 'kor-a', '--reason', reason],
+    ['admin', 'arena', 'today-withdraw', '--user', '5', '--keys', 'kor-a'],
+    ['admin', 'arena', 'today-withdraw', '--user', '5', '--keys', 'kor-a', '--reason', 'short'],
+    [...base, '--keys', 'kor-a,kor-a'],
+    [...base, '--keys', 'bad key'],
+    [...base],
+  ]) assert.throws(() => parseAdminOperation(parseArgs(bad)), undefined, bad.join(' '));
+  const file = path.join(testWorkRoot(), `arena-withdraw-${process.pid}.json`);
+  try {
+    fs.writeFileSync(file, JSON.stringify({ userId: 5, keys: ['kor-a', { authorKey: 'kor-b' }], reason }));
+    const fromFile = parseAdminOperation(parseArgs(['admin', 'arena', 'today-withdraw', '--user', '5', '--file', file]));
+    assert.deepEqual(fromFile.body, { userId: 5, keys: ['kor-a', 'kor-b'], reason, dryRun: true });
+    assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'today-withdraw', '--user', '6', '--file', file])), /member 5/);
+    assert.throws(() => parseAdminOperation(parseArgs([...base, '--file', file, '--keys', 'kor-a'])), /exactly one/);
+    fs.writeFileSync(file, JSON.stringify(['kor-c']));
+    assert.deepEqual(parseAdminOperation(parseArgs([...base, '--file', file])).body.keys, ['kor-c']);
+  } finally { fs.unlinkSync(file); }
+  const lines = formatArenaResult({ operation: preview, data: {
+    dryRun: true, userId: 5, revision: 3, withdrawn: [{ key: 'kor-b' }],
+    skipped: [{ key: 'kor-a', reason: 'served', detail: 'Assigned to the member today' }],
+    readyBefore: 4, readyAfter: 3, refillDue: true, target: 20,
+  } }).join('\n');
+  assert.match(lines, /would withdraw 1 queued question\(s\) for member 5: kor-b/);
+  assert.match(lines, /Skipped kor-a: served/);
+  assert.match(lines, /4 before, 3 after; refill to 20/);
+  assert.match(lines, /--confirm/);
+});
+
 test('arena import is a validation-only dry run without --confirm and carries the audio prefix', () => {
   const op = parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--audio', 'audio/suneung-eng/eng-08']));
   assert.equal(op.name, 'arena.import.preview');

@@ -5695,6 +5695,44 @@ Bridge Builder qualifies from QR check-ins: 7 different people, or one meetup a 
 Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
 
 
+## Arena Today's Challenge personal queues
+
+Each member who chose Today's Challenge preferences is served the oldest
+`ready`, never-shown question written for their current preference revision.
+Questions are prepared editorially (see the repository's
+`agent-guides/lumine-admin.md`, Today's Challenge personal refills, for the
+content rules, including the 11-03 no-answer-revealing-options and real-test
+coverage rules).
+
+```
+lumine admin arena today-queue [--cursor <id>] [--limit <1-100>] --json
+lumine admin arena today-member --user <id> --json
+lumine admin arena today-import --file <reviewed-questions.json> [--confirm] --json
+lumine admin arena today-withdraw --user <id> (--keys <key,key,...> | --file <withdraw.json>) --reason "<why>" [--confirm] --json
+```
+
+`today-import` validates without publishing; `--confirm` publishes. Keys and
+content are immutable and duplicate questions are rejected.
+
+`today-withdraw` removes that member's unserved queued questions that failed
+review, so corrected replacements are not served behind them. Without
+`--confirm` it is a preview. It withdraws only `ready` questions never assigned
+to the member; a question shown today or on an earlier day is skipped as
+`served`, and keys are looked up only in that member's queue (another member's
+key reads as `not_found`). Already-withdrawn keys are skipped, so a repeat is a
+no-op, and a retried request replays its original receipt. Each confirmed run is
+recorded in the administrator audit log (operator, time, member, keys, reason),
+and each withdrawn question keeps that record in its review evidence. The result
+lists `withdrawn` and `skipped` keys (`not_found`, `already_withdrawn`, `served`,
+`not_ready`) with `readyBefore`/`readyAfter` at the current preference revision.
+Withdrawn questions are never served or counted as ready. Their keys stay
+reserved and the identical question cannot be imported again; import the
+corrected version under a new key (it may keep the same passage and prompt).
+A withdrawal file is a JSON array of keys, or `{ "userId": <id>, "keys": [...],
+"reason": "..." }` (`userId` must match `--user`; `--reason` overrides the
+file's reason). Re-read `today-member` afterwards and refill if the member is
+due.
+
 ## Nonogram picture collection
 
 Nonogram's `nonogram-picture-v1` proof uses a private, reviewed picture bank.
