@@ -2671,6 +2671,7 @@ lumine admin subject creator set-made-by-poster 123 --json
 lumine admin subject feature 123 --json
 lumine admin subject unfeature 123 --json
 lumine admin featured list --json
+lumine admin featured history --all --json # defaults to current Featured board
 lumine admin featured history --subject-ids 50,40 --all --json
 lumine admin featured add --subject-ids 50,40 \
   --posted-after 2026-08-27T00:00:00+07:00 --json
@@ -2788,6 +2789,8 @@ Featured reorder is a complete-set replacement: it rejects duplicates,
 unknown/deleted IDs, missing current members, non-subject rows, and more than
 100 subjects. Permanent pins and editorial ordering policy are deliberately not
 hardcoded.
+
+When `lumine admin featured history` omits `--subject-ids`, the CLI reads the current Featured board once and requests history for those IDs in board order. Human output explicitly says that it defaulted to the current board; JSON and `--output` include `data.subjectSelection` with `source: "current-featured-board"`, `subjectIds`, and the same message. An empty board succeeds with empty subjects/events and `coverage: null`, explicitly stating that no history was requested. A failed or malformed board read fails rather than being treated as empty. Explicit `--subject-ids` keeps its existing behavior and skips the board read. Pagination retains the resolved IDs for the entire scan. A no-ID `--all --resume` requires the same board IDs in the same order; a changed board is rejected by checkpoint scope validation. If the board changes, use the previous result's explicit `subjectIds` for `--cursor`, or start a fresh `--all` scan with those IDs and a new checkpoint. An empty board cannot resume a prior scan or supply IDs for its cursor.
 
 `featured history` is the compact canonical evidence path. It returns only
 coverage metadata, per-subject lifetime summaries, and paginated mutation
