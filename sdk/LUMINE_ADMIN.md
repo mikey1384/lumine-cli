@@ -5695,6 +5695,71 @@ Bridge Builder qualifies from QR check-ins: 7 different people, or one meetup a 
 Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
 
 
+## Arena timed-bank item revisions
+
+Reviewed text, option and visual fixes to a published paper go live in place, without
+re-importing the paper:
+
+```
+lumine admin arena revise --file <revisions.json> --json
+lumine admin arena revise --file <revisions.json> --confirm --json
+```
+
+The file is `{ "reason": "...", "items": [ { "itemId": <live id>,
+"expectedVersion": <version you read>, "paper": "<edition>", "number": <n>,
+"content": { "stem", "body", "choices", "answer", "accepted",
+"transformation", "review", "visual", "passage" (any subset) }, "reason": "...", "review":
+"<options-only check + blind solve evidence>" } ] }` (or a bare array). `paper`
+and `number` are optional guards; a per-item `reason` overrides the file's.
+Without `--confirm` it is a dry run.
+
+- The item keeps its id, so exposures, question identity, paper completeness
+  and passed/solo exclusions are unchanged. The old content is archived as its
+  version and the item gets the next version. Finished papers, open sittings,
+  marking, review cards and drills keep the version they froze. A cover or
+  challenge prepared before the revision starts on the new version.
+- Stem, body, choices, key (`answer`, `accepted`, `transformation`), review,
+  visual and an existing unrecorded text passage can change. Set membership,
+  type, number, mode, rubric and recordings stay fixed. Changing choices, key,
+  passage or visual requires the full rewritten `content.review`. Its explanation
+  is non-empty text; optional `why` notes are an array of strings, one per choice.
+  Option reasoning may instead be included in the full explanation. The same
+  field types apply to a supplied Korean translation.
+- To change a passage, send `content.passage` and top-level
+  `expectedPassageVersion` for **every live/checked item sharing that passage**,
+  each with its own expected item version and review evidence. All siblings must
+  carry the identical new text. The entire set is validated, and the old passage
+  and item versions are archived in the same transaction. Old sittings and drills
+  keep their original text; new starts use the revised item and passage together.
+  A passage also used by a retired/draft item is refused, because its unchanged
+  version must retain its old text.
+  Use `visual: null` to remove a visual; supplied diagrams/charts must validate.
+- The result is checked with the import validators together with the rest of
+  its set (choice count, key index, `why` lines, evidence spans). A version
+  other than `expectedVersion`, a retired item, an essay/spoken task or any
+  invalid result refuses the whole file; nothing is written.
+- Confirmed runs are audited (`arena.items.revise`: operator, time, item ids,
+  reasons). Each item records the revision (versions, reason, evidence,
+  audit id) in its authoring. A retried request replays its receipt;
+  re-running an applied file reports `already applied` and writes nothing.
+- The new version starts its own calibration from the item's level, as on
+  import; the old version's calibration stays on record.
+
+### Ordered timed-review explanations
+
+Authored timed items may include `review.steps`: 1–8 ordered `{text, scene?}`
+pairs. `text` is 1–1600 characters; the whole sequence is bounded to 40,000
+characters. Keep `review.explanation` as the full readable fallback. The review
+screen and Zero/Ciel use these exact step numbers. A translated `review.ko`
+must provide the same number of aligned steps when explicit steps are used.
+
+Scenes use the existing `cards`, `bars` or `passage` contract (caption up to
+300 characters; 1–12 parts with text up to 1600 characters; bars need a finite
+value from 0 to 1,000,000), or the validated `diagram` contract with a required
+accessible `alt` (up to 200 characters). No executable markup or figure-plan
+placeholders. Render and review the actual scenes at phone size before import.
+Older text-only items retain the sentence-based step behavior.
+
 ## Arena Today's Challenge personal queues
 
 Each member who chose Today's Challenge preferences is served the oldest

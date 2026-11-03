@@ -78,6 +78,38 @@ test('today-withdraw previews by default, takes --keys or a withdrawal file, and
   assert.match(lines, /--confirm/);
 });
 
+test('arena revise sends a reviewed revision file as a dry run unless --confirm', () => {
+  const file = path.join(testWorkRoot(), `arena-revise-${process.pid}.json`);
+  const item = { itemId: 101, expectedVersion: 1, expectedPassageVersion: 4, paper: 'kor-E1', number: 12, content: { passage: 'Reviewed replacement text', visual: null, choices: ['a', 'b', 'c', 'd', 'e'], answer: 2, review: { explanation: 'x' } }, review: 'options-only check and blind solve notes' };
+  try {
+    fs.writeFileSync(file, JSON.stringify({ reason: 'Absolute-word giveaways replaced', items: [item] }));
+    const preview = parseAdminOperation(parseArgs(['admin', 'arena', 'revise', '--file', file]));
+    assert.equal(preview.name, 'arena.revise.preview');
+    assert.equal(preview.path, '/cli/admin/arena/items/revise');
+    assert.equal(preview.mutates, false);
+    assert.deepEqual(preview.body, { items: [item], reason: 'Absolute-word giveaways replaced', dryRun: true });
+    const real = parseAdminOperation(parseArgs(['admin', 'arena', 'revise', '--file', file, '--confirm']));
+    assert.equal(real.name, 'arena.revise');
+    assert.equal(real.mutates, true);
+    assert.equal(real.body.dryRun, false);
+    fs.writeFileSync(file, JSON.stringify([item]));
+    assert.deepEqual(parseAdminOperation(parseArgs(['admin', 'arena', 'revise', '--file', file])).body, { items: [item], dryRun: true });
+    fs.writeFileSync(file, JSON.stringify({ items: [] }));
+    assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'revise', '--file', file])), /1 to 300/);
+    fs.writeFileSync(file, '{not json');
+    assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'revise', '--file', file])), /Cannot read/);
+  } finally { fs.unlinkSync(file); }
+  assert.throws(() => parseAdminOperation(parseArgs(['admin', 'arena', 'revise'])), /--file/);
+  const lines = formatArenaResult({ operation: { name: 'arena.revise' }, data: {
+    dryRun: false, revised: [{ itemId: 101, paper: 'kor-E1', number: 12, fromVersion: 1, toVersion: 2, changed: ['choices', 'review'], passageId: 7, fromPassageVersion: 4, toPassageVersion: 5 }],
+    unchanged: [{ itemId: 102, version: 3, status: 'already_applied' }], problems: [],
+  } }).join('\n');
+  assert.match(lines, /Revised 1 item\(s\); 1 already as written/);
+  assert.match(lines, /Item 101 \(kor-E1 #12\): v1 -> v2, choices, review/);
+  assert.match(lines, /passage 7 v4 -> v5/);
+  assert.match(lines, /Item 102: already revised \(v3\)/);
+});
+
 test('arena import is a validation-only dry run without --confirm and carries the audio prefix', () => {
   const op = parseAdminOperation(parseArgs(['admin', 'arena', 'import', '--dir', paper, '--audio', 'audio/suneung-eng/eng-08']));
   assert.equal(op.name, 'arena.import.preview');
