@@ -75,8 +75,26 @@ test("gather identifies waiting exam members before generic inventory and follow
   };
   const result = await dailyRunGather({ adminOutputDir: dir }, stub);
   assert.equal(result.ok, true);
-  assert.deepEqual(result.data.paperQueue, { complete: true, pages: 2, waitingTracks: 1 });
+  assert.deepEqual(result.data.paperQueue, { complete: true, pages: 2, waitingTracks: 1, demandBases: ["waiting-published-papers-v1"] });
   assert.ok(stub.calls.findIndex(args => args[1] === "paper-queue") < stub.calls.findIndex(args => args[0] === "math-lab"));
+});
+
+test("gather accepts clear-gated Arena pages and preserves each received basis during rollout", async (t) => {
+  for (const bases of [["cleared-exhausted-papers-v2", "cleared-exhausted-papers-v2"], ["waiting-published-papers-v1", "cleared-exhausted-papers-v2"]]) {
+    const dir = fixture(t);
+    const stub = runner(() => page());
+    const base = stub.run;
+    stub.run = (args, options) => {
+      if (args[0] !== "arena" || args[1] !== "paper-queue") return base(args, options);
+      const first = args[args.indexOf("--cursor") + 1] === "0";
+      const json = { ok: true, data: { demandBasis: bases[first ? 0 : 1], entries: [], nextCursor: first ? 40 : null } };
+      fs.writeFileSync(options.outputFile, JSON.stringify(json));
+      return { ok: true, json, attempts: 1, durationMs: 1 };
+    };
+    const result = await dailyRunGather({ adminOutputDir: dir }, stub);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.paperQueue, { complete: true, pages: 2, waitingTracks: 0, demandBases: [...new Set(bases)] });
+  }
 });
 
 test("an explicitly exhausted empty queue replaces old page duties but preserves their files", async (t) => {
