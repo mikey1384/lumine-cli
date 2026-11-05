@@ -5698,6 +5698,28 @@ Bridge Builder qualifies from QR check-ins: 7 different people, or one meetup a 
 Every decision requires Mikey's authorization for that crew and action. Mutations are audited and idempotent; `--output <path>` is an explicit request to retain the canonical JSON. General write receipts omit private crew details.
 
 
+## Grammar Quest legacy Ghost evidence
+
+`lumine admin english quest-evidence <case.json> --json` previews one member's
+held legacy retry-evidence case. The private JSON input contains a numeric
+`userId` and `skillCode`. Compare the returned count, due-date evidence, pending
+runs and `sourceHash` with the individually reviewed history. To apply a
+`ready` preview, add its exact `sourceHash` to the same input as `expectedHash`
+and repeat with `--confirm`. A changed history refuses the request; re-read and
+review it rather than refreshing the hash blindly. The mutation and
+idempotency/audit receipt commit together. Use a stable `--idempotency-key` and
+inspect any unconfirmed outcome before retrying.
+
+The command resolves a no-effect hold or removes one proven excess below the
+Ghost threshold. With no completed or open scheduled review, it can also move
+an erroneously early due date to the reconstructed date only if that date is
+already past or today, so a due review stays available. It never increases a
+miss count or changes an answer or Ghost stage. Advanced or open/completed
+scheduled Ghost reviews, other due-date differences, incomplete history and
+unrecognized evidence remain held for individual review. The source command is
+available in this checkout; check the release receipt before assuming a
+published npm version contains it.
+
 ## Arena timed-bank item revisions
 
 Reviewed text, option and visual fixes to a published paper go live in place, without
