@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.81.0
+Version: 1.81.1
 Updated: 2026-11-07
-Generated: 2026-11-07T02:35:09.137Z
+Generated: 2026-11-07T12:02:59.156Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -241,7 +241,7 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Report live player or avatar bounds so the preview host can detect floor, wall, or out-of-bounds issues.
   - Always available in the build iframe.
   - Reports live gameplay bounds in the same coordinate space as setPlayfield.
-  - Use this for moving players or avatars so preview review and auto-fix can detect floor or wall escapes.
+  - Use this for moving players or avatars so the preview check can detect floor or wall escapes.
   - Do not report viewport-relative or screen-pixel rectangles; keep telemetry in stable game/world coordinates.
   - Example: Twinkle.preview.reportGameplayState({ playerBounds: { x: player.x, y: player.y, width: player.width, height: player.height } });
 - getGameplayTelemetry() | scopes: none
