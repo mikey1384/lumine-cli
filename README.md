@@ -388,6 +388,68 @@ runs must pass
 models; `xhigh` and `max` require a 2.6 model (flare or sunburst). Estimates describe image output;
 actual battery usage also includes prompt and reference input.
 
+## Previewing and testing like Lumine
+
+`lumine preview` and `lumine test` run Lumine's own preview tools
+(`view_preview` and `run_preview_test`) on Twinkle's capture browser, so
+Codex, Claude Code and Lumine check a build the same way. They are read-only:
+the capture sandbox refuses SDK writes, reward claims, notifications and paid
+app AI, nothing is saved, and no AI or Energy is used. Run them from a pulled
+workspace (they send its files, saved or not) or pass `--saved` to check the
+saved project, and `--build <id>` outside a workspace. They work on builds you
+own; on a team project, preview your own branch.
+
+```bash
+# Screenshot (saved under .twinkle/previews/ unless --out), runtime errors and
+# layout overflow. Actions run in order from the opening screen (up to 24).
+lumine preview --viewport phone --actions '[{"type":"click","x":500,"y":620},{"type":"touch","x":500,"y":700,"endX":500,"endY":300}]'
+
+# A throwaway test: inputs plus checks, each step reported.
+lumine test .twinkle/tests/map-scroll.json
+```
+
+Keep test files under `.twinkle/tests/` (or outside the workspace): anything
+among the project files is uploaded by `lumine save`.
+
+`.twinkle/tests/map-scroll.json`:
+
+```json
+{
+  "name": "world map scrolls to the status bar",
+  "viewport": "phone",
+  "steps": [
+    { "type": "click", "x": 500, "y": 620 },
+    { "type": "expect", "text": "World Map", "state": "visible" },
+    { "type": "touch", "x": 500, "y": 800, "endX": 500, "endY": 200, "durationMs": 400 },
+    { "type": "expect", "selector": "#status", "state": "in_view", "timeoutMs": 1500 },
+    { "type": "expect_value", "path": "game.screen", "op": "equals", "value": "map" },
+    { "type": "call", "module": "/rules.js", "export": "scoreWord", "args": ["CAT"], "op": "equals", "value": 3 }
+  ]
+}
+```
+
+- Inputs: `click`, `touch` (add `endX`/`endY` to drag or swipe, `durationMs`
+  to hold), `scroll` (`deltaY`), `key` (`key`), `wait` (`durationMs`).
+  Coordinates are 0-1000 across the app frame.
+- Checks: `expect` (`text` or a CSS `selector`; `state` visible, in_view,
+  present or absent; `which` any/first/last; `timeoutMs` up to 3000),
+  `expect_value` (a `path` the app keeps on `window`, `op` equals, not_equals,
+  gt, gte, lt, lte, truthy, falsy or contains, and the expected `value`; a
+  string value is read as JSON when it parses, so `"3"` means the number 3),
+  `call` (a project module's export with `args` as a list; `op` may
+  also be throws), `expect_pixels` (a region `x`,`y` to `endX`,`endY` with at
+  least `minShare` % within `tolerance` of `color` #rrggbb).
+- Up to 24 steps; a test stops at the first failed check. The result lists
+  each step as passed, done, failed, could_not_run or not_run, and `checked`
+  lists exactly what passed. A screenshot comes back only when a step fails.
+  A pass proves those checks at that moment in that browser, nothing more:
+  not saving, rewards, shared data or multiplayer.
+- Every call starts at the app's opening screen and closes the page after.
+  You get 8 looks per 10 minutes (the same budget as one Lumine run); a test
+  is one look, a preview is one look per 8 actions.
+- `--json` prints the full result; the exit code is 1 when a preview fails or
+  a test does not pass.
+
 ## Thumbnails
 
 `lumine thumbnail set <file>` uploads a jpg/png/webp (max 8MB) as the build's

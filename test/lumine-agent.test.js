@@ -766,3 +766,197 @@ input.on("line", (line) => {
     false,
   );
 });
+
+const PREVIEW_TOOLS = [
+  { type: "function", name: "read_project_files", description: "Read", parameters: { type: "object", properties: {} } },
+  { type: "function", name: "view_preview", description: "Look", parameters: { type: "object", properties: {} } },
+  { type: "function", name: "run_preview_test", description: "Test", parameters: { type: "object", properties: {} } },
+];
+
+test("tool session sends Lumine's preview tools to the preview route with the walk from the last look", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-agent-preview-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const traceFile = path.join(dir, "trace.jsonl");
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    requests.push({ url: String(url), body });
+    if (requests.length === 3) {
+      return { ok: false, status: 429, async text() {
+        return JSON.stringify({ error: "You have used the 8 preview looks allowed in this 10-minute window.", code: "lumine_cli_preview_rate_limited" });
+      } };
+    }
+    return { ok: true, status: 200, async text() {
+      return JSON.stringify({
+        output: { ok: true, screenshot: "Attached below as an image (390x844).", capturesLeft: 8 - requests.length, interaction: { status: "completed" } },
+        image: { mimeType: "image/jpeg", width: 390, height: 844, base64: "SECRETPIXELS" },
+        looks: 1,
+        looksLeft: 8 - requests.length,
+        walk: { viewport: "phone", actions: Array.from({ length: requests.length }, () => ({ type: "click", x: 1, y: 2 })) },
+      });
+    } };
+  };
+  const session = await createExternalAgentToolSession({
+    options: { apiUrl: "https://api.example.test", timeoutMs: 1000 },
+    auth: { token: "test-token" },
+    buildId: 73,
+    baseFilesHash: "a".repeat(64),
+    dir,
+    runtime: { maxToolRounds: 4, phase: "implementation", tools: PREVIEW_TOOLS },
+    traceFile,
+    provider: "codex",
+    initialFiles: [{ path: "/index.html", content: "<main>working copy</main>" }],
+  });
+  const first = await session.callTool("view_preview", { viewport: "phone", session: "restart", actions: [{ type: "click", x: 1, y: 2 }] });
+  assert.equal(first.output.ok, true);
+  assert.equal(first.image.base64, "SECRETPIXELS");
+  const second = await session.call("run_preview_test", { viewport: "phone", session: "continue", name: "t", steps: [] });
+  assert.equal(second.capturesLeft, 6);
+  const refused = await session.callTool("view_preview", { viewport: "phone", session: "continue", actions: [] });
+  assert.equal(refused.output.ok, false);
+  assert.equal(refused.output.code, "lumine_cli_preview_rate_limited");
+  assert.equal(refused.image, null);
+
+  assert.ok(requests.every((request) => request.url === "https://api.example.test/cli/build/73/preview-tool"));
+  assert.deepEqual(requests.map((request) => request.body.tool), ["view_preview", "run_preview_test", "view_preview"]);
+  // The working files, never the saved ones; the walk the previous look returned.
+  assert.deepEqual(requests[0].body.projectFiles, [{ path: "/index.html", content: "<main>working copy</main>" }]);
+  assert.deepEqual(requests[0].body.agent, { walk: null });
+  assert.equal(requests[1].body.agent.walk.actions.length, 1);
+  assert.equal(requests[2].body.agent.walk.actions.length, 2);
+  // The trace says what happened, never the screenshot.
+  const traceText = await fs.readFile(traceFile, "utf8");
+  assert.doesNotMatch(traceText, /SECRETPIXELS|working copy/);
+  const results = (await readAgentTrace(traceFile)).filter((event) => event.type === "tool_result");
+  assert.deepEqual(results.map((event) => event.ok), [true, true, false]);
+
+  // A runtime without the preview tools (not the owner) never calls the route.
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), body: JSON.parse(init.body) });
+    return { ok: true, status: 200, async text() {
+      return JSON.stringify({ projectFiles: [{ path: "/index.html", content: "x" }], readPaths: [], output: { ok: false, error: "unavailable" } });
+    } };
+  };
+  const plain = await createExternalAgentToolSession({
+    options: { apiUrl: "https://api.example.test", timeoutMs: 1000 },
+    auth: { token: "test-token" },
+    buildId: 73,
+    baseFilesHash: "a".repeat(64),
+    dir,
+    runtime: { maxToolRounds: 1, phase: "implementation", tools: PREVIEW_TOOLS.slice(0, 1) },
+    traceFile,
+    provider: "codex",
+    initialFiles: [{ path: "/index.html", content: "x" }],
+  });
+  await plain.call("view_preview", {});
+  assert.equal(requests.at(-1).url, "https://api.example.test/cli/build/73/agent/tool");
+});
+
+test("agent-mcp returns a preview screenshot as an MCP image block", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-agent-mcp-image-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const server = http.createServer((request, response) => {
+    let raw = "";
+    request.on("data", (chunk) => { raw += chunk; });
+    request.on("end", () => {
+      const body = JSON.parse(raw || "{}");
+      response.setHeader("content-type", "application/json");
+      if (request.url !== "/cli/build/73/preview-tool" || body.tool !== "view_preview" || !body.agent) {
+        response.statusCode = 400;
+        response.end(JSON.stringify({ error: `unexpected ${request.url}` }));
+        return;
+      }
+      response.end(JSON.stringify({
+        output: { ok: true, screenshot: "Attached below as an image (2x2)." },
+        image: { mimeType: "image/jpeg", width: 2, height: 2, base64: "QUJD" },
+        looks: 1,
+        looksLeft: 7,
+        walk: null,
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const apiUrl = `http://127.0.0.1:${server.address().port}`;
+  const runtimeFile = path.join(dir, "runtime.json");
+  const authFile = path.join(dir, "auth.json");
+  await fs.writeFile(path.join(dir, "index.html"), "<main>ok</main>");
+  await fs.writeFile(runtimeFile, JSON.stringify({
+    schemaVersion: 1,
+    runId: "test-run",
+    provider: "claude-code",
+    runtime: { phase: "implementation", maxToolRounds: 16, tools: PREVIEW_TOOLS },
+  }));
+  await fs.writeFile(authFile, JSON.stringify({ token: "test-token", apiUrl }));
+  const child = spawn(process.execPath, [
+    cliPath, "agent-mcp", "--dir", dir, "--runtime-file", runtimeFile,
+    "--trace-file", path.join(dir, "trace.jsonl"), "--api-url", apiUrl,
+    "--auth-file", authFile, "--build", "73", "--base-files-hash", "a".repeat(64), "--no-update-check",
+  ], { stdio: ["pipe", "pipe", "pipe"] });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  child.stdin.end([
+    JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "view_preview", arguments: { viewport: "phone", session: "restart", actions: [] } } }),
+    "",
+  ].join("\n"));
+  const exitCode = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  assert.equal(exitCode, 0, stderr);
+  const [message] = stdout.trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(message.result.isError, false);
+  assert.equal(message.result.content[0].type, "text");
+  assert.equal(JSON.parse(message.result.content[0].text).ok, true);
+  assert.deepEqual(message.result.content[1], { type: "image", data: "QUJD", mimeType: "image/jpeg" });
+});
+
+test("Codex adapter attaches a preview screenshot as an inputImage item", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lumine-codex-image-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const fakeCodex = path.join(dir, "fake-codex");
+  await fs.writeFile(
+    fakeCodex,
+    `#!/usr/bin/env node
+const readline = require("node:readline");
+if (process.argv[2] === "features") { process.stdout.write("apps stable true\\ncode_mode_host stable true\\n"); process.exit(0); }
+if (process.argv[2] === "mcp") { process.stdout.write("[]\\n"); process.exit(0); }
+const input = readline.createInterface({ input: process.stdin });
+const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+input.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") send({ id: message.id, result: { userAgent: "codex-cli/1.2.3" } });
+  if (message.method === "thread/start") send({ jsonrpc: "2.0", id: message.id, result: { thread: { id: "thread-1" }, model: "gpt-5.6" } });
+  if (message.method === "mcpServerStatus/list") send({ id: message.id, result: { data: [], nextCursor: null } });
+  if (message.method === "turn/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { turn: { id: "turn-1" } } });
+    send({ jsonrpc: "2.0", id: 91, method: "item/tool/call", params: { tool: "view_preview", arguments: { viewport: "phone" } } });
+  }
+  if (message.id === 91 && !message.method) {
+    const items = message.result.contentItems.map((item) => item.type + ":" + (item.imageUrl || JSON.parse(item.text).ok));
+    send({ jsonrpc: "2.0", method: "item/completed", params: { item: { type: "agentMessage", text: items.join("|") } } });
+    send({ jsonrpc: "2.0", method: "turn/completed", params: { turn: { status: "completed", error: null } } });
+  }
+});
+`,
+    { mode: 0o755 },
+  );
+  await fs.chmod(fakeCodex, 0o755);
+  const result = await runCodexAgentPass({
+    options: { providerPath: fakeCodex },
+    runtime: { systemPrompt: "Lumine system", initialPrompt: "Look", tools: PREVIEW_TOOLS },
+    toolSession: {
+      async callTool() {
+        return { output: { ok: true }, image: { mimeType: "image/jpeg", width: 2, height: 2, base64: "QUJD" } };
+      },
+    },
+    isolationDir: dir,
+  });
+  assert.equal(result.finalText, "inputText:true|inputImage:data:image/jpeg;base64,QUJD");
+});
