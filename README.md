@@ -377,14 +377,15 @@ To preserve Pro output in an existing script, change the option to
 using Pro through the server's legacy model alias. This CLI release must be
 published after the API update that accepts the new model IDs.
 
-`lumine assets generate "<prompt>" --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana|nano-banana-pro>` creates
+`lumine assets generate "<prompt>" --model <flare|sunburst|gpt-image-2|nano-banana|nano-banana-pro>` creates
 an AI-generated image asset instead of uploading one. `--model` is required
-(Flare = fast generation; Sunburst = precise editing; gpt-image-2 = original
-model; nano-banana = Gemini Nano Banana 2.1, nano-banana-pro = Gemini Nano Banana Pro). Generation spends your Twinkle AI Battery, so the
+(flare = GPT Image 2.6 Flare, fast generation; sunburst = GPT Image 2.6
+Sunburst, precise editing; the full ids gpt-image-2.6-flare/-sunburst work too,
+and the retired 2.5 ids now mean 2.6; gpt-image-2 = original model; nano-banana = Gemini Nano Banana 2.1, nano-banana-pro = Gemini Nano Banana Pro). Generation spends your Twinkle AI Battery, so the
 CLI shows the estimated cost and asks for confirmation first — non-interactive
 runs must pass
 `--yes` to consent. `--quality low|medium|high|xhigh|max` applies to GPT Image
-models; `xhigh` and `max` require a 2.5 model. Estimates describe image output;
+models; `xhigh` and `max` require a 2.6 model (flare or sunburst). Estimates describe image output;
 actual battery usage also includes prompt and reference input.
 
 ## Thumbnails
@@ -392,7 +393,7 @@ actual battery usage also includes prompt and reference input.
 `lumine thumbnail set <file>` uploads a jpg/png/webp (max 8MB) as the build's
 thumbnail. `lumine thumbnail capture` screenshots the running app server-side
 and sets the result (add `--out <file>` to keep a local copy).
-`lumine thumbnail generate ["<prompt>"] --model <gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2|nano-banana|nano-banana-pro>`
+`lumine thumbnail generate ["<prompt>"] --model <flare|sunburst|gpt-image-2|nano-banana|nano-banana-pro>`
 generates an AI image and sets it as the thumbnail (the image is also kept as a
 normal reusable asset); without a prompt the server composes one from the build
 title and description. Replacing an existing thumbnail asks for confirmation;

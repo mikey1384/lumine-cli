@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.80.0
-Updated: 2026-11-02
-Generated: 2026-11-02T01:36:03.543Z
+Version: 1.81.0
+Updated: 2026-11-07
+Generated: 2026-11-07T02:35:09.137Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -15,10 +15,13 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 6. Code loads only from project files and Twinkle's vendor paths (/build/vendor/...). Package imports, CDN scripts, external network calls and app-local /api/* routes fail at runtime; use the Twinkle SDK for data, AI and storage.
 7. Call only Twinkle.* methods documented in the SDK reference. An invented or guessed method name throws and breaks the feature.
 8. Twinkle.privateDb and Twinkle.sharedDb save on a user action or as an occasional snapshot, never per frame, tick or keystroke: fast repeated writes are refused with 429 and the data is lost. A privateDb value is at most 16 KB. Keep live state in memory, and use Twinkle.world for realtime multiplayer.
-9. Start sound and image generation inside the viewer's tap or click handler. A Web Audio AudioContext stays silent until it is created or resumed in a tap (iPhones always enforce this), and Twinkle.ai.generateImage called from load or a timer fails with USER_ACTIVATION_REQUIRED.
-10. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
-11. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
-12. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
+9. Before changing an existing view, read its relevant event handlers, animations and state flow, and identify the behavior the edit must keep. A new appearance, reference image, renderer or performance improvement does not authorize removing an interaction, animation or capability; preserve it unless the creator explicitly asks for that change. After editing, compare the affected behavior before and after, including its active and inactive states (for example, playing and paused). Exercise those states when tools allow; a still screenshot or a clean console cannot prove motion or interaction. If a state cannot be exercised, report that limit rather than claiming it is preserved.
+10. When changing stored data or a renderer, inspect both the old save/resume shape and every reader, including fallback views. Keep existing saves readable with an explicit, non-destructive conversion and retain fields needed by another supported renderer. Verify an old save in the new version, new state after reload, and switching to the fallback (for example, 2D x/y toppings becoming 3D positions and returning to a flat view). Never silently drop saved objects or reset progress to make the new view work; an incomplete migration is part of this change to finish, not unrelated future polish.
+11. Keep local gameplay and unsaved edits separate from confirmed server state. Await storage writes and replace saved counters, scores and other durable state from the documented canonical response; Twinkle.privateDb.get/set return { item }, and the stored data is item.value (get may return item: null). Never read a guessed response shape, present a local increment as saved, or swallow a save/load error. Keep unfinished work recoverable, show a clear pending or failed-save state, and let the viewer retry deliberately without counting the same action twice. Verify canonical response restoration, rejected saves and delayed replies, not only a successful local animation.
+12. Start sound and image generation inside the viewer's tap or click handler. A Web Audio AudioContext stays silent until it is created or resumed in a tap (iPhones always enforce this), and Twinkle.ai.generateImage called from load or a timer fails with USER_ACTIVATION_REQUIRED.
+13. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
+14. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
+15. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
 
 ## Essential SDK features
 Features every app needs whenever they apply. When you build a new app or make a substantial change, add every one that applies as part of that change, without being asked. On a small, targeted request, add a missing one only when the request touches what it covers (a change to levels, scoring or saving: keep-place; a new screen: back-button); otherwise name it in one line so the creator can ask. Say in one line what you added. Never add one that does not apply.
@@ -543,7 +546,7 @@ renderBattery(policy?.energyPercent, policy?.energySegmentsRemaining);
   - Example: const chatHistory = conversation.slice(-12).map((entry) => ({ role: entry.role === 'assistant' ? 'assistant' : 'user', content: entry.text }));
 const result = await Twinkle.ai.chat({ message, history: chatHistory, systemPrompt: 'You are a cheerful pirate helper who answers in one sentence.', onText: (text, meta) => renderReply(text), onStatus: (status) => setThinking(status === 'thinking') });
 - async decide({ state, questions, images }) | scopes: none
-  - Returns: { answers, model, provider, aiUsagePolicy, imageCount? }
+  - Returns: { decisionId, answers, model, provider, aiUsagePolicy, imageCount? }
   - Use JEV for fast contextual choices, yes/no probabilities, and scores inside a running app. Send several independent questions about the same state together.
   - Read the AI decision design guidance when deciding whether this capability benefits the app. This method evaluates supplied context; it does not generate prose, browse, run tools, grant access, or award XP/Coins. It looks at pictures only through the preview images option below.
   - state is non-empty text, a JSON object, or a JSON array. questions maps your question IDs to { type, instructions, criteria? }. Instructions may be non-empty text or structured JSON. Every question sees the same state and answers independently; put the complete question in instructions, not just its ID.
@@ -552,6 +555,7 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Yes/no probability: { type: 'noul', instructions, criteria?: { true: description, false: description } }. Returns { type: 'noul', noul }, where noul is the probability of yes between 0 and 1. There is no separate confidence field. If criteria is supplied, describe both true and false.
   - A request accepts 1–32 questions, at most 64 KB of JSON and 20 levels of nesting. Question IDs and option names must be non-empty, at most 128 characters, and cannot be __proto__, constructor, or prototype. Descriptions may use structured JSON; state must contain only data the app is allowed to access.
   - Requires a signed-in viewer and uses the normal runtime AI rate limits. Twinkle selects and calls JEV on its server; never put provider credentials or an external endpoint in app code. Decisions are covered by Twinkle: they never use the viewer's AI Energy, and a viewer with empty Energy still gets answers. The response includes the viewer's current canonical aiUsagePolicy, unchanged by the call.
+  - Successful decisions include a server-generated decisionId. Keep it with the returned provider and model when recording a decision outcome; it identifies that decision, not a fight or a reward receipt. A failed request may include requestId when server decision handling began; failures before that point may have no ID.
   - Errors include invalid_ai_decision (bad input), ai_decision_unavailable, ai_decision_timeout, ai_decision_rate_limited, ai_decision_invalid_response, and ai_usage_unavailable, plus the existing auth, access, Energy, and rate-limit errors. Invalid answers are rejected. An answer that fails validation is retried once on the server within the same deadline; there is no other provider retry, fabricated answer, or paid LLM fallback. Do not automatically retry a rejected request.
   - Preview: images (not generally available yet). Pass images: { name: picture } with 1-4 entries to let JEV look at pictures. Names use lowercase letters, digits and underscores (e.g. drawing); each name becomes a key of state, so state must then be a JSON object without that key, and instructions refer to the picture by name (e.g. 'Does `drawing` show a cat?'). A picture is this app's own upload URL (from Twinkle.files, at most 5 MB each), a canvas, or a PNG/JPEG/WebP Blob of at most 3 MB (5 MB of snapshots per decision). All pictures of one decision together must be at most 10 MB; a larger one is refused with 'Image too large: max 5 MB each, 10 MB per decision. Resize the picture first.' so resize big pictures before asking. Image decisions are covered by Twinkle like text decisions. Only some run at once (one per player, several per app, and a generous ceiling per minute for the app), so wait for one answer before asking again and do not call decide in a tight loop. Until Twinkle turns them on for the app, and whenever a picture cannot be checked or too many decisions are running, decide throws ai_decision_unavailable with a reason (disabled, app_disabled, rate_limited, capped, images_dropped, timeout, ...). There is never a text-only answer that ignores the pictures. Use images only when the creator asks for it, keep the feature usable without it (for example skip the AI check and let the player continue), and never use the answer for safety, access, XP or Coins.
   - Call on meaningful app events with bounded frequency, batch questions, and keep rendering and deterministic game rules in local code. Ignore a result if the app state or turn changed while it was pending. Test uncertain inputs and choose a fallback appropriate to the experience; confidence is not a correctness guarantee.
@@ -599,10 +603,10 @@ const result = await Twinkle.ai.chat({ message, history: chatHistory, systemProm
   - Pass requestId when you need to correlate browser logs, backend logs, and iframe status events for one generation.
   - partial_image statuses may include partialImageB64 for progressive preview UI before the final imageUrl arrives.
   - referenceImageB64 may be a raw base64 string or a data:image/...;base64 URL.
-  - Optional model: gpt-image-2.5-flare or gpt-image-2.5-sunburst. Without a model, OpenAI uses Flare for new images and Sunburst when a reference image or continuation is supplied. Explicit gpt-image-2 remains supported.
-  - Quality accepts low, medium, high, xhigh, or max. xhigh and max require a GPT Image 2.5 model. Gemini has one quality tier.
+  - Optional model: gpt-image-2.6-flare (fast) or gpt-image-2.6-sunburst (careful edits, slower). Without a model, OpenAI uses Flare for new images and Sunburst when a reference image or continuation is supplied. GPT Image 2.6 replaced 2.5: an app that still sends gpt-image-2.5-flare or gpt-image-2.5-sunburst gets the 2.6 model of the same name. Explicit gpt-image-2 remains supported.
+  - Quality accepts low, medium, high, xhigh, or max. xhigh and max require a GPT Image 2.6 model. Gemini has one quality tier. On 2.6, low and medium are faster but cost almost as much as high (roughly 47% and 82% of high), so pick quality for speed rather than to save energy.
   - engine: 'gemini' uses Google's Nano Banana 2.1 (the fast Gemini image tier; it replaced the retired original Nano Banana on 2026-10-08).
-  - GPT Image 2.5 battery spending uses actual image-model input and output token usage. The confirmation shows an image-output estimate; prompts and reference images use additional energy.
+  - GPT Image 2.6 battery spending uses actual image-model input and output token usage. The confirmation shows an image-output estimate; prompts and reference images use additional energy.
   - responseId and imageId are opaque continuation handles. Pass them back unchanged to edit a prior result; do not assume an OpenAI ID format. Existing GPT Image 2 continuations remain usable.
   - Example: const result = await Twinkle.ai.generateImage({ prompt: 'Create a fashion guide portrait for this face with flattering colors and outfit ideas', referenceImageB64, quality: 'high', onStatus: (status) => console.log(status.stage) });
 - async generateMusic({ prompt, length, instrumental, requestId, timeoutMs } = {}) | scopes: none
@@ -1000,13 +1004,14 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - limit is 1-50 (default 10). kind filters to helper or workshop builds.
   - Example: const { builds } = await Twinkle.minecraft.getZeroBuilds({ limit: 10, kind: 'workshop' });
 - async getPeople() | scopes: content:read
-  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', op, online, isZero, twinkle: { userId, username } | null, ...owner: groups, banned, protected, firstSeenAt, lastSeenAt, endorsements: [{ voucherName, voucherUuid, endorsedAt }] | ...others: seen: 'online'|'today'|'week'|'month'|'older'|null }], roles }
+  - Returns: { canManage, people: [{ uuid, name, role: 'visitor'|'member'|'builder'|'moderator', op, online, isZero, twinkle: { userId, username } | null, ...owner: groups, banned, protected, firstSeenAt, lastSeenAt, endorsements: [{ voucherName, voucherUuid, endorsedAt }] | ...others: seen: 'online'|'today'|'week'|'month'|'older'|null }], visitorBuilders: [{ userId, username, linkedUuids }] | null, roles }
   - Everyone who has joined the server with their in-game rank, for a player directory; the server owner also gets the full records for role management.
   - Every viewer gets the list. Only the server owner, in an app they own, gets canManage: true with full records (groups, bans, exact first/last seen); everyone else gets canManage: false and the public view: banned players left out, and seen is a rough bucket instead of exact times. Show role controls only when canManage is true.
   - Roles: visitor (play and chat), member (/tpa, /home, /back, may ask Zero to build), builder (member + /fly and creative/survival), moderator (builder + teleport others, CoreProtect rollback, /kick). op: true players are server operators and have every power regardless of role.
   - protected: true players (the owner and Zero's account) can't be changed from the app. Sorted online first, then most recently seen.
   - Not cached; call on screen open or after a change, not on a timer.
   - twinkle is the Twinkle account linked to that player with /link, or null.
+  - visitorBuilders lists approved Twinkle-only Builders and linked Minecraft UUIDs; null means unavailable. Merge by userId or linked UUID. This approval permits Zero orders and is not itself an in-game role change.
   - endorsements (owner view only) lists who backed this player's Builder application: a moderator or anyone above typed /vouch for a player already on Twinkle. voucherUuid is the voucher's Minecraft uuid (null when endorsed from the app or console); endorsedAt is an ISO time. Empty when there are none, or when the server's vouch list could not be read.
   - Example: const { canManage, people } = await Twinkle.minecraft.getPeople(); renderDirectory(people, { editable: canManage });
 - async setPlayerRole({ uuid, role }) | scopes: content:write
@@ -1652,6 +1657,7 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { item: { id, key, value, updatedAt } | null }
   - Read one key from the default private per-user JSON store.
   - Reads a single key from the current viewer's private store.
+  - Read the stored value from response.item.value, not response.value or the response itself. item is null when the key is absent; a rejected read is not an empty saved value.
 - async list({ prefix, limit, cursor } = {}) | scopes: privateDb:read
   - Returns: { items: [{ id, key, value, updatedAt }], cursor? }
   - List keys from the default private per-user JSON store.
@@ -1660,6 +1666,7 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { item: { id, key, value, updatedAt } }
   - Upsert one JSON-serializable value in the default private per-user store.
   - Upserts one key for the current viewer. Value must be JSON-serializable (max 16 KB).
+  - Await the write and adopt response.item.value as the confirmed saved state. Keep pending local changes separate; on failure show an unsaved state and retain the work for a deliberate retry instead of swallowing the error or incrementing a saved counter again.
 - async remove(key) | scopes: privateDb:write
   - Returns: { success: true, deleted: boolean }
   - Delete one key from the default private per-user JSON store.

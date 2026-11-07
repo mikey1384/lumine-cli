@@ -866,10 +866,14 @@ function runCli(args) {
 }
 
 
-test("CLI image quality supports 2.5 without changing legacy model contracts", () => {
-  assert.deepEqual(resolveGenerateModel({ model: "flare", quality: "max" }), { model: "gpt-image-2.5-flare", quality: "max" });
-  assert.deepEqual(resolveGenerateModel({ model: "gpt-image-2.5-sunburst", quality: "xhigh" }), { model: "gpt-image-2.5-sunburst", quality: "xhigh" });
-  assert.throws(() => resolveGenerateModel({ model: "gpt-image-2", quality: "max" }), /require a GPT Image 2.5/);
+test("CLI image quality supports 2.6, and retired 2.5 ids map to 2.6", () => {
+  assert.deepEqual(resolveGenerateModel({ model: "flare", quality: "max" }), { model: "gpt-image-2.6-flare", quality: "max" });
+  assert.deepEqual(resolveGenerateModel({ model: "sunburst", quality: "xhigh" }), { model: "gpt-image-2.6-sunburst", quality: "xhigh" });
+  assert.deepEqual(resolveGenerateModel({ model: "gpt-image-2.6-flare" }), { model: "gpt-image-2.6-flare", quality: null });
+  // retired 2.5 ids keep working and mean 2.6
+  assert.deepEqual(resolveGenerateModel({ model: "gpt-image-2.5-flare" }), { model: "gpt-image-2.6-flare", quality: null });
+  assert.deepEqual(resolveGenerateModel({ model: "gpt-image-2.5-sunburst", quality: "xhigh" }), { model: "gpt-image-2.6-sunburst", quality: "xhigh" });
+  assert.throws(() => resolveGenerateModel({ model: "gpt-image-2", quality: "max" }), /require a GPT Image 2.6/);
   assert.throws(() => resolveGenerateModel({ model: "nano-banana", quality: "max" }), /only applies to GPT Image/);
   // Gemini by tier: nano-banana = Nano Banana 2.1, nano-banana-pro = Pro;
   // the old Pro preview id still works and means the stable Pro model
