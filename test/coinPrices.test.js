@@ -25,8 +25,9 @@ test("a builders price never prints as only \"Coins removed\"", () => {
   const claimLine = lines.find((line) => line.includes("claim-plot"));
   // Round-2 N7: a 0-Coin builders price is not "free".
   // r2: paid from Twinkle's own block record inside the plot the key names.
-  assert.match(claimLine, /0 Coins of its own \+ 50 Coins per block to other players for the blocks Twinkle recorded as theirs inside the 16x16 plot its key names \("region:x:z"\)/);
-  assert.match(claimLine, /never the buyer or the owner; up to 4096 each, 64 builders, 100000 Coins a purchase; land over a limit cannot be bought/);
+  assert.match(claimLine, /0 Coins of its own \+ 50 Coins per block to other players for the blocks credited to them in Twinkle's record inside the 16x16 plot its key names \("region:x:z"\)/);
+  // review-r2 M2/M5: each builder is paid for at most the limit; only the totals refuse.
+  assert.match(claimLine, /never the buyer or the owner; each paid for at most 4096; land with more than 64 builders or over 100000 Coins for builders cannot be bought/);
   assert.doesNotMatch(claimLine, /the app names|topic/);
   assert.match(coinPriceDestination({ ...claim, builders: { ...claim.builders, tally: undefined } }), /no tally declared, so nobody can be paid/);
   assert.match(claimLine, /key group plots/);
@@ -52,7 +53,7 @@ test("admin review show prints the prices and the server's coin warnings", () =>
   } finally {
     console.log = log;
   }
-  assert.ok(lines.some((line) => /claim-plot: Claim built land · 0 Coins of its own \+ 50 Coins per block to other players for the blocks Twinkle recorded/.test(line)));
+  assert.ok(lines.some((line) => /claim-plot: Claim built land · 0 Coins of its own \+ 50 Coins per block to other players for the blocks credited to them in Twinkle's record/.test(line)));
   assert.ok(lines.includes("WARNING: “Claim built land” also pays players the app names (builders)."));
 });
 
@@ -115,7 +116,7 @@ test("tally-import batches: at most 5,000 cells a request, only the first clears
   assert.deepEqual(result.data.importIds, [1, 2, 3]);
   const lines = formatCoinsResult({ operation: { name: "coins.tally-import" }, data: result.data });
   assert.match(lines[0], /^Imported the builder tally of app 363, region main/);
-  assert.match(lines.join(" "), /cleared 4 \(--replace-region\)/);
+  assert.match(lines.join(" "), /cleared 4 older imported blocks \(--replace-region\)/);
   // A dry run sends no idempotency key; a refused batch stops the run with the server's words.
   const dryBatches = tallyImportBatches(file, { buildId: 363, replace: false, reason: "r", dryRun: true });
   const drySent = [];
@@ -128,3 +129,46 @@ test("tally-import batches: at most 5,000 cells a request, only the first clears
     /do not exist/
   );
 });
+
+// review-r2 M4: the replace dry run says what it keeps and why; L8: removals kept are counted.
+test("tally-import output names the blocks --replace-region keeps and the file cells left alone", () => {
+  const lines = formatCoinsResult({
+    operation: { name: "coins.tally-import.preview" },
+    data: { dryRun: true, buildId: 363, region: "mountains1", at: 1793980053, batches: 1, regionCellsBefore: 10, cleared: 6,
+      replaceKeeps: { live: 3, newer: 0, consumed: 1, total: 4 }, placed: 5, removed: 2, keptNewer: 3, keptNewerPlaced: 2, keptNewerRemoved: 1 },
+  });
+  const text = lines.join("\n");
+  assert.match(text, /would clear 6 older imported blocks \(--replace-region\)/);
+  assert.match(text, /--replace-region keeps 4 blocks: 3 recorded live \(never touched by an import\), 0 imported from newer history, 1 used up by a sale/);
+  assert.match(text, /3 file cells left alone because a live, newer or used-up block holds them \(2 placements, 1 removals\)/);
+  assert.match(text, /Nothing was written/);
+});
+
+// review-r2 M2: the admin's fix for fake builder records.
+test("tally-clear: one player's records, optional region and area, a dry run without --confirm", () => {
+  const base = { adminConfirm: "", adminReason: "fake blocks over plot", adminUser: "77" };
+  const dry = buildCoinsOperation({ action: "tally-clear", target: "363", options: base });
+  assert.equal(dry.name, "coins.tally-clear.preview");
+  assert.equal(dry.path, "/cli/admin/coins/tally-clear");
+  assert.equal(dry.mutates, false);
+  assert.deepEqual(dry.body, { buildId: 363, userId: 77, reason: "fake blocks over plot", dryRun: true });
+  const real = buildCoinsOperation({ action: "tally-clear", target: "363", options: { ...base, adminConfirm: "true", adminCoinRegion: "mountains1", adminCoinArea: "112:-48:127:-33" } });
+  assert.equal(real.name, "coins.tally-clear");
+  assert.equal(real.mutates, true);
+  assert.deepEqual(real.body, { buildId: 363, userId: 77, region: "mountains1", area: "112:-48:127:-33", reason: "fake blocks over plot", dryRun: false });
+  assert.throws(() => buildCoinsOperation({ action: "tally-clear", target: "363", options: { ...base, adminUser: "" } }), /--user must be a positive whole number/);
+  assert.throws(() => buildCoinsOperation({ action: "tally-clear", target: "363", options: { ...base, adminReason: "" } }), /--reason is required/);
+  assert.throws(() => buildCoinsOperation({ action: "tally-clear", target: "363", options: { ...base, adminCoinRegion: "Mountains1" } }), /lowercase/);
+  assert.throws(() => buildCoinsOperation({ action: "tally-clear", target: "363", options: { ...base, adminCoinArea: "0:0:15:15" } }), /--area needs --region/);
+  for (const area of ["0:0:15", "00:0:15:15", "0:0:-1:15", "0:0:1e3:15"])
+    assert.throws(() => buildCoinsOperation({ action: "tally-clear", target: "363", options: { ...base, adminCoinRegion: "main", adminCoinArea: area } }), /--area is x0:z0:x1:z1/);
+  const lines = formatCoinsResult({
+    operation: { name: "coins.tally-clear.preview" },
+    data: { dryRun: true, buildId: 363, userId: 77, username: "rival", region: "mountains1", area: { x0: 112, z0: -48, x1: 127, z1: -33 },
+      cells: 64, consumed: 0, touchedByOthers: 2, imported: 0, regions: [{ region: "mountains1", cells: 64, bounds: { x0: 112, x1: 127, z0: -48, z1: -33 } }] },
+  });
+  assert.match(lines[0], /^Dry run: would clear 64 recorded blocks of rival \(77\) in app 363, region mountains1, area 112:-48:127:-33\./);
+  assert.match(lines.join(" "), /2 were broken or built over by another player since \(a hint the block was real\)/);
+  assert.match(lines.at(-1), /Add --confirm to apply/);
+});
+
