@@ -2,7 +2,7 @@
 
 Version: 1.84.0
 Updated: 2026-11-08
-Generated: 2026-11-08T14:45:58.104Z
+Generated: 2026-11-08T16:01:26.858Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1978,9 +1978,17 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { ok: true, priceId, key, coins, priceCoins, destination, builders: [{ userId, username, units, coins }], unitName?, balance, canAfford, price } | { ok: false, problem: "taken" | "owned" | "overlap" | "reserved" | "region" | "one_per_world" | "lifetime_limit" | "daily_limit" | "builders_price_required" | "over_limit" | "key_invalid" | "not_live" | "price_missing" | "unavailable", code, message, details?, holder?, lastPrice?, minimumOffer?, maximumOffer? }
   - The exact price this player would pay for a plot (and the builders it pays), or why it can't be bought, before opening Twinkle's box.
   - Rate-limited like purchase quotes (about 12 a minute). Then buy with Twinkle.coins.charge({ priceId, key }).
-- await Twinkle.land.history({ region, x, y, z, before? } | { key, since? }) | scopes: land:read
+- await Twinkle.land.history({ region, x, y, z, before? } | { key, order: "newest", sinceAt?, before? } | { key, since? }) | scopes: land:read
   - Returns: { changes: [{ id, x, y, z, value, prevValue, by: { id, username }, cause, source, seq, at }], nextBefore | nextSince }
-  - Who changed a cell (newest first), or every change inside a plot since a change id (Undo since claim).
+  - Who changed a cell (newest first), a plot's changes since a time newest first (Undo "last hour" / "since claimed"), or a plot's changes from a change id oldest first.
+  - Plot, newest first: { key, order: "newest", sinceAt } returns the changes made at or after sinceAt (server seconds; e.g. now - 3600 for the last hour, or the plot's since for "since claimed"), newest first, 1,000 a page; pass before: nextBefore until nextBefore is null. Only that window is read, however busy the plot. at is the server time of each change.
+  - Cell: 200 a page, newest first, before: nextBefore. Plot from a change id: { key, since }, oldest first, 200 a page, since: nextSince.
+- await Twinkle.land.mine({ region, ignore?: [value, ...] }) | scopes: land:read
+  - Returns: { region, land, plotSize, total, reserved, truncated, clusters: [{ x, z, count, area: { x0, z0, x1, z1 }, status: "free" | "yours" | "taken" | "reserved" | "no_land" }] }
+  - Where the signed-in player's own blocks stand in one world, grouped into the places a plot would cover, so the game can say "You have 28 blocks around x 100, z 102 and no land yet".
+  - Own blocks = cells whose last change was this player's hand edit (no cause), not flagged natural, with a value that is not empty (the land declaration's empty, default [0]) and not in ignore (up to 32 values, e.g. your water/lava ids). A block someone else changed since is theirs, not yours.
+  - clusters: at most 8, biggest first, never overlapping. x, z = the middle of the place; area = the plotSize square a claim around x, z would cover (both corners included); count = the player's blocks inside it. Blocks whose plot would touch a reserved spot (the spawn area) are left out (reserved counts them). status: free (nobody holds any of it), yours (touches a plot you hold), taken (touches someone else's plot), reserved, or no_land (this world has no land).
+  - total = the player's blocks found (at most 50,000; truncated says when there were more).
 - Twinkle.land.subscribe(region, listener) | scopes: none
   - Returns: unsubscribe()
   - Live land events for one world: cellsChanged (accepted cells, with seq) and landChanged (a plot changed holder or rules).
