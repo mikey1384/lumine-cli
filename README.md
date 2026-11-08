@@ -486,6 +486,19 @@ after validation passes and still uses the workspace's server-issued
 overwritten. Provider login and model usage stay inside the selected local CLI;
 Twinkle never receives a provider credential and does not reserve AI Energy.
 
+The project tools are Lumine's own (list, read, search, edit). Like grep,
+`search_project_files` can match plain text (the default), a JavaScript regular
+expression (`mode: "regex"`, up to 200 characters, with a time limit, one
+regex search at a time and a per-minute text budget per member), or a whole
+class with `kind: "emoji"` or `kind: "symbol"`. `kind: "emoji"` counts only
+characters that show as emoji: a text-style symbol such as an arrow or bullet
+counts only when followed by U+FE0F, otherwise it is listed under
+`kind: "symbol"`. A kind finds each one written directly and written as an
+escape: `\u25B6`, `\u{1F512}`, surrogate
+pairs, CSS `content: "\25B6"`, `&#x1F512;`, or `String.fromCodePoint(...)`. When
+results are capped, a regex runs out of time, or a long line is only partly
+checked, the result sets `truncated` and says in `note` what was left out.
+
 Every run writes a sanitized observable tool trace under
 `.twinkle/agent-runs/`. By default, the selected subscription agent reviews
 that trace after the pass and records evidence-based loop feedback without
