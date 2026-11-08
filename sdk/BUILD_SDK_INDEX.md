@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.83.0
+Version: 1.84.0
 Updated: 2026-11-08
-Generated: 2026-11-08T05:30:44.050Z
+Generated: 2026-11-08T14:45:58.104Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -85,7 +85,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 - Call at meaningful user actions or discrete app decision points, not every render, animation frame, keystroke, or background poll. Batch work, debounce changing input, keep one request active per decision flow, and discard results whose app state changed while waiting. Keep rendering, movement, and controls local and responsive. JEV decisions are covered by Twinkle and never use the viewer's AI Energy; the runtime AI rate limits still apply. Handle unavailable, timeout, and rate-limit errors with a clear retry or an explicitly local fallback; never fabricate an AI answer or run an automatic retry loop. Consider the guest and offline experience before making AI essential.
 
 ## Token Scopes
-files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write, rewards:claim, coins:charge
+files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, land:read, land:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write, rewards:claim, coins:charge
 
 ## Namespaces
 
@@ -1584,8 +1584,8 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Call the returned function to unsubscribe.
 
 ### Twinkle.world
-- async join({ worldKey = 'default', roomKey = 'main', instanceId = 'main', presence, player } = {}) | scopes: none
-  - Returns: { sessionId, session, room, players, snapshot, subscribe(listener), updatePresence(patch), send(actionOrType, data), leave() }
+- async join({ worldKey = 'default', roomKey = 'main', instanceId = 'main', presence, player, land } = {}) | scopes: none
+  - Returns: { sessionId, session, room, players, snapshot, subscribe(listener), updatePresence(patch), send(actionOrType, data), edit(cells, { cause }) (land worlds only), leave() }
   - Join a realtime Build world room and receive a snapshot plus a session handle for presence updates, actions, and room events.
   - Always available in the build iframe.
   - World state is ephemeral and heartbeat/TTL based. Use sharedDb/privateDb for durable inventory, XP, quests, ownership, and saved progress — but write those LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick); per-frame/live state stays in world presence or client memory. The server rate-limits sharedDb/privateDb writes and returns 429.
@@ -1596,6 +1596,7 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Treat the render/input loop as local-only. Queue presence only after relevant fields change, replace any queued snapshot with the newest one, and flush on a fixed 5-15 updates-per-second schedule with at most one updatePresence request in flight. Never call or await updatePresence every animation frame, resend unchanged snapshots, overlap requests, or build a backlog.
   - Send discrete actions only when they happen; do not poll or automatically retry them. The parent limits updatePresence and send together to protect the website connection. WORLD_EVENT_RATE_LIMITED is recoverable: drop that attempted update without an immediate retry and keep the current session.
   - Rooms are addressed by worldKey, roomKey, and instanceId so the contract can later move to sharded or dedicated game backends.
+  - Twinkle.land: join({ ..., land: { region } }) binds the session to one land world of the app (region: 1 to 64 lowercase letters, digits or dashes). Then session.edit([[x, y, z, value], ...], { cause? }) sends block changes that Twinkle checks against held plots before anyone sees them; it resolves { accepted, unchanged, refused: [[x, y, z, code]], seq, credit }. Apply your own change at once and roll back the refused hand edits. Other players see only Twinkle's land.cellsChanged events (subscribe with Twinkle.land.subscribe), never a client-sent block action. Coalesce edits and send at most about 5 edit calls a second (each up to 2,000 cells).
   - Example: const world = await Twinkle.world.join({ roomKey: 'town-square', presence: { x: 0, y: 0, z: 0, facing: 'south' }, player: { name: avatarName } });
 world.subscribe((event) => updateRemotePlayers(event.players));
 world.updatePresence({ x, y, z, facing });
@@ -1913,14 +1914,16 @@ world.updatePresence({ x, y, z, facing });
   - Refusals are errors with a code and a sentence to show: build_coin_insufficient, build_coin_daily_limit, build_coin_lifetime_limit, build_coin_spend_budget, build_coin_self_payment (the owner cannot buy an owner-paid price from their own app), build_coin_quote_changed (the price went up since the box was shown, or its destination changed; a builder split that changed without raising the total goes ahead with Twinkle's split), build_coin_not_live (draft or unapproved version).
   - Pass the same requestId (8 to 64 of A-Z a-z 0-9 _ -) again after a lost reply to get the first receipt back without paying twice. Sales and takeovers get server requestIds ("offer:<offerId>") an app cannot choose.
   - Drafts and previews never charge: the owner's preview returns a receipt with preview: true and id "preview-…" and the balance unchanged. Never treat a preview receipt as ownership.
+  - Land prices (Twinkle.land): a price in the land key group may declare "maxPerRegion" (e.g. 1 = the first plot in each world is free, once per world even after a sale; refunds do not count; admin grants count): over it, build_coin_region_limit with details { region, maxPerRegion }. A plot outside land.regions is refused with build_coin_land_region, one near a reserved spot with build_coin_land_reserved (details { x, z, radius, why }). A purchase, Sell, takeover, refund or release changes the land the same second (Twinkle.land events land.changed); a purchase's result also carries land: { region, landVersion }.
 - await Twinkle.coins.getReceipts({ priceId?, key?, mine?, held?, cursor?, limit? }) | scopes: coins:charge
   - Returns: { mode: "live", receipts: [{ id, priceId, key, kind: "purchase" | "sale" | "takeover", coins, destination: "removed" | "owner" | "holder", buyer: { id, username }, recipient: { id, username } | null, payload, builders?: [{ userId, units, coins }], status: "active" | "transferred" | "released" | "refunded", holds, previousReceiptId, offerId, createdAt, preview? }], nextCursor } | { mode: "preview", receipts: [] }
   - Read server-written purchase receipts for this app: who holds which item.
   - Receipts are written only by Twinkle's server inside the charge, so they are the proof of ownership no client can forge. Decide who owns an item from getReceipts({ priceId, held: true }) (holds: true is the current holder of a unique key), not from sharedDb, privateDb or app state. Page with nextCursor (newest first, up to 50).
   - The viewer reads all of their own receipts (as buyer or recipient). Other players' receipts appear only while they hold an item, with only id, priceId, key, kind, coins (the last price), buyer, payload, status, holds and createdAt (no destination, recipient or builder split). A refunded or released receipt no longer holds its item; a sold or taken-over one shows status "transferred" and the new holder has a newer receipt for the same key.
 - await Twinkle.coins.recordBlocks({ region, placed?: [[x, y, z], ...], removed?: [[x, y, z], ...] }) | scopes: coins:charge
-  - Returns: { mode: "live", recorded: { placed, removed, keptForOthers }, today: { cells, limit } } | { mode: "preview", recorded: { placed: 0, removed: 0, keptForOthers: 0 }, message }
+  - Returns: { mode: "live", recorded: { placed, removed, keptForOthers }, today: { cells, limit } } | { mode: "preview", recorded: { placed: 0, removed: 0, keptForOthers: 0 }, message } | { mode: "server", recorded: { placed: 0, removed: 0, keptForOthers: 0 }, message }
   - Record the blocks this player placed or broke, so builders are paid from Twinkle's own record when land is bought.
+  - Apps that declare land (Twinkle.land) do not call this: Twinkle credits builders from the block changes it accepted, and recordBlocks answers mode "server" and writes nothing there. It will leave these docs once no app uses it.
   - Only for apps whose approved prices pay builders with a tally (build_coin_tally_off otherwise). Twinkle records the blocks as the signed-in player's own (from their website session; the app cannot name anyone else). A block placed on an empty cell is credited to that player. Once credited, a block stays that player's credit when anyone else breaks or builds over it (the record notes who did, for the admin); the credit ends only when that player sends its removal, or when a plot containing it is sold. So a removal or placement of another player's block changes nothing (counted in recorded.keptForOthers). Twinkle cannot see the world: it trusts each player's own reports of their own blocks, and only the admin can clear a player's records (lumine admin coins tally-clear).
   - region is the world's name (1 to 64 lowercase letters, digits or dashes: a-z 0-9 -), the same name the purchase keys use. Cells are [x, y, z] whole numbers (real numbers, not strings): x and z within ±1,000,000, y from -512 to 512.
   - Send batches: 1 to 64 blocks a call, each block once per call with its latest change. Record only blocks the player placed or broke by hand, never blocks the game made (water, lava results, revealed ores, falling sand, grown trees), and send a removal only for a block a player had placed (breaking natural ground needs no call). Calls run one at a time in the order you make them (the SDK waits for each answer before sending the next), so a newer change is never undone by an older one.
@@ -1947,6 +1950,42 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { mode: "live", offers: [{ id, priceId, key, coins, status: "open" | "kept" | "sold" | "taken" | "withdrawn" | "closed" | "failed" | "lapsed", offerer: { id, username }, holder: { id, username }, createdAt, respondedAt, takeoverAt, lapsesAt, canTakeOver, saleReceiptId }], nextCursor }
   - List offers on one item (key) or the viewer's own offers.
   - Pass key for one item's offers (any status), mine: "received" for open offers waiting for the viewer's answer, or mine: "made" for the viewer's own. On offers the viewer is not part of, offerer, coins, respondedAt, canTakeOver and saleReceiptId are left out. The notification target is { coinOfferId }.
+
+### Twinkle.land
+- await Twinkle.land.edit({ region, cells: [[x, y, z, value, flags?], ...], cause?, at? }) | scopes: land:write
+  - Returns: { ok: true, accepted, unchanged, refused: [[x, y, z, code]], seq, fromSeq, credit: { placed, removed, keptForOthers, capped } | null }
+  - Send block changes over HTTP (use world session.edit while in a room; this is for no-room cases, the page-hide flush and offline queues).
+  - Cells are whole numbers: x and z within ±1,000,000, y from -512 to 512, value from 0 to 2,147,483,647 (your app's block id; Twinkle never interprets it). 1 to 2,000 cells a call; the last change to a cell in one call wins. flags bit 1 = natural: the world's own generated block put back (ends the player's own builder credit there).
+  - cause: why the cell changed, 1 to 8 lowercase letters or digits (e.g. "tnt", "fluid", "derived", "grow", "fall"). Leave it out for a player's own hand edits: only those earn builder credit. Inside someone's plot a cause opens the plot only when the holder switched on the declared switch for that cause and the value is one the declaration lists.
+  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full (2,000,000 cells a world, 5,000,000 an app, 64 worlds an app). Roll back refused hand edits; drop refused game-made changes quietly.
+  - at (server seconds, clamped to now): a change first made earlier (an offline queue, an old tab's edits carried over). A cell changed after at is left alone (land_newer), so newer work is never overwritten.
+  - Limits per player per app: bursts of 4,000 cells refilled at 60 a second (land_throttled with details { retryAfterSeconds }: keep the cells and send them after that wait).
+- await Twinkle.land.cells({ region, since?, area?: { x0, z0, x1, z1 }, cursor? }) | scopes: land:read
+  - Returns: { region, seq, landVersion, format: 1, cells: [[x, y, z, value], ...], count, nextCursor, nextSince, done }
+  - Read the world: every stored cell (pages of 5,000), an area, or only what changed since a seq.
+  - Load order: subscribe first and buffer events, read every page (keep the first page's seq as S, pass nextCursor until done), then apply buffered cells.changed events with toSeq > S in order. Reconnected: cells({ since: lastSeq }) until done, then live events.
+  - area: at most 512 columns a side, both corners included. Cells never changed in the world are not stored: what your game generates is the world until a player changes it.
+- await Twinkle.land.plots({ region, area?: { x0, z0, x1, z1 }, key?, cursor? }) | scopes: land:read
+  - Returns: { region, plots: [{ key, receiptId, priceId, area: { x0, z0, x1, z1 }, holder: { id, username }, build, use, switches, lastPrice, since, you: { build, use }, friends?: [{ id, username }] }], nextCursor }
+  - Held plots in a world: who holds each, who may build and use, and what the viewer may do there.
+  - Read it again on a land.changed event (purchase, sale, takeover, refund, release, rules, grant) for the keys it names, or the area around the player. use is stored for every client to read but honoured by your game (it has no shared effect).
+- await Twinkle.land.setRules({ key, build?, use?, switches?, friends? }) | scopes: land:write
+  - Returns: { ok: true, key, build, use, switches, friends, landVersion }
+  - The holder chooses who may build and use their plot, the switches, and their friends.
+  - build and use: "me", "friends" or "everyone". switches: names the app declared (a list of the names that are on, or { name: true/false }). friends: up to 40 player ids.
+  - Settings belong to the holder's receipt: a buyer starts on the defaults (me / me / no switches / no friends); a refund brings the old holder's settings back.
+- await Twinkle.land.check({ key, priceId? }) | scopes: land:read
+  - Returns: { ok: true, priceId, key, coins, priceCoins, destination, builders: [{ userId, username, units, coins }], unitName?, balance, canAfford, price } | { ok: false, problem: "taken" | "owned" | "overlap" | "reserved" | "region" | "one_per_world" | "lifetime_limit" | "daily_limit" | "builders_price_required" | "over_limit" | "key_invalid" | "not_live" | "price_missing" | "unavailable", code, message, details?, holder?, lastPrice?, minimumOffer?, maximumOffer? }
+  - The exact price this player would pay for a plot (and the builders it pays), or why it can't be bought, before opening Twinkle's box.
+  - Rate-limited like purchase quotes (about 12 a minute). Then buy with Twinkle.coins.charge({ priceId, key }).
+- await Twinkle.land.history({ region, x, y, z, before? } | { key, since? }) | scopes: land:read
+  - Returns: { changes: [{ id, x, y, z, value, prevValue, by: { id, username }, cause, source, seq, at }], nextBefore | nextSince }
+  - Who changed a cell (newest first), or every change inside a plot since a change id (Undo since claim).
+- Twinkle.land.subscribe(region, listener) | scopes: none
+  - Returns: unsubscribe()
+  - Live land events for one world: cellsChanged (accepted cells, with seq) and landChanged (a plot changed holder or rules).
+  - Events come from Twinkle, never from another player's client. The listener gets { type: "cellsChanged", region, fromSeq, toSeq, cells: [[x, y, z, value], ...], count, serverTime } or { type: "landChanged", region, landVersion, reason, keys, serverTime }. If a cellsChanged fromSeq is more than one past the last toSeq you applied (a reconnect), read cells({ region, since: lastToSeq }) until done before applying it.
+  - Needs a world session bound to that region (Twinkle.world.join({ land: { region } })).
 
 ### Twinkle.cardCraft
 - await Twinkle.cardCraft.getStatus() | scopes: cardCraft:read
