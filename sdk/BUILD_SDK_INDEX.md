@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.82.1
+Version: 1.83.0
 Updated: 2026-11-08
-Generated: 2026-11-08T00:36:53.981Z
+Generated: 2026-11-08T05:30:44.050Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -31,6 +31,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 2. When: The app has more than one view: a list and its details, menus, chapters, pages, settings. Use: Twinkle.app.history.push on each confirmed view change and Twinkle.app.history.subscribe to restore views, so Back and Forward move inside the app instead of leaving it.
 3. When: Progress, collections, unlocks, high scores or settings the viewer expects to still have tomorrow. Use: Twinkle.privateDb (Twinkle.sharedDb for what everyone sees), written on a user action or as an occasional snapshot, never per frame.
 4. When: The app shares or links to something inside itself (a level, a post, a result). Use: Twinkle.app.getShareUrl(pathSegment) for the link, and read the segment back at startup, instead of building twin-kle.com URLs by hand.
+5. When: A game, or an app whose taps, answers, wins or other moments would feel better with sound (a quiz's right and wrong answers, a button that does something, a level clear), and the app has no sound yet. Use: The Groove Lab player (import * as groove from '/build/vendor/groove-lab/1.0.0/player.js'): await groove.unlock() inside the first tap, then groove.sfx('click' | 'coin' | 'jump' | 'hit' | 'correct' | 'wrong' | 'win' | 'lose' | 'levelup' ...) at those moments, with a mute toggle kept in Twinkle.privateDb. Offer music too: compose a soundtrack as a Groove Lab song spec in a project module (soundtrack/<name>.js with export default { ...spec }, played with groove.createSoundtrack(spec).play({ fadeIn: 1 }) after unlock), or play the creator's published Groove Lab song with groove.loadPublishedSong(entryId) and show its credit.
 
 ## Notes
 - Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
@@ -73,6 +74,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 - word-game-puzzle-v1 preserves Word Search streak bonuses using canonical puzzle reward history: daily-easy/medium/hard with optional -s10 and -s20 tiers. A learner earns each difficulty once per UTC day across every tier and release. rewards.getStatus returns wordGamePuzzle { streakDays, ruleIds, earnedLevels }; choose its ruleIds and display canonical rule amounts. Streaks count consecutive days with a puzzle reward, capped at 30. This profile checks streak eligibility and duplicate difficulty claims in addition to the approved timer; it does not simulate or prove the puzzle solve.
 - word-game-puzzle-v2 is the same daily rule and also requires a server-verified finished solve of that difficulty today (Twinkle.wordMaster.startPuzzle and sendPuzzleEvents). word-search-champion-v1 pays only the rank-1 viewer of a completed UTC month on the server-written verified:month:YYYY-MM board (score, then earliest), once per month and only after the month is final (07:00 UTC on the 2nd, when its last boards can no longer take scores); once anyone collected a month, nobody else can; a removed or fully banned #1 passes the prize to the next eligible player; The daily Twinkle review confirms each month’s winner from the server’s record of their solves before the prize opens (a disqualified winner passes it to the next eligible player). rewards.getStatus returns wordSearchChampion: { month, months, claimable, checking } — months are ready to collect; checking lists wins still being confirmed (show a checking message, no collect button). Show the champion banner from that status, never from app storage.
 - Twinkle.coins prices are part of the app's rewards review (rewards.json prices + spendBudget). Using Twinkle.coins requires the same approval as Twinkle.rewards; the website, never the app, confirms every purchase. Use getReceipts as the only proof of who owns a bought item.
+- Groove Lab player (/build/vendor/groove-lab/1.0.0/player.js): sound effects and music for any app, built from Groove Lab's own instruments, so a song sounds the same as in Groove Lab. Browsers stay silent until a tap: await unlock() inside a tap or click handler before the first sound. Effects: sfx(name, { pitch, volume }) with name one of SFX (click, select, coin, jump, land, step, hit, hurt, explosion, laser, powerup, win, lose, correct, wrong, levelup, open, close, countdown, go) or your own steps [{ instrument, note, seconds, delay, velocity } | { drum, kit, delay, velocity }]; playNote({ instrument, note, seconds, velocity, delay }); playDrum({ kit, sound, velocity, delay }) with sound a DRUMS name (kick, snare, hat, openHat, crash, clap, rim, lowTom, ...) or GM key; setEffectsVolume(0..1). Music: loadSong(spec) checks a Groove Lab song spec and returns { song, warnings }; createSoundtrack(specOrSong, { loop = true, volume }) returns { play({ fadeIn, from }), stop({ fadeOut }), setVolume(v), preload(), playing, time, duration, onEnd, credit }; setMusicVolume(0..1, seconds) ducks music without touching effects; stopMusic({ fadeOut }); loadPublishedSong(entryId) returns { song, credit } via Twinkle.soundtracks.getSong. One soundtrack plays at a time. Song spec (the same format as Groove Lab's load_song): { title, bpm, bars, key: 'D', scale: 'minor', sound: 'studio' | 'retro', loop: { startBar, endBar }, tracks: [{ kind: 'synth' | 'drums', name, instrument, gain, notes: [[tick, midi, lengthTicks, velocity127]] | phrases: [{ bar, beat, text: 'D4:1 F4:.5 A4:.5 | C5:2' }] | grids: [{ bar, bars, pattern: { kick: 'x...x...x...x...', hat: '..x...x...x...x.' } }] }] }; ticks are 96 per quarter note; drum notes are [tick, gmKey, velocity127]. INSTRUMENTS and KITS list the instrument ids (piano, epiano, organ, strings, guitar, brass, flute, bass303, subbass, supersaw, squarelead, pluck, bell, the Command Nexus nx* and kh* voices; kits kit, kit808, gmkit, nexuskit). Write a real piece for the app's mood (melody, bass, drums, a loop section after any intro), not a two-note loop; keep game music loopable and leave room for effects.
 
 ## AI decision design
 - Twinkle.ai.decide runs JEV, a model for narrow decisions over supplied text or structured state, and it is free for viewers: decisions are covered by Twinkle and never use their AI Energy. Whenever an app makes a judgment that ordinary code can only approximate, consider JEV first. Proven patterns: an opponent or boss coach that reads the player's habits (favourite lane, repeated trick, cheese move) and picks a counter-plan from a fixed list, as in Red Square's boss and Open Football's opponent coach; NPCs that understand what a player types and choose an action; classifying or scoring user submissions; ranking supplied candidates; and picking the next exercise or difficulty from evidence about the learner. Any app with an AI opponent, NPC, or adaptive difficulty should decide explicitly whether JEV improves it. These are examples to reason from, not a keyword checklist or a requirement to add AI to every app.
@@ -2067,6 +2069,13 @@ showHint(`${latest.item.emoji} ${latest.item.name} = ${latest.a.name} + ${latest
   - Lumine Network Build 2742 only. Replace UI state from confirmed server responses.
 
 ### Twinkle.soundtracks
+- async getSong({ entryId }) | scopes: sharedDb:read
+  - Returns: { song: { entryId, title, creator: { id, username }, url, updatedAt, coverUrl, data, parts } } | { song: { entryId, title, creator, url, songLocked: true, coverUnlockHint } }
+  - Read one published Groove Lab song so this app can play it with the Groove Lab player.
+  - entryId is the published song's id (in Groove Lab: the song's Use in your app button). Only published songs are returned, never private projects; a song in the middle of being re-published returns 409 (try again shortly).
+  - Play it with the Groove Lab player, which assembles data and parts for you: const { song, credit } = await groove.loadPublishedSong(entryId) after import * as groove from '/build/vendor/groove-lab/1.0.0/player.js'. Show the credit in the app ("Music: Night Drive by @someone").
+  - Load the song when the app needs it instead of copying it into project files: the creator's later re-publishes from Groove Lab then reach the app automatically.
+  - Story-locked songs (Red Square's Full Circle and Starlight) return songLocked with coverUnlockHint and no music until this viewer unlocks them: play something else and show the hint.
 - async searchSources({ query } = {}) | scopes: sharedDb:read
   - Returns: { sources: [{ kind, appId?, title, href, thumbnailUrl? }] }
   - Find a public app or Grammarbles Quest for a song tag.
@@ -2436,4 +2445,18 @@ if (status.mode === 'live') {
   // const result = await Twinkle.rewards.claim({ challengeId: challenge.challengeId, answers });
   // Display only result.balances and result.receipt after awarded === true.
 }
+```
+
+### Sound effects and a soundtrack
+
+```js
+import * as groove from '/build/vendor/groove-lab/1.0.0/player.js';
+import theme from './soundtrack/theme.js'; // export default { title, bpm, bars, key, scale, tracks: [...] }
+const music = groove.createSoundtrack(theme);
+startButton.addEventListener('click', async () => {
+  await groove.unlock(); // inside the tap: browsers stay silent until then
+  music.play({ fadeIn: 1 });
+});
+function onCoin() { groove.sfx('coin'); }
+function onGameOver() { music.stop({ fadeOut: 1.5 }); groove.sfx('lose'); }
 ```
