@@ -172,3 +172,14 @@ test("tally-clear: one player's records, optional region and area, a dry run wit
   assert.match(lines.at(-1), /Add --confirm to apply/);
 });
 
+
+test("coins list pages older purchases with --before (the server's nextBefore)", () => {
+  const first = buildCoinsOperation({ action: "list", options: { adminConfirm: "", adminBuild: "363", adminCoinPrice: "plot" } });
+  assert.equal(first.path, "/cli/admin/coins/purchases?buildId=363&priceId=plot");
+  const older = buildCoinsOperation({ action: "list", options: { adminConfirm: "", adminBuild: "363", adminCoinPrice: "plot", adminCoinBefore: "4120" } });
+  assert.equal(older.path, "/cli/admin/coins/purchases?buildId=363&priceId=plot&before=4120");
+  assert.equal(older.mutates, false);
+  assert.throws(() => buildCoinsOperation({ action: "list", options: { adminConfirm: "", adminBuild: "363", adminCoinBefore: "abc" } }), /--before must be a positive whole number/);
+  const lines = formatCoinsResult({ operation: first, data: { receipts: [{ id: 4121, createdAt: 1794000000, buyer: { id: 7, username: "kid" }, kind: "purchase", priceId: "plot", key: "fw3:0:0", coins: 10000, destination: "removed", status: "active", holds: true }], nextBefore: 4121 } });
+  assert.match(lines.at(-1), /re-run with --before 4121/);
+});
