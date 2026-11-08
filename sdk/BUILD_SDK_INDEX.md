@@ -2,7 +2,7 @@
 
 Version: 1.84.0
 Updated: 2026-11-08
-Generated: 2026-11-08T16:01:26.858Z
+Generated: 2026-11-08T17:26:08.541Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1957,14 +1957,15 @@ world.updatePresence({ x, y, z, facing });
   - Send block changes over HTTP (use world session.edit while in a room; this is for no-room cases, the page-hide flush and offline queues).
   - Cells are whole numbers: x and z within ±1,000,000, y from -512 to 512, value from 0 to 2,147,483,647 (your app's block id; Twinkle never interprets it). 1 to 2,000 cells a call; the last change to a cell in one call wins. flags bit 1 = natural: the world's own generated block put back (ends the player's own builder credit there).
   - cause: why the cell changed, 1 to 8 lowercase letters or digits (e.g. "tnt", "fluid", "derived", "grow", "fall"). Leave it out for a player's own hand edits: only those earn builder credit. Inside someone's plot a cause opens the plot only when the holder switched on the declared switch for that cause and the value is one the declaration lists.
-  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full (2,000,000 cells a world, 5,000,000 an app, 64 worlds an app). Roll back refused hand edits; drop refused game-made changes quietly.
-  - at (server seconds, clamped to now): a change first made earlier (an offline queue, an old tab's edits carried over). A cell changed after at is left alone (land_newer), so newer work is never overwritten.
-  - Limits per player per app: bursts of 4,000 cells refilled at 60 a second (land_throttled with details { retryAfterSeconds }: keep the cells and send them after that wait).
+  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full / land_quota (a player's or all guests' daily allowance of new blocks) (2,000,000 cells a world, 5,000,000 an app, only declared worlds). Roll back refused hand edits; drop refused game-made changes quietly.
+  - at (server seconds) is only for an old tab's edits carried over: Twinkle accepts it inside the world's carry-over window (from cells() carryFrom, the time of the world's imported cells, for 30 days) and refuses it otherwise (land_carry_closed). A cell changed after at is left alone (land_newer). History keeps the time Twinkle stored the change.
+  - Limits per player (or guest), per address and per app: bursts of 4,000 cells refilled at 60 a second (land_throttled with details { retryAfterSeconds }: keep the cells and send them after that wait, on the socket too).
 - await Twinkle.land.cells({ region, since?, area?: { x0, z0, x1, z1 }, cursor? }) | scopes: land:read
   - Returns: { region, seq, landVersion, format: 1, cells: [[x, y, z, value], ...], count, nextCursor, nextSince, done }
   - Read the world: every stored cell (pages of 5,000), an area, or only what changed since a seq.
-  - Load order: subscribe first and buffer events, read every page (keep the first page's seq as S, pass nextCursor until done), then apply buffered cells.changed events with toSeq > S in order. Reconnected: cells({ since: lastSeq }) until done, then live events.
+  - Load order: subscribe first and buffer events, read every page (keep the first page's seq as S, pass nextCursor until done), then apply buffered cells.changed events with toSeq > S in order. Reconnected: cells({ since: lastSeq }) until done, then live events. Never move lastSeq past a gap you could not fill: keep later events and read cells({ since }) again after a short wait.
   - area: at most 512 columns a side, both corners included. Cells never changed in the world are not stored: what your game generates is the world until a player changes it.
+  - The first page also says carryFrom: where this world's carry-over window starts (seconds), or null when Twinkle accepts no carried-over edits there.
 - await Twinkle.land.plots({ region, area?: { x0, z0, x1, z1 }, key?, cursor? }) | scopes: land:read
   - Returns: { region, plots: [{ key, receiptId, priceId, area: { x0, z0, x1, z1 }, holder: { id, username }, build, use, switches, lastPrice, since, you: { build, use }, friends?: [{ id, username }] }], nextCursor }
   - Held plots in a world: who holds each, who may build and use, and what the viewer may do there.
@@ -1982,7 +1983,7 @@ world.updatePresence({ x, y, z, facing });
   - Returns: { changes: [{ id, x, y, z, value, prevValue, by: { id, username }, cause, source, seq, at }], nextBefore | nextSince }
   - Who changed a cell (newest first), a plot's changes since a time newest first (Undo "last hour" / "since claimed"), or a plot's changes from a change id oldest first.
   - Plot, newest first: { key, order: "newest", sinceAt } returns the changes made at or after sinceAt (server seconds; e.g. now - 3600 for the last hour, or the plot's since for "since claimed"), newest first, 1,000 a page; pass before: nextBefore until nextBefore is null. Only that window is read, however busy the plot. at is the server time of each change.
-  - Cell: 200 a page, newest first, before: nextBefore. Plot from a change id: { key, since }, oldest first, 200 a page, since: nextSince.
+  - Cell: 200 a page, newest first, before: nextBefore (guests of a public app may ask about free land too; a guest's change says by: { guest: true }). Plot from a change id: { key, since }, oldest first, 200 a page, since: nextSince. Every page reads only about its own rows, however long the plot's history.
 - await Twinkle.land.mine({ region, ignore?: [value, ...] }) | scopes: land:read
   - Returns: { region, land, plotSize, total, reserved, truncated, clusters: [{ x, z, count, area: { x0, z0, x1, z1 }, status: "free" | "yours" | "taken" | "reserved" | "no_land" }] }
   - Where the signed-in player's own blocks stand in one world, grouped into the places a plot would cover, so the game can say "You have 28 blocks around x 100, z 102 and no land yet".

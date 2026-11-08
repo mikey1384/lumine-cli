@@ -10,7 +10,10 @@ import {
   formatLandResult,
   LAND_IMPORT_LIMITS,
   landImportBatches,
+  landClearRequestKey,
   landImportRequestKey,
+  readLandImportFile,
+  runLandClear,
   runLandImport,
 } from "../lib/admin-land.js";
 import { formatCoinPrices, formatLand } from "../lib/rewards.js";
@@ -157,4 +160,57 @@ test("publish --ask-reload asks once after publishing and never undoes the publi
   assert.match(reloadAskLine(failed), /^Published, but asking players to reload failed: Players were just asked/);
   process.exitCode = before;
   assert.deepEqual(calls, [363]);
+});
+
+// Review fixes (11-08): imports before approval (--land-review), the edits file's cutover (M5), and
+// lumine admin land clear (H1).
+test("imports: --land-review goes with every batch; an edits file must name its cutover", () => {
+  const cellsFile = tempFile("cells.json", { format: "twinkle-land-cells-v1", region: "fw3", at: 1794000000, cells: [[0, 0, 0, 1, 5, "derived", 0], [1, 0, 0, 2, 5]] });
+  const op = buildLandOperation({ action: "import-cells", target: "363", options: { ...base, adminFile: cellsFile, adminReason: "before approval", adminLandReview: "912" } });
+  assert.ok(op.batches.every((batch) => batch.landReviewId === 912));
+  assert.deepEqual(op.batches[0].cells[0], [0, 0, 0, 1, 5, "derived", 0], "cause and flags travel as they are");
+  const rewards = tempFile("rewards.json", { prices: [{ id: "starter", coins: 0 }], land: { keyGroup: "plots", plotSize: 16, keyFormat: "region:x:z", regions: ["fw3"], freeRegions: ["tnt-world-fw3"] }, rules: [] });
+  const fromFile = buildLandOperation({ action: "import-plots", target: "363", options: { ...base, adminFile: tempFile("plots.json", { format: "twinkle-land-plots-v1", region: "fw3", priceId: "starter", artifactVersionId: 9, plots: [{ plotId: 1, userId: 5, x0: 0, z0: 0, claimedAt: 1794000000 }] }), adminReason: "before the review", adminLandFile: rewards } });
+  assert.deepEqual(fromFile.batches[0].landDeclaration, { prices: [{ id: "starter", coins: 0 }], land: { keyGroup: "plots", plotSize: 16, keyFormat: "region:x:z", regions: ["fw3"], freeRegions: ["tnt-world-fw3"] } });
+  assert.throws(() => buildLandOperation({ action: "import-cells", target: "363", options: { ...base, adminFile: cellsFile, adminReason: "x", adminLandFile: rewards, adminLandReview: "9" } }), /not both/);
+  const noCutover = tempFile("edits.json", { format: "twinkle-land-edits-v1", region: "fw3", rows: [{ userId: 1, at: 10, cells: [[0, 0, 0, 1]] }] });
+  assert.throws(() => readLandImportFile(noCutover, "import-edits"), /cutover must be the time/);
+  const withCutover = tempFile("edits.json", { format: "twinkle-land-edits-v1", region: "fw3", cutover: 9, rows: [{ userId: 1, at: 10, cells: [[0, 0, 0, 1]] }] });
+  const edits = buildLandOperation({ action: "import-edits", target: "363", options: { ...base, adminFile: withCutover, adminReason: "late pass" } });
+  assert.ok(edits.batches.every((batch) => batch.cutover === 9 && batch.landReviewId === undefined));
+});
+
+test("clear: one author (--user or --guest), dry run unless --confirm, batch by batch until the server says done", async () => {
+  assert.throws(() => buildLandOperation({ action: "clear", target: undefined, options: { ...base, adminBuild: "363", adminReason: "flood" } }), /Name one author/);
+  assert.throws(() => buildLandOperation({ action: "clear", target: undefined, options: { ...base, adminBuild: "363", adminUser: "5", adminLandGuest: "gaaaaaaaaaaaaaaaaaaaa", adminReason: "x" } }), /Name one author/);
+  assert.throws(() => buildLandOperation({ action: "clear", target: undefined, options: { ...base, adminBuild: "363", adminLandGuest: "guest-1", adminReason: "x" } }), /land guest id/);
+  const dry = buildLandOperation({ action: "clear", target: undefined, options: { ...base, adminBuild: "363", adminLandGuest: "gaaaaaaaaaaaaaaaaaaaa", adminCoinRegion: "fw3", adminSince: "1794000000", adminReason: "flood" } });
+  assert.equal(dry.name, "land.clear.preview");
+  assert.deepEqual(dry.body, { buildId: 363, guestId: "gaaaaaaaaaaaaaaaaaaaa", region: "fw3", since: 1794000000, reason: "flood", dryRun: true });
+  const sent = [];
+  const plan = { region: "fw3", changesInScope: 30000, cells: 2000, reverted: 1500, removed: 400, leftForLaterChanges: 100, more: true, dryRun: true };
+  const dryResult = await runLandClear({ options: { apiUrl: "http://api.test" }, operation: dry, authToken: "t", request: async (call) => { sent.push(call); return { ok: true, data: plan }; } });
+  assert.equal(sent.length, 1, "a dry run asks once");
+  assert.deepEqual(sent[0].headers, {});
+  assert.match(formatLandResult({ operation: dry, data: dryResult.data }).join("\n"), /30000 changes there; this batch: 2000 cells, 1500 put back, 400 back to the generated world, 100 left/);
+  // Confirmed, without --region: the server picks the next world each time until nothing is in scope.
+  const live = buildLandOperation({ action: "clear", target: undefined, options: { ...base, adminConfirm: "true", adminBuild: "363", adminUser: "7", adminReason: "flood" } });
+  sent.length = 0;
+  const answers = [
+    { region: "fw3", reverted: 10, removed: 5, leftForLaterChanges: 1, historyRemoved: 20000, more: true },
+    { region: "fw3", reverted: 2, removed: 0, leftForLaterChanges: 0, historyRemoved: 300, more: false },
+    { region: "tnt-world-fw3", reverted: 0, removed: 7, leftForLaterChanges: 0, historyRemoved: 7, more: false },
+    { regions: [], more: false },
+  ];
+  const result = await runLandClear({ options: { apiUrl: "http://api.test" }, operation: live, authToken: "t", request: async (call) => { sent.push(call); return { ok: true, data: answers[sent.length - 1] }; } });
+  assert.equal(sent.length, 4);
+  assert.deepEqual(sent.map((call) => call.body.batchIndex), [0, 1, 2, 3]);
+  assert.equal(sent[2].headers["x-lumine-idempotency-key"], landClearRequestKey(live.body, 2));
+  assert.equal(landClearRequestKey(live.body, 2), "cli:land:clear:363:u7:all:0:2");
+  assert.deepEqual({ reverted: result.data.reverted, removed: result.data.removed, historyRemoved: result.data.historyRemoved, regions: result.data.regions }, { reverted: 12, removed: 12, historyRemoved: 20307, regions: ["fw3", "tnt-world-fw3"] });
+  assert.match(formatLandResult({ operation: live, data: result.data }).join("\n"), /12 cells put back, 12 back to the generated world, 1 left \(changed later by someone else\), 20307 history rows removed/);
+  const parsed = parseArgs(["admin", "land", "clear", "--build", "363", "--guest", "gaaaaaaaaaaaaaaaaaaaa", "--land-review", "9", "--land-file", "r.json", "--reason", "x"]);
+  assert.equal(parsed.adminLandGuest, "gaaaaaaaaaaaaaaaaaaaa");
+  assert.equal(parsed.adminLandReview, "9");
+  assert.equal(parsed.adminLandFile, "r.json");
 });
