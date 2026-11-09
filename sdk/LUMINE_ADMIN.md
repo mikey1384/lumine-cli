@@ -1914,11 +1914,17 @@ Read-only, no run lease. For yesterday, always pass its exact UTC `--date`; `--d
 earners, XP, Coins) and the flagged player-days, worst first:
 
 - `fast`: a completion claim within 5 s of the rule's `minSeconds` — a human
-  who types the stage lands well above the minimum; a script lands on it;
+  who types the stage lands well above the minimum; a script lands on it.
+  Only rules with a minimum (`minSeconds` > 0) can be `fast`;
 - `burst`: 3+ claims within 10 minutes;
 - `sweep`: 75 %+ of an app's completion rules earned within 30 minutes (3+ claims);
 - `cap` / `daily-max`: at the per-learner day cap; at it on 3+ days of the window;
 - `guessing`: a quiz challenge with 15+ wrong answers (unlimited-tries rules).
+
+Each flagged player-day carries `reasons`: one plain sentence per flag, in
+the order of `flags`, with the numbers that raised it (closest claim against
+its minimum, claims in the burst window, rules swept, cap reached, days at the
+cap, attempts on the worst challenge). Quote them with the row.
 
 Put the app totals and every flagged row in the daily report verbatim. A
 single `cap` day is a good player having a good day; `fast` + `sweep` +

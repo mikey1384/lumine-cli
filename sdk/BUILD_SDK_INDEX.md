@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.84.0
-Updated: 2026-11-08
-Generated: 2026-11-08T17:26:08.541Z
+Version: 1.85.0
+Updated: 2026-11-09
+Generated: 2026-11-09T08:26:38.047Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1884,7 +1884,8 @@ world.updatePresence({ x, y, z, facing });
   - Returns: Same as startBankQuestion with the new question, or { needsQuestion: false } when an unseen question already exists (call startBankQuestion).
   - Have the server write, double-check and serve a new question at the learner's step. Uses the learner's AI Energy.
   - Show a progress bar from onProgress: stage is 'pending', 'writing', 'checking' (the independent solve), 'saving' or 'done'; percent follows the server's real phases and the model's streamed output, never goes backwards, and reaches 100 only when the question is served. Silent model thinking inside a phase cannot be measured, so the bar eases forward there rather than guessing.
-  - Takes as long as two GPT-6.1 Sol calls (tens of seconds): show progress and keep one request in flight. Both calls are billed to the signed-in learner's AI Energy; an empty battery rejects before any work.
+  - Takes as long as two GPT-6.1 Sol calls (often a few minutes): show progress. Both calls are billed to the signed-in learner's AI Energy; an empty battery rejects before any work.
+  - The server writes the question as a job, so a dropped connection or a reload does not lose it or pay twice: calling generateBankQuestion again for the same topic joins the question already being written, and startBankQuestion serves it once it is ready. No retry or resume logic is needed in the app.
   - build_reward_bank_unverified (503) means two tries did not produce a question whose answers agreed; nothing is stored. build_reward_bank_generation_limit (429) caps questions one learner writes per day.
   - The question joins the shared bank: every other learner at that step gets it before anything new is written.
 - await Twinkle.rewards.claimBankQuestion({ challengeId, answer: number }) | scopes: rewards:claim
