@@ -418,9 +418,9 @@ among the project files is uploaded by `lumine save`.
   "name": "world map scrolls to the status bar",
   "viewport": "phone",
   "steps": [
-    { "type": "click", "x": 500, "y": 620 },
-    { "type": "expect", "text": "World Map", "state": "visible" },
-    { "type": "touch", "x": 500, "y": 800, "endX": 500, "endY": 200, "durationMs": 400 },
+    { "type": "click", "text": "World Map" },
+    { "type": "expect", "selector": "#map-bar", "state": "visible" },
+    { "type": "touch", "selector": "#map-bar", "endX": 500, "endY": 200, "durationMs": 400 },
     { "type": "expect", "selector": "#status", "state": "in_view", "timeoutMs": 1500 },
     { "type": "expect_value", "path": "game.screen", "op": "equals", "value": "map" },
     { "type": "call", "module": "/rules.js", "export": "scoreWord", "args": ["CAT"], "op": "equals", "value": 3 }
@@ -428,9 +428,29 @@ among the project files is uploaded by `lumine save`.
 }
 ```
 
-- Inputs: `click`, `touch` (add `endX`/`endY` to drag or swipe, `durationMs`
-  to hold), `scroll` (`deltaY`), `key` (`key`), `wait` (`durationMs`).
-  Coordinates are 0-1000 across the app frame.
+- Inputs: `click`, `touch` (add `endX`/`endY` or `endSelector` to drag or
+  swipe, `durationMs` to hold), `scroll` (`deltaY`, mouse wheel), `key`
+  (`key`), `wait` (`durationMs`), `reload` (the app is closed and opened
+  again in the same visit, as when a phone unloads it). Aim an input with `x`/`y` (0-1000 across
+  the app frame) or with `selector` (CSS) or `text` (visible text, aria-label
+  or value; `which` first/last in a test) to hit the centre of that element
+  on screen. A named element that is missing, off screen or covered by
+  something else stops the step as could_not_run and says what it found.
+- The phone viewport is a touch phone from the app's first line (touch
+  events, `navigator.maxTouchPoints`, `(pointer: coarse)`), so controls an
+  app shows only on touch screens appear; `click` is a finger tap and a
+  `touch` drag is a real swipe that scrolls touch scrollers and fires touch
+  handlers. The mouse wheel does neither, so check a swipe fix with `touch`.
+  Desktop stays a mouse-and-keyboard computer.
+- Every app save is kept in that call's throwaway preview memory:
+  `Twinkle.privateDb`, `Twinkle.sharedDb` (key-value and entries), the
+  `userDb` SQL database (starting as a copy of your real one) and
+  `Twinkle.app.lifecycle` snapshots. Nothing reaches the real store and
+  saves that already exist still read back, so "save, `reload`, expect it
+  back" is a real test. Rewards, notifications, entry claims and
+  multiplayer are not simulated.
+- A malformed step is refused before anything runs, with the step, the field
+  and what is allowed (for example `Step 2 (wait): unknown field "timeout"`).
 - Checks: `expect` (`text` or a CSS `selector`; `state` visible, in_view,
   present or absent; `which` any/first/last; `timeoutMs` up to 3000),
   `expect_value` (a `path` the app keeps on `window`, `op` equals, not_equals,

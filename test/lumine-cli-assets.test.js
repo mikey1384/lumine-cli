@@ -63,14 +63,14 @@ test("CLI validates encodings and mirrors project limits locally", () => {
   assert.match(cliSource, /function countEffectiveLines\(value\)/);
   assert.match(
     cliSource,
-    /function collectProjectLimitFindings\(files, projectLimits = \{\}\)/,
+    /function collectProjectLimitFindings\(files, projectLimits = \{\}, \{ savedFileHashes = null \} = \{\}\)/,
   );
   assert.match(cliSource, /const PROJECT_MAX_FILES = 100;/);
   assert.match(cliSource, /const PROJECT_MAX_EFFECTIVE_FILE_LINES = 500;/);
   assert.match(cliSource, /const PROJECT_EFFECTIVE_LINE_MAX_COLUMNS = 160;/);
   assert.match(
     cliSource,
-    /assertProjectFilesWithinLimits\(files, build\?\.projectLimits\);/,
+    /assertProjectFilesWithinLimits\(files, build\?\.projectLimits, \{\s*savedFileHashes:/,
   );
   assert.match(
     cliSource,

@@ -122,3 +122,16 @@ test("local check uses freshly loaded canonical limits over stale checkout metad
     true,
   );
 });
+
+test("an over-limit file is kept while unchanged from the saved version, refused once changed", async () => {
+  const { computeProjectFileHashes } = await import("../lib/workspace.js");
+  const legacy = { path: "/old.js", content: Array.from({ length: 501 }, () => "x").join("\n") };
+  const saved = computeProjectFileHashes([legacy, { path: "/index.html", content: "<p>a</p>" }]);
+  const unchanged = collectProjectLimitFindings([legacy, { path: "/index.html", content: "<p>b</p>" }], {}, { savedFileHashes: saved });
+  assert.deepEqual(unchanged.errors, []);
+  const grown = collectProjectLimitFindings([{ ...legacy, content: `${legacy.content}\nmore` }], {}, { savedFileHashes: saved });
+  assert.match(grown.errors[0], /\/old\.js" exceeds the per-file limit of 500 effective lines \(502/);
+  // An older checkout without per-file hashes refuses as before, and says how to fix it.
+  const unknown = collectProjectLimitFindings([legacy], {});
+  assert.match(unknown.errors[0], /no record of the saved files/);
+});
