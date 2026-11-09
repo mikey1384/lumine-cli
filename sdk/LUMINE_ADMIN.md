@@ -1196,6 +1196,10 @@ These compose the documented commands in this contract, running them as child pr
 
 Default checkpoints, mutation intents, runtime-log evidence and Build reviews live
 under `work/lumine-admin` in the invocation directory, with private permissions.
+When the invocation directory is inside an app's Lumine project workspace (a
+`.twinkle/lumine-project.json` there or above), they live in `~/.twinkle/lumine-admin`
+instead, never among the app's files; `lumine save` skips any `work/lumine-admin`
+folder an older CLI left in a workspace and says so once.
 Explicit persistent output/checkpoint paths take priority. Older automatic
 checkpoints in OS temp storage are copied with their candidate spools to persistent
 storage before resuming; the existing scope/hash checks still apply.

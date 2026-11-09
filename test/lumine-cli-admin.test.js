@@ -1719,6 +1719,44 @@ test("shared verified-email policies are explicit, reversible, and run-independe
   assert.match(request?.requestId, /^cli:[0-9a-f-]{36}$/);
 });
 
+// 11-09: run from an app's Lumine project workspace, admin receipts were
+// written to <workspace>/work/lumine-admin and `lumine save` uploaded them
+// (#363 v230 carried 33). Inside a workspace they go to the CLI's own state
+// folder (~/.twinkle/lumine-admin); elsewhere work/lumine-admin is unchanged.
+test("admin receipts never go inside an app's project workspace", async (t) => {
+  const fixture = await createFixtureServer(t);
+  const base = fs.mkdtempSync(path.join(testWorkRoot(), "lumine-admin-home-"));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const home = path.join(base, "home");
+  const workspace = path.join(base, "app-363");
+  fs.mkdirSync(path.join(workspace, ".twinkle"), { recursive: true });
+  fs.mkdirSync(path.join(workspace, "src"), { recursive: true });
+  fs.writeFileSync(path.join(workspace, ".twinkle", "lumine-project.json"), JSON.stringify({ buildId: 363 }));
+  const env = { ...process.env, HOME: home };
+  const args = [
+    "admin", "ai-email-policy", "set", "--email", "Teacher+Class@Example.com",
+    "--mode", "separate_accounts", "--note", "Teacher-confirmed classroom provisioning address",
+    "--json", ...fixture.cliArgs,
+  ];
+  // From the workspace root and from a folder inside it.
+  for (const cwd of [workspace, path.join(workspace, "src")]) {
+    const result = await runCli(args, { cwd, env });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(fs.existsSync(path.join(cwd, "work")), false, `${cwd} has no work/ folder`);
+  }
+  assert.equal(fs.existsSync(path.join(workspace, "work")), false);
+  const stateRequests = path.join(home, ".twinkle", "lumine-admin", "requests");
+  assert.equal(listAdminReceipts(undefined, stateRequests).length, 2);
+  assert.equal(fs.statSync(path.join(home, ".twinkle", "lumine-admin")).mode & 0o777, 0o700);
+  // Outside any workspace (the repository root case) the home is unchanged.
+  const repo = path.join(base, "repo");
+  fs.mkdirSync(repo);
+  const result = await runCli(args, { cwd: repo, env });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(listAdminReceipts(repo).length, 1);
+  assert.equal(listAdminReceipts(undefined, stateRequests).length, 2);
+});
+
 test("identity inspect keeps no copy on disk unless --output asks for a private one", async (t) => {
   const fixture = await createFixtureServer(t);
   // Its own working directory, so receipts other tests write into the shared
@@ -1744,8 +1782,7 @@ test("identity inspect keeps no copy on disk unless --output asks for a private 
   assert.equal(network.mutates, false);
 });
 
-function listAdminReceipts(cwd = path.resolve(__dirname, "..")) {
-  const dir = path.resolve(cwd, "work", "lumine-admin", "requests");
+function listAdminReceipts(cwd = path.resolve(__dirname, ".."), dir = path.resolve(cwd, "work", "lumine-admin", "requests")) {
   try {
     return fs.readdirSync(dir).filter((name) => name.endsWith(".receipt.json")).sort();
   } catch {
@@ -4473,10 +4510,10 @@ async function readRequestBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-async function runCli(args, { cwd = path.resolve(__dirname, "..") } = {}) {
+async function runCli(args, { cwd = path.resolve(__dirname, ".."), env = process.env } = {}) {
   const child = spawn(process.execPath, [cliPath, ...args], {
     cwd,
-    env: process.env,
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";

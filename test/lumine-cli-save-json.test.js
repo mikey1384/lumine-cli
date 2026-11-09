@@ -77,3 +77,32 @@ test('versions --json returns the canonical history with no prose', async t => {
   assert.equal(f.output.length, 1);
   assert.deepEqual(JSON.parse(f.output[0]).versions, [{ version: 12, id: 123 }]);
 });
+
+// 11-09: #363 v230 carried 33 `lumine admin` receipts an older CLI wrote into
+// the workspace's work/lumine-admin/. Save (and launch / save --publish, which
+// save the same way) never uploads that folder, at any depth, and says so once.
+test('save never uploads CLI admin state left in the workspace, and warns once', async t => {
+  const f = fixture(t);
+  const write = (relative, content) => {
+    fs.mkdirSync(path.dirname(path.join(f.workspace, relative)), { recursive: true });
+    fs.writeFileSync(path.join(f.workspace, relative), content);
+  };
+  write('work/lumine-admin/requests/abc.receipt.json', '{"ok":true,"status":"success"}');
+  write('work/lumine-admin/requests/abc.pending.json', '{}');
+  write('src/work/lumine-admin/requests/def.receipt.json', '{"ok":true}');
+  // An app's own work/ folder is still the app's.
+  write('work/notes.js', 'export const notes = 1;');
+  write('src/lumine-admin/panel.js', 'export const panel = 1;');
+  const warnings = [];
+  t.mock.method(console, 'error', line => warnings.push(String(line)));
+  await save(f.options('save', ['--publish']));
+  const sent = JSON.parse(f.requests.find(r => r.endpoint === '/build/2/project-files').body);
+  const paths = sent.files.map(file => file.path).sort();
+  assert.deepEqual(paths, ['/index.html', '/src/lumine-admin/panel.js', '/work/notes.js']);
+  assert.equal(JSON.parse(f.output[0]).publication.published, true);
+  const skipped = warnings.filter(line => /skipping .*lumine-admin\//.test(line));
+  assert.deepEqual(skipped.map(line => line.match(/skipping (\S+)/)[1]).sort(), ['src/work/lumine-admin/', 'work/lumine-admin/']);
+  // A second save in the same run does not repeat the warning.
+  await save(f.options('save'));
+  assert.equal(warnings.filter(line => /skipping .*lumine-admin\//.test(line)).length, 2);
+});
