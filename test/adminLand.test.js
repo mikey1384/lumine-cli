@@ -259,6 +259,8 @@ test("rewards check, who and edits show land zones and resets", () => {
     resettable: [{ id: "castle", region: "tnt-world-v2", x0: 33, z0: 80, x1: 65, z1: 112, why: "the Castle", cooldownSeconds: 30 }],
   });
   assert.ok(lines.includes("  locked: the Star Maze · maze-world-v2 x 10..85, z 20..95 · nobody can change blocks"));
+  assert.ok(formatLand({ keyGroup: "p", plotSize: 16, keyFormat: "region:x:z", regions: ["a"], locked: [{ region: "a", x0: 0, z0: 0, x1: 3, z1: 3, why: "fountain", allowCauses: [{ cause: "fluid", values: [8, 2] }] }] })
+    .includes("  locked: fountain · a x 0..3, z 0..3 · nobody can change blocks (except fluid → 8, 2)"));
   assert.ok(lines.includes('  resettable "castle": the Castle · tnt-world-v2 x 33..65, z 80..112 · any player can put it back, every 30 s'));
   const who = buildLandOperation({ action: "who", options: { ...base, adminBuild: "363", adminCoinRegion: "tnt-world-v2", adminLandCell: "40,10,90" } });
   const whoLines = formatLandResult({ operation: who, data: { region: "tnt-world-v2", cell: [40, 10, 90], current: null, reset: { id: "castle", by: { id: 6, username: "ana" }, at: 1794000000, seq: 9 }, changes: [{ id: 1, at: 1793990000, username: "ben", prevValue: null, value: 3, source: "live", seq: 4 }] } });

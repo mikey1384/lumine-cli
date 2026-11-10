@@ -2,7 +2,7 @@
 
 Version: 1.86.0
 Updated: 2026-11-10
-Generated: 2026-11-10T00:19:21.100Z
+Generated: 2026-11-10T01:19:30.233Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1958,7 +1958,7 @@ world.updatePresence({ x, y, z, facing });
   - Send block changes over HTTP (use world session.edit while in a room; this is for no-room cases, the page-hide flush and offline queues).
   - Cells are whole numbers: x and z within ±1,000,000, y from -512 to 512, value from 0 to 2,147,483,647 (your app's block id; Twinkle never interprets it). 1 to 2,000 cells a call; the last change to a cell in one call wins. flags bit 1 = natural: the world's own generated block put back (ends the player's own builder credit there).
   - cause: why the cell changed, 1 to 8 lowercase letters or digits (e.g. "tnt", "fluid", "derived", "grow", "fall"). Leave it out for a player's own hand edits: only those earn builder credit. Inside someone's plot a cause opens the plot only when the holder switched on the declared switch for that cause and the value is one the declaration lists.
-  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_locked (a locked area: nobody may change it, game-made changes only when the area's allowCauses names their cause), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full / land_quota (a player's or all guests' daily allowance of new blocks) (2,000,000 cells a world, 5,000,000 an app, only declared worlds). Roll back refused hand edits; drop refused game-made changes quietly.
+  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_locked (a locked area: nobody may change it; a game-made change only when the area's allowCauses lists its cause and the value is one of that cause's declared values), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full / land_quota (a player's or all guests' daily allowance of new blocks) (2,000,000 cells a world, 5,000,000 an app, only declared worlds). Roll back refused hand edits; drop refused game-made changes quietly.
   - at (server seconds) is only for an old tab's edits carried over: Twinkle accepts it inside the world's carry-over window (from cells() carryFrom, the time of the world's imported cells, for 30 days) and refuses it otherwise (land_carry_closed). A cell changed after at is left alone (land_newer). History keeps the time Twinkle stored the change.
   - Limits per player (or guest), per address and per app: bursts of 4,000 cells refilled at 60 a second (land_throttled with details { retryAfterSeconds }: keep the cells and send them after that wait, on the socket too).
 - await Twinkle.land.cells({ region, since?, area?: { x0, z0, x1, z1 }, cursor? }) | scopes: land:read
