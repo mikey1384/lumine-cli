@@ -15,6 +15,8 @@ import {
   readLandImportFile,
   runLandClear,
   runLandImport,
+  runLandReset,
+  landResetRequestKey,
 } from "../lib/admin-land.js";
 import { formatCoinPrices, formatLand } from "../lib/rewards.js";
 import { askReloadAfterPublish, parseArgs, reloadAskLine } from "../lib/commands.js";
@@ -213,4 +215,55 @@ test("clear: one author (--user or --guest), dry run unless --confirm, batch by 
   assert.equal(parsed.adminLandGuest, "gaaaaaaaaaaaaaaaaaaaa");
   assert.equal(parsed.adminLandReview, "9");
   assert.equal(parsed.adminLandFile, "r.json");
+});
+
+// Land zones (11-10).
+test("reset: --build --region --id, dry run unless --confirm, one part per call until the server says done", async () => {
+  assert.equal(parseArgs(["admin", "land", "reset", "--build", "363", "--region", "tnt-world-v2", "--id", "castle", "--reason", "rebuild"]).adminLandArea, "castle");
+  const dry = buildLandOperation({ action: "reset", options: { ...base, adminBuild: "363", adminCoinRegion: "tnt-world-v2", adminLandArea: "castle", adminReason: "rebuild" } });
+  assert.equal(dry.name, "land.reset.preview");
+  assert.equal(dry.mutates, false);
+  assert.deepEqual(dry.body, { buildId: 363, region: "tnt-world-v2", id: "castle", reason: "rebuild", dryRun: true });
+  assert.throws(() => buildLandOperation({ action: "reset", options: { ...base, adminBuild: "363", adminCoinRegion: "tnt-world-v2", adminLandArea: "Castle!", adminReason: "x" } }), /--id is the resettable area/);
+  assert.throws(() => buildLandOperation({ action: "reset", options: { ...base, adminBuild: "363", adminCoinRegion: "tnt-world-v2", adminLandArea: "castle" } }), /--reason is required/);
+  const sent = [];
+  const area = { x0: 33, z0: 80, x1: 65, z1: 112 };
+  const dryResult = await runLandReset({ options: { apiUrl: "http://api.test" }, operation: dry, authToken: "t", request: async (call) => { sent.push(call); return { ok: true, data: { dryRun: true, area, why: "the Castle", cells: 2400, atLeast: false, parts: 1 } }; } });
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].headers, {});
+  assert.deepEqual(formatLandResult({ operation: dry, data: dryResult.data }), [
+    'Dry run: reset "castle" (the Castle) in app 363, tnt-world-v2 x 33..65, z 80..112: 2,400 stored cells would go back to the generated world (1 part).',
+    "Nothing was written. Add --confirm to apply (players see it at once).",
+  ]);
+  const live = buildLandOperation({ action: "reset", options: { ...base, adminConfirm: "true", adminBuild: "363", adminCoinRegion: "tnt-world-v2", adminLandArea: "castle", adminReason: "flood" } });
+  sent.length = 0;
+  const answers = [
+    { area, why: "the Castle", removed: 4000, credits: 0, seq: 41, more: true },
+    { area, why: "the Castle", removed: 1200, credits: 2, seq: 42, more: false },
+  ];
+  const result = await runLandReset({ options: { apiUrl: "http://api.test" }, operation: live, authToken: "t", runKey: "k1", request: async (call) => { sent.push(call); return { ok: true, data: answers[sent.length - 1] }; } });
+  assert.deepEqual(sent.map((call) => call.body.batchIndex), [0, 1]);
+  assert.equal(sent[1].headers["x-lumine-idempotency-key"], "cli:land:reset:363:tnt-world-v2:castle:k1:1");
+  assert.equal(landResetRequestKey(live.body, "k1", 0), "cli:land:reset:363:tnt-world-v2:castle:k1:0");
+  assert.deepEqual(formatLandResult({ operation: live, data: result.data }), [
+    'Done: reset "castle" (the Castle) in app 363, tnt-world-v2 x 33..65, z 80..112: 5,200 cells back to the generated world in 2 parts (seq 42), 2 builder credits ended.',
+    "  Open tabs drop those cells at once (cellsReset).",
+  ]);
+  await assert.rejects(() => runLandReset({ options: { apiUrl: "http://api.test" }, operation: live, authToken: "t", request: async () => ({ ok: false, error: { code: "CLI_ADMIN_LAND_INVALID", message: '"moat" is not a resettable area' } }) }), /not a resettable area/);
+});
+
+test("rewards check, who and edits show land zones and resets", () => {
+  const lines = formatLand({
+    keyGroup: "plots", plotSize: 16, keyFormat: "region:x:z", regions: ["fw3"], freeRegions: ["tnt-world-v2", "maze-world-v2"], reserved: [], switches: [], empty: [0],
+    locked: [{ region: "maze-world-v2", x0: 10, z0: 20, x1: 85, z1: 95, why: "the Star Maze", allowCauses: [] }],
+    resettable: [{ id: "castle", region: "tnt-world-v2", x0: 33, z0: 80, x1: 65, z1: 112, why: "the Castle", cooldownSeconds: 30 }],
+  });
+  assert.ok(lines.includes("  locked: the Star Maze · maze-world-v2 x 10..85, z 20..95 · nobody can change blocks"));
+  assert.ok(lines.includes('  resettable "castle": the Castle · tnt-world-v2 x 33..65, z 80..112 · any player can put it back, every 30 s'));
+  const who = buildLandOperation({ action: "who", options: { ...base, adminBuild: "363", adminCoinRegion: "tnt-world-v2", adminLandCell: "40,10,90" } });
+  const whoLines = formatLandResult({ operation: who, data: { region: "tnt-world-v2", cell: [40, 10, 90], current: null, reset: { id: "castle", by: { id: 6, username: "ana" }, at: 1794000000, seq: 9 }, changes: [{ id: 1, at: 1793990000, username: "ben", prevValue: null, value: 3, source: "live", seq: 4 }] } });
+  assert.match(whoLines[1], /last reset: "castle" by ana at .*, seq 9 \(the cell shows the generated world since then\)/);
+  const edits = buildLandOperation({ action: "edits", options: { ...base, adminBuild: "363", adminUser: "6" } });
+  const editLines = formatLandResult({ operation: edits, data: { userId: 6, buildId: 363, changes: [], byRegion: {}, resets: [{ at: 1794000000, region: "tnt-world-v2", id: "castle", area: { x0: 33, z0: 80, x1: 65, z1: 112 }, removed: 2400, source: "live" }] } });
+  assert.match(editLines.join("\n"), /Resets by player 6[\s\S]*"castle" x 33\.\.65, z 80\.\.112: 2400 cells · live/);
 });

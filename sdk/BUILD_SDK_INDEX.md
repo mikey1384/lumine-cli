@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.85.0
-Updated: 2026-11-09
-Generated: 2026-11-09T08:26:38.047Z
+Version: 1.86.0
+Updated: 2026-11-10
+Generated: 2026-11-10T00:19:21.100Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1958,13 +1958,14 @@ world.updatePresence({ x, y, z, facing });
   - Send block changes over HTTP (use world session.edit while in a room; this is for no-room cases, the page-hide flush and offline queues).
   - Cells are whole numbers: x and z within ±1,000,000, y from -512 to 512, value from 0 to 2,147,483,647 (your app's block id; Twinkle never interprets it). 1 to 2,000 cells a call; the last change to a cell in one call wins. flags bit 1 = natural: the world's own generated block put back (ends the player's own builder credit there).
   - cause: why the cell changed, 1 to 8 lowercase letters or digits (e.g. "tnt", "fluid", "derived", "grow", "fall"). Leave it out for a player's own hand edits: only those earn builder credit. Inside someone's plot a cause opens the plot only when the holder switched on the declared switch for that cause and the value is one the declaration lists.
-  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full / land_quota (a player's or all guests' daily allowance of new blocks) (2,000,000 cells a world, 5,000,000 an app, only declared worlds). Roll back refused hand edits; drop refused game-made changes quietly.
+  - Refused cells come back with a code and are never stored or shown: land_not_yours (someone's plot), land_locked (a locked area: nobody may change it, game-made changes only when the area's allowCauses names their cause), land_newer (an at edit older than the cell's last change), land_region_full / land_app_full / land_quota (a player's or all guests' daily allowance of new blocks) (2,000,000 cells a world, 5,000,000 an app, only declared worlds). Roll back refused hand edits; drop refused game-made changes quietly.
   - at (server seconds) is only for an old tab's edits carried over: Twinkle accepts it inside the world's carry-over window (from cells() carryFrom, the time of the world's imported cells, for 30 days) and refuses it otherwise (land_carry_closed). A cell changed after at is left alone (land_newer). History keeps the time Twinkle stored the change.
   - Limits per player (or guest), per address and per app: bursts of 4,000 cells refilled at 60 a second (land_throttled with details { retryAfterSeconds }: keep the cells and send them after that wait, on the socket too).
 - await Twinkle.land.cells({ region, since?, area?: { x0, z0, x1, z1 }, cursor? }) | scopes: land:read
-  - Returns: { region, seq, landVersion, format: 1, cells: [[x, y, z, value], ...], count, nextCursor, nextSince, done }
+  - Returns: { region, seq, landVersion, format: 1, cells: [[x, y, z, value], ...], count, nextCursor, nextSince, done, resets?: [{ id, area: { x0, z0, x1, z1 }, seq }] }
   - Read the world: every stored cell (pages of 5,000), an area, or only what changed since a seq.
   - Load order: subscribe first and buffer events, read every page (keep the first page's seq as S, pass nextCursor until done), then apply buffered cells.changed events with toSeq > S in order. Reconnected: cells({ since: lastSeq }) until done, then live events. Never move lastSeq past a gap you could not fill: keep later events and read cells({ since }) again after a short wait.
+  - A since read (catch-up) also returns resets: the resettable areas put back to the generated world in that page's window (oldest first). Drop every cell you hold inside each reset area (full height) and show your generated world there FIRST, then apply the page's cells: a cell stored in a reset area after the reset is in cells; nothing from before it is.
   - area: at most 512 columns a side, both corners included. Cells never changed in the world are not stored: what your game generates is the world until a player changes it.
   - The first page also says carryFrom: where this world's carry-over window starts (seconds), or null when Twinkle accepts no carried-over edits there.
 - await Twinkle.land.plots({ region, area?: { x0, z0, x1, z1 }, key?, cursor? }) | scopes: land:read
@@ -1977,14 +1978,21 @@ world.updatePresence({ x, y, z, facing });
   - build and use: "me", "friends" or "everyone". switches: names the app declared (a list of the names that are on, or { name: true/false }). friends: up to 40 player ids.
   - Settings belong to the holder's receipt: a buyer starts on the defaults (me / me / no switches / no friends); a refund brings the old holder's settings back.
 - await Twinkle.land.check({ key, priceId? }) | scopes: land:read
-  - Returns: { ok: true, priceId, key, coins, priceCoins, destination, builders: [{ userId, username, units, coins }], unitName?, balance, canAfford, price } | { ok: false, problem: "taken" | "owned" | "overlap" | "reserved" | "region" | "one_per_world" | "lifetime_limit" | "daily_limit" | "builders_price_required" | "over_limit" | "key_invalid" | "not_live" | "price_missing" | "unavailable", code, message, details?, holder?, lastPrice?, minimumOffer?, maximumOffer? }
+  - Returns: { ok: true, priceId, key, coins, priceCoins, destination, builders: [{ userId, username, units, coins }], unitName?, balance, canAfford, price } | { ok: false, problem: "taken" | "owned" | "overlap" | "reserved" | "locked" | "region" | "one_per_world" | "lifetime_limit" | "daily_limit" | "builders_price_required" | "over_limit" | "key_invalid" | "not_live" | "price_missing" | "unavailable", code, message, details?, holder?, lastPrice?, minimumOffer?, maximumOffer? }
   - The exact price this player would pay for a plot (and the builders it pays), or why it can't be bought, before opening Twinkle's box.
   - Rate-limited like purchase quotes (about 12 a minute). Then buy with Twinkle.coins.charge({ priceId, key }).
 - await Twinkle.land.history({ region, x, y, z, before? } | { key, order: "newest", sinceAt?, before? } | { key, since? }) | scopes: land:read
-  - Returns: { changes: [{ id, x, y, z, value, prevValue, by: { id, username }, cause, source, seq, at }], nextBefore | nextSince }
+  - Returns: { changes: [{ id, x, y, z, value, prevValue, by: { id, username }, cause, source, seq, at }], reset?: { id, area, seq, removed, source, by: { id, username }, at } | null, nextBefore | nextSince }
   - Who changed a cell (newest first), a plot's changes since a time newest first (Undo "last hour" / "since claimed"), or a plot's changes from a change id oldest first.
   - Plot, newest first: { key, order: "newest", sinceAt } returns the changes made at or after sinceAt (server seconds; e.g. now - 3600 for the last hour, or the plot's since for "since claimed"), newest first, 1,000 a page; pass before: nextBefore until nextBefore is null. Only that window is read, however busy the plot. at is the server time of each change.
   - Cell: 200 a page, newest first, before: nextBefore (guests of a public app may ask about free land too; a guest's change says by: { guest: true }). Plot from a change id: { key, since }, oldest first, 200 a page, since: nextSince. Every page reads only about its own rows, however long the plot's history.
+  - Cell form: reset is the newest reset covering that cell (land zones). When its seq is larger than the newest change's seq (imported changes have seq 0), the cell shows the generated world since that reset, and by is who reset it.
+- await Twinkle.land.resetArea({ region, id }) | scopes: land:write
+  - Returns: { ok: true, id, region, area: { x0, z0, x1, z1 }, removed, credits, parts, seq, more, cooldownSeconds }
+  - Put a declared resettable area back to the generated world in one server operation (a rebuild pad, a reset button), instead of sending every block as an edit.
+  - Twinkle removes every stored cell inside the area in one short operation and tells every player in that world with one cellsReset event (yours too): drop your cells there and show your generated world. Nothing built inside survives; builder credit there ends. History keeps one record for the reset (who, when, how many cells), and history() on a cell inside says reset.
+  - Each area waits cooldownSeconds (default 30) after a reset (land_reset_cooldown with details { retryAfterSeconds }); a player may reset about 6 times a minute in one app (land_throttled). Unknown id or world: land_reset_unknown.
+  - removed: cells taken away (0 when the area was already as generated: no event then). A flooded area is reset in parts; more: true means it was not finished: call resetArea again (no cooldown while it is unfinished).
 - await Twinkle.land.mine({ region, ignore?: [value, ...] }) | scopes: land:read
   - Returns: { region, land, plotSize, total, reserved, truncated, clusters: [{ x, z, count, area: { x0, z0, x1, z1 }, status: "free" | "yours" | "taken" | "reserved" | "no_land" }] }
   - Where the signed-in player's own blocks stand in one world, grouped into the places a plot would cover, so the game can say "You have 28 blocks around x 100, z 102 and no land yet".
@@ -1993,8 +2001,8 @@ world.updatePresence({ x, y, z, facing });
   - total = the player's blocks found (at most 50,000; truncated says when there were more).
 - Twinkle.land.subscribe(region, listener) | scopes: none
   - Returns: unsubscribe()
-  - Live land events for one world: cellsChanged (accepted cells, with seq) and landChanged (a plot changed holder or rules).
-  - Events come from Twinkle, never from another player's client. The listener gets { type: "cellsChanged", region, fromSeq, toSeq, cells: [[x, y, z, value], ...], count, serverTime } or { type: "landChanged", region, landVersion, reason, keys, serverTime }. If a cellsChanged fromSeq is more than one past the last toSeq you applied (a reconnect), read cells({ region, since: lastToSeq }) until done before applying it.
+  - Live land events for one world: cellsChanged (accepted cells, with seq), cellsReset (a resettable area put back to the generated world) and landChanged (a plot changed holder or rules).
+  - Events come from Twinkle, never from another player's client. The listener gets { type: "cellsChanged", region, fromSeq, toSeq, cells: [[x, y, z, value], ...], count, serverTime }, { type: "cellsReset", region, id, area: { x0, z0, x1, z1 }, seq, fromSeq, toSeq, count, more, serverTime } or { type: "landChanged", region, landVersion, reason, keys, serverTime }. Apply cellsChanged and cellsReset in seq order (a cellsReset has fromSeq = toSeq = seq): for cellsReset, drop every cell you hold inside area (full height) and show your generated world there. If an event's fromSeq is more than one past the last toSeq you applied (a reconnect), read cells({ region, since: lastToSeq }) until done (it carries the resets you missed) before applying it.
   - Needs a world session bound to that region (Twinkle.world.join({ land: { region } })).
 
 ### Twinkle.cardCraft
