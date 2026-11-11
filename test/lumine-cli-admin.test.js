@@ -1002,6 +1002,71 @@ test("personal follow-ups use the assigned run and a specific task revision", ()
   assert.throws(() => parseAdminOperation(parseArgs(["admin", "followup", "update", "4", "--status", "completed", "--note", "Done"])), /revision/);
 });
 
+test("direct follow-ups require an explicit owner without changing legacy run commands", () => {
+  const list = parseAdminOperation(parseArgs(["admin", "followup", "list", "--direct", "--identity", "ciel", "--cursor", "19"]));
+  assert.equal(list.path, "/cli/admin/personal-followups/direct?identity=ciel&cursor=19&status=pending");
+  assert.equal(list.requiresRun, false);
+  const get = parseAdminOperation(parseArgs(["admin", "followup", "get", "101", "--identity", "zero"]));
+  assert.equal(get.path, "/cli/admin/personal-followups/direct/101?identity=zero");
+  assert.equal(get.requiresRun, false);
+  const update = parseAdminOperation(parseArgs(["admin", "followup", "update", "101", "--direct", "--identity", "zero", "--revision", "2", "--status", "blocked", "--note", "Waiting for the published version."]));
+  assert.equal(update.path, "/cli/admin/personal-followups/direct/101");
+  assert.equal(update.requiresRun, false);
+  assert.deepEqual(update.body, { identity: "zero", revision: 2, status: "blocked", note: "Waiting for the published version." });
+  const legacy = parseAdminOperation(parseArgs(["admin", "followup", "update", "101", "--identity", "zero", "--revision", "2", "--status", "blocked", "--note", "Waiting."]));
+  assert.equal(legacy.path, "/cli/admin/personal-followups/101");
+  assert.equal(legacy.requiresRun, undefined);
+  const explicitlyLegacy = parseAdminOperation(parseArgs(["admin", "followup", "update", "101", "--direct=false", "--identity", "zero", "--revision", "2", "--status", "blocked", "--note", "Waiting."]));
+  assert.equal(explicitlyLegacy.path, "/cli/admin/personal-followups/101");
+  assert.equal(explicitlyLegacy.requiresRun, undefined);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "followup", "get", "101"])), /--identity zero/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "followup", "list", "--direct", "--identity", "auto"])), /--identity zero/);
+  assert.throws(() => parseAdminOperation(parseArgs(["admin", "followup", "list", "--direct", "--identity", "zero", "--via", "run"])), /does not use --via/);
+});
+
+test("direct follow-up commands make no daily-run request and an old server fails closed", async (t) => {
+  const directory = fs.mkdtempSync(path.join(testWorkRoot(), "direct-followups-"));
+  const authFile = path.join(directory, "auth.json");
+  const requests = [];
+  const previousDirectory = process.cwd();
+  process.chdir(directory);
+  t.after(() => {
+    process.chdir(previousDirectory);
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  t.mock.method(globalThis, "fetch", async (requestUrl, options) => {
+    const url = new URL(requestUrl);
+    const body = options.body ? JSON.parse(options.body) : null;
+    requests.push({ method: options.method, path: url.pathname, query: url.search, body, headers: options.headers });
+    if (url.pathname === "/cli/session") {
+      return Response.json({ userId: 7, username: "mikey", scopes: ["build:read", "build:write"] });
+    }
+    if (url.pathname === "/cli/admin/personal-followups/direct/101") {
+      return Response.json({ ok: true, status: "success", changed: options.method === "PUT", data: { personalFollowup: { id: 101, revision: options.method === "PUT" ? 3 : 2 } } });
+    }
+    return Response.json({ ok: false, status: "not_found", error: { code: "NOT_FOUND", message: "Not found" } }, { status: 404 });
+  });
+  const apiUrl = "https://fixture.invalid";
+  fs.writeFileSync(authFile, JSON.stringify({ token: "test-token", apiUrl }));
+  const common = ["--api-url", apiUrl, "--auth-file", authFile, "--no-update-check", "--json"];
+  const get = await adminCommand(parseArgs(["admin", "followup", "get", "101", "--identity", "zero", ...common]));
+  assert.equal(get.data.personalFollowup.revision, 2);
+  const update = await adminCommand(parseArgs(["admin", "followup", "update", "101", "--direct", "--identity", "zero", "--revision", "2", "--status", "blocked", "--note", "Waiting for the published version.", ...common]));
+  assert.equal(update.data.personalFollowup.revision, 3);
+  const directRequests = requests.filter((item) => item.path.startsWith("/cli/admin/"));
+  assert.deepEqual(directRequests.map((item) => [item.method, item.path]), [
+    ["GET", "/cli/admin/personal-followups/direct/101"],
+    ["PUT", "/cli/admin/personal-followups/direct/101"],
+  ]);
+  assert.equal(directRequests[0].query, "?identity=zero");
+  assert.equal(directRequests[1].body.identity, "zero");
+  assert.equal(directRequests[1].headers["x-lumine-admin-run-id"], undefined);
+  assert.ok(directRequests[1].headers["x-lumine-idempotency-key"]);
+  await assert.rejects(adminCommand(parseArgs(["admin", "followup", "get", "102", "--identity", "zero", ...common])), { status: 404 });
+  assert.equal(requests.at(-1).path, "/cli/admin/personal-followups/direct/102");
+  assert.equal(requests.some((item) => item.path === "/cli/admin/personal-followups/102"), false);
+});
+
 test("todo lifecycle carries experiments between runs without requiring a public bot", () => {
   assert.deepEqual(parseAdminOperation(parseArgs(["admin", "todo", "list"])), {
     name: "todo.list",

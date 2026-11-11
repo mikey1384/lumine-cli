@@ -2067,8 +2067,8 @@ administrative action, deployment, reward, or publication.
 
 Full `daily-run start` returns `personalFollowups` for the assigned bot;
 `daily-run gather` saves its first page in `personal-followups.json`. Follow
-`nextCursor` to exhaustion. Other bots' tasks wait for their own turns, and
-scoped sessions do not surface or modify the list.
+`nextCursor` to exhaustion. During a full run, work its assigned bot's tasks;
+scoped sessions do not automatically surface or consume the list.
 
 ```bash
 lumine admin followup list --json
@@ -2076,14 +2076,31 @@ lumine admin followup list --cursor 100 --json
 lumine admin followup update 17 --revision 2 --status completed --note "Played the requested path on published version 400; observed ...; replied in original comment 91 (reply 103)." --json
 ```
 
+For an individually authorized task outside a full run, choose its owner
+explicitly. `get` reads the current revision; list and update use `--direct`
+to distinguish them from the existing run-bound commands:
+
+```bash
+lumine admin followup list --direct --identity zero --json
+lumine admin followup get 17 --identity zero --json
+lumine admin followup update 17 --direct --identity zero --revision 2 --status blocked --note "Waiting for the published version." --json
+```
+
+The direct path does not start or change a daily run, and its update records
+the selected bot, the operator, the evidence and a runless event in the audit
+trail. It does not authorize any reply or other action by itself. It requires
+the matching API deployment and CLI release; an older server rejects the new
+path and the CLI does not fall back to a full-run operation.
+
 Read the original context, do the promised work, keep evidence, and report the
 real result to the member in the original context under the existing reply
 rules. Do not move a private request into a public post. Build replies still
 require exact-version review evidence. Record `blocked` with a concrete next
 step when access, the creator, or Mikey's decision is needed. A completed
-daily run never completes promises automatically. Update requires the current
-revision and the assigned bot's active full run; stale or sibling updates are
-refused. Daily reports include pending follow-ups and their latest progress.
+daily run never completes promises automatically. All updates require the
+current revision and the correct bot; stale or sibling updates are refused.
+Updates without `--direct` continue to use the assigned bot's active full run.
+Daily reports include pending follow-ups and their latest progress.
 
 Apply `add-ai-daily-followups.sql` before deploying this API/CLI capability.
 
