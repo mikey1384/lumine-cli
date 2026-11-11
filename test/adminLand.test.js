@@ -147,6 +147,10 @@ test("rewards check and admin review show the land block and per-world limits", 
   // The server's summary shape (switches as a list) prints the same.
   assert.deepEqual(formatLand({ ...declared, switches: [{ name: "tnt", cause: "tnt", values: [0] }], empty: [0] }), lines.slice(-2));
   assert.deepEqual(formatLand(null), []);
+  // Terrain versions (11-10): one line, from the declaration or the server's summary.
+  const terrainLine = "  terrain versions: fw3 2 · a tab on an older version cannot change blocks there until it reloads";
+  assert.equal(formatLand({ ...declared, terrain: { fw3: 2 } }).at(-1), terrainLine);
+  assert.equal(formatLand({ ...declared, terrain: [{ region: "fw3", version: 2 }] }).at(-1), terrainLine);
 });
 
 test("publish --ask-reload asks once after publishing and never undoes the publish", async () => {
