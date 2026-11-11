@@ -5814,6 +5814,43 @@ lumine admin arena today-withdraw --user <id> (--keys <key,key,...> | --file <wi
 `today-import` validates without publishing; `--confirm` publishes. Keys and
 content are immutable and duplicate questions are rejected.
 
+**Authored pictures and listening.**
+The main `content.question` and transfer `content.check` accept the same optional
+media fields. API and website support ship together. Before a content import,
+verify that both serving versions support media: an older importer can discard
+unknown fields.
+
+- `visual`: either `{kind:"image",src:"img/today/<unique-name>.png",alt:"..."}`
+  (also JPG/JPEG/WebP), or a validated Arena `diagram` with a nonempty `alt`.
+  Code-native diagrams can supply original picture vocabulary without an image API.
+- `choiceVisuals`: an array aligned exactly with `choices`, containing pictures
+  in the same format or `null` for a text-only choice. At least one picture is
+  required. Keep every choice's text label distinct; `Picture A`/`B`/`C` is valid.
+- `audio`: `{src:"audio/today/<unique-name>.mp3",label:"Listen to the conversation",
+  transcript:"private, exact reviewed script"}` (also M4A/OGG/WAV). The transcript
+  is retained privately and never included in the public question or check. Teach
+  the relevant spoken evidence in the revealed lesson; do not print it in the
+  initial passage and claim a listening exercise. The player starts only on the
+  learner's action and allows replay in personal practice.
+
+Asset keys use the existing Arena media store. Absolute URLs, traversal, query
+strings, traversal encodings and executable image formats are refused. Existing
+reviewed Arena `img/<path>` and `audio/<path>` keys can be reused after verifying
+content suitability and exam-bank independence; a namespace alone does not prove
+reuse eligibility. Retain media under unique,
+immutable names; never overwrite an asset after publication. Verify each uploaded
+asset's exact bytes, accessibility and audio/picture fidelity before import. A key
+passing schema validation is not evidence that the asset exists or was reviewed.
+Existing upload and spending authorization still applies; these fields authorize
+no generation, upload or billing. New personal media must be independent of live
+timed-bank questions. Review the complete exam-type mix, including listening and
+pictures, and the main question, interactive lesson and fresh transfer check.
+
+Media is preserved by the canonical main/check/shared projections without exposing
+answers or private scripts. Existing text-only fingerprints are unchanged; media
+identities include the picture data and recording key. None of this revises an
+already assigned question or changes rewards, preference matching or lesson gates.
+
 `today-withdraw` removes that member's unserved queued questions that failed
 review, so corrected replacements are not served behind them. Without
 `--confirm` it is a preview. It withdraws only `ready` questions never assigned
