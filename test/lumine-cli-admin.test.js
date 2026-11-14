@@ -4620,6 +4620,33 @@ test("newspaper verbs map to the delegated news routes", () => {
   );
 });
 
+test("newspaper edition read maps to the read-only edition route", () => {
+  const today = parseAdminOperation(parseArgs(["admin", "news", "edition"]));
+  assert.equal(today.name, "news.edition");
+  assert.equal(today.method, "GET");
+  assert.equal(today.path, "/cli/admin/news/edition");
+  assert.equal(today.mutates, false);
+
+  const dated = parseAdminOperation(
+    parseArgs(["admin", "news", "edition", "--date", "2026-11-13"]),
+  );
+  assert.equal(dated.path, "/cli/admin/news/edition?date=2026-11-13");
+
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs(["admin", "news", "edition", "--date", "yesterday"]),
+      ),
+    /--date must be YYYY-MM-DD/,
+  );
+  assert.doesNotThrow(() =>
+    assertAdminOperationAllowedForRunScope({
+      operation: today,
+      runScope: "newspaper",
+    }),
+  );
+});
+
 test("Build discovery defaults to publication-window coverage and rejects legacy API responses", () => {
   const op = parseAdminOperation(parseArgs(["admin", "builds", "candidates"]));
   assert.equal(op.pagination.coverageMode, "since-run");

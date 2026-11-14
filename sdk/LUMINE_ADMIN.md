@@ -3262,12 +3262,20 @@ never invent excitement, reactions, popularity, or drama.
 
 ```bash
 lumine admin news --json
+lumine admin news edition [--date YYYY-MM-DD] --json
 lumine admin news claim --output claim.json --scaffold editorial.json --json
 lumine admin news validate --claim claim.json --file editorial.json --json
 lumine admin news submit --claim claim.json --file editorial.json \
   --model "Ciel" --json
 lumine admin news print --json
 ```
+
+`news edition` is read-only. It returns the printed edition for the day
+(default today): edition id, revision, coverage window, the lead, and every
+story with its section (`front`, `community`, ...) and position, URL, author
+and cited/covered event keys, plus briefs, announcements and source keys. Use it
+to confirm what is on the front page, such as the daily update article's URL.
+`printed: false` means no edition exists for that day.
 
 When there is nothing to claim (today's paper is already printed, or the next
 edition has not opened yet), `news claim` writes no claim or scaffold file and

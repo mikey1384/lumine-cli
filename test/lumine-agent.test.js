@@ -47,7 +47,9 @@ test("a failed notice repair saves the earlier notices-only candidate instead of
     path.resolve(__dirname, "../lib/agent.js"),
     "utf8",
   );
-  assert.match(source, /if \(validation\.platformRuleNoticesOnly\) \{\s*noticesOnlyFiles = candidateFiles;\s*noticesOnlyFinalText = finalText;/);
+  // The server's checkedProjectFiles (the candidate plus the platform's own
+  // long-press protection) when it sent them, else the agent's files.
+  assert.match(source, /if \(validation\.platformRuleNoticesOnly\) \{[^}]*noticesOnlyFiles = Array\.isArray\(validation\.checkedProjectFiles\)\s*\? validation\.checkedProjectFiles\s*: candidateFiles;\s*noticesOnlyFinalText = finalText;/);
   // The reply printed matches the restored files, not the failed repair.
   assert.match(source, /currentFiles = noticesOnlyFiles;\s*finalText = `\$\{noticesOnlyFinalText\}/);
   for (const reason of [
