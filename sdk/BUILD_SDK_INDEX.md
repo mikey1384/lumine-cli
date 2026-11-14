@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.89.0
-Updated: 2026-11-10
-Generated: 2026-11-14T01:31:36.275Z
+Version: 1.90.0
+Updated: 2026-11-14
+Generated: 2026-11-14T07:01:05.061Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -58,6 +58,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 - Live web search is enabled by default for Twinkle.ai.chat and for Medium/High Twinkle.ai.generateObject and Twinkle.characters.chat requests. App authors can pass webSearch: false to disable it for their app. Search uses the provider's live web-search tool and is included in AI Energy usage; structured and character Lite Mode remains tool-free.
 - Mobile long-press must not select game UI or open browser Copy/Look Up/image menus. The SDK provides no-selection/callout defaults for standard buttons, button-like ARIA controls, and canvases. Mark the entire custom gameplay wrapper data-twinkle-no-select, including HUD, labels, scores, menus, controls, and empty play space; also style it with user-select: none, -webkit-user-select: none, and -webkit-touch-callout: none for local previews. Protecting only one button or the canvas is insufficient. This behavior is independent of Twinkle.preview layout mode.
 - Played game pages block text selection, the long-press menu and page pinch-zoom everywhere except inputs, textareas, contenteditable and data-twinkle-selectable text, so text a game shows for copying (a chat log, a word to copy) needs data-twinkle-selectable. A page is a played game when the app sets data-twinkle-game on <html> or <body>, or, for apps that do not lay themselves out with Twinkle.preview, when a play-sized canvas is on screen: rendered, not pointer-events:none, and covering at least 30% of the viewport by its layout size; the page then stays a played game while that canvas is in the document, even hidden between screens. Set data-twinkle-game on a game that sizes itself with Twinkle.preview, a DOM-only game, or a small-canvas game; set data-twinkle-document to keep a canvas page (charts, drawing pad) an ordinary page, which also keeps it out of viewport-app layout so it scrolls; set data-twinkle-allow-zoom to keep page pinch-zoom on a game. Viewport-app layout (html/body pinned to the screen, no page scroll) turns on for any canvas except a small one on screen (both sides at most 160 CSS px); data-twinkle-game keeps it for any canvas, and data-twinkle-document or laying the page out with Twinkle.preview turns it off.
+- On played game pages a touch that starts right where the previous one ended (tap Jump, then hold Jump) is cancelled so the iPhone text magnifier cannot appear; pointer and touch listeners still run, and the browser's mousedown/mouseup/click for that touch is sent once by Twinkle (untrusted, so do not require event.isTrusted on game buttons). Touches on inputs, contenteditable, data-twinkle-selectable text and anything inside a scrolling container keep native behaviour. Drive held controls with pointerdown/pointerup (or touchstart/touchend), not click. Game pages also get touch-action: manipulation (no double-tap zoom).
 - Keep inputs/contenteditable usable. Mark genuinely copyable story/chat/user-written text data-twinkle-selectable and style it with user-select: text, -webkit-user-select: text, and -webkit-touch-callout: default. SDK defaults have low specificity so existing explicit copyable-text styles remain effective. Preserve document/reader selection; do not block document-wide touch/pointer events or disable scrolling/zoom to prevent selection.
 - Verify mobile long presses on controls, HUD, and empty play space in Safari and Chromium; confirm held controls still work and release/cancel correctly, and scrolling, typing, and copying still work. lumine check only detects a missing no-selection rule, not selector coverage or mobile behavior.
 - Build app tab mute is enforced by the host runtime automatically for standard media elements and Web Audio connections to AudioContext.destination. Apps with custom audio engines can also observe Twinkle.onAudioMuteChange and check Twinkle.isAudioMuted.
@@ -248,16 +249,18 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
 
 ### Twinkle.preview
 - getLayout() | scopes: none
-  - Returns: { mode, viewport, stage, safeInsets, playfield }
+  - Returns: { mode, viewport, stage, safeInsets, playfield, keyboard? }
   - Read the host preview layout and derive a fixed-world scale from layout.playfield before sizing a canvas, sprites, or mobile game UI.
   - Always available in the build iframe.
   - Returns the current preview geometry, including viewport size, current stage size/scale, reserved safe insets, and the usable playfield rectangle.
   - Use this as the source of truth for canvas/game sizing instead of guessing from raw window size alone.
   - For fixed-world games, derive one scale from layout.playfield and apply it consistently to sprites, UI, and movement.
   - Do not subtract guessed HUD or chrome heights from the viewport when layout.playfield already represents the usable gameplay area.
+  - layout.keyboard is { open, height }: whether the phone keyboard is up for a text field in this app and how many CSS px of the app's bottom edge it covers (0 when closed; also 0 when the browser has already moved the page so the focused field shows). The same height is in the CSS variable --twinkle-preview-keyboard-height. Lift a bottom compose bar or chat input by layout.keyboard.height (or padding-bottom: var(--twinkle-preview-keyboard-height, 0px)) instead of measuring visualViewport inside the app, which cannot see the keyboard from inside the frame. The field is absent when the Twinkle page does not report the keyboard (an older page): treat absent as no keyboard information.
+  - keyboard does not change stage, safeInsets or playfield; a game keeps its play area and only moves typing UI.
   - Example: const WORLD = { width: 360, height: 640 }; const layout = Twinkle.preview.getLayout(); const scale = Math.min(layout.playfield.width / WORLD.width, layout.playfield.height / WORLD.height);
 - reserveInsets({ top, right, bottom, left }) | scopes: none
-  - Returns: { mode, viewport, stage, safeInsets, playfield }
+  - Returns: { mode, viewport, stage, safeInsets, playfield, keyboard? }
   - Reserve host-aware safe space for HUD bars, touch controls, or other overlays before clamping gameplay.
   - Always available in the build iframe.
   - Reserves in-app safe space for overlays such as HUD bars or touch controls.
@@ -289,7 +292,7 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Always available in the build iframe.
   - Clears previously reported playfield and player telemetry.
 - clearReservedInsets() | scopes: none
-  - Returns: { mode, viewport, stage, safeInsets, playfield }
+  - Returns: { mode, viewport, stage, safeInsets, playfield, keyboard? }
   - Always available in the build iframe.
   - Clears previously reserved safe insets.
 - subscribe(listener, { immediate } = {}) | scopes: none
@@ -299,6 +302,7 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Subscribes to preview layout changes such as resize, host fit changes, or inset updates.
   - Use this when the app needs to keep a canvas or playfield synced with the host preview.
   - Re-apply world scale here so embedded ContentPanel and Build Studio runtime stay aligned.
+  - Also fires when layout.keyboard changes (the phone keyboard opens, closes or changes height for a text field in the app), so a chat or name-entry bar can follow it. A page that does not subscribe can listen for the window event twinkle:preview-layout (event.detail is the layout) or use --twinkle-preview-keyboard-height in CSS; neither turns off automatic game layout.
   - Example: const unsubscribe = Twinkle.preview.subscribe((layout) => syncGameLayout(layout), { immediate: true });
 
 ### Twinkle.mount
