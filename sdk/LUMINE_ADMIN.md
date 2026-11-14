@@ -5902,8 +5902,7 @@ lumine admin nonogram restore <key> [--confirm]
 An import file is an array of 1–150 pictures: `{ key, title, category, rows,
 artReview, difficultyReview }`. `rows` is a 5×5, 10×10 or 15×15 array of binary
 strings. Titles are plain text, at most 80 characters. Draw recognizable art
-first, verify its unique no-guess solve, and visually review it at play size
-before importing. Record actual visual features and the deduction/difficulty
+first and verify its unique no-guess solve before importing. Record actual visual features and the deduction/difficulty
 review, not just a pass count. Never pad the reserve with weak art or variants.
 The server rejects ambiguous puzzles, skips mirror/rotation duplicates, and
 refuses changing the solution under an existing key. Default operations are
