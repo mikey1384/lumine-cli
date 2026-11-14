@@ -1228,14 +1228,9 @@ Use actual byte counts/digests and only acknowledge work performed. Every eviden
 reference stays inside the run directory. Changed files invalidate reading
 acknowledgments. Effort totals use the canonical report's `subject.effort.set`
 audit counts, including failed attempts separately; unavailable receipts remain
-unknown. Pending browser duties need genuine version-bound interaction evidence.
+unknown.
 
 ### Full management report in Chrome
-
-Mikey's standing delivery preference (2026-09-15): after a full daily run, open
-the **complete management report as a browsable localhost page in Chrome**.
-Do this as part of finishing the authorized run; a Markdown path in chat alone
-is insufficient, and no additional confirmation is needed to open the report.
 
 1. Save the complete report as
    `/Users/mikey/Developer/twinkle/work/daily-management-YYYY-MM-DD/daily-management-report.md`, using the
@@ -1249,10 +1244,6 @@ is insufficient, and no additional confirmation is needed to open the report.
    its required assets and the report Markdown through a dedicated directory
    or explicit routes; do not serve the surrounding private evidence folder.
    Keep the server available after the response so Mikey can browse it.
-4. Open the localhost URL in Mikey's Chrome. Verify that the page renders,
-   section navigation works, and the full report is accessible. Keep the
-   report tab open. Include both the localhost URL and Markdown file link in
-   the final response.
 
 For a follow-up that only opens or updates an existing report, reuse that
 report and its existing tab/server where available. This does not authorize
@@ -2107,6 +2098,8 @@ Apply `add-ai-daily-followups.sql` before deploying this API/CLI capability.
 ### Operator carryovers
 
 Keep unresolved investigations, release dependencies and creator decisions visible with their exact next evidence trigger. Once a bug is verified closed, ordinary logs/health telemetry cover it; do not require a separate daily retest or write-up. Reopen on a recurrence, new report, contradicting evidence or a relevant code change. No new event is not proof that an unresolved item is fixed.
+
+Lumine project telemetry creates platform investigations, not assignments to finish members' projects. Use the original request and actual outcome to trace shared context, tool, orchestration, evaluator, save or recovery defects. Carry over the specific platform question and evidence limit; do not turn an unresolved historical outcome into app edits, a paid rerun, a plan recheck or publication. Member-project contributions and reward-review proposals require their own explicit assignment. Completing a creator's app does not establish that Lumine's underlying failure was fixed.
 
 ```bash
 lumine admin todo list --json
@@ -5809,7 +5802,7 @@ Scenes use the existing `cards`, `bars` or `passage` contract (caption up to
 300 characters; 1–12 parts with text up to 1600 characters; bars need a finite
 value from 0 to 1,000,000), or the validated `diagram` contract with a required
 accessible `alt` (up to 200 characters). No executable markup or figure-plan
-placeholders. Render and review the actual scenes at phone size before import.
+placeholders.
 Older text-only items retain the sentence-based step behavior.
 
 ## Arena Today's Challenge personal queues
@@ -5829,7 +5822,11 @@ lumine admin arena today-withdraw --user <id> (--keys <key,key,...> | --file <wi
 ```
 
 `today-import` validates without publishing; `--confirm` publishes. Keys and
-content are immutable and duplicate questions are rejected.
+content are immutable and duplicate questions are rejected. Mikey's November 11
+ruling permits reusing reviewed live exam items in practice. The deployed importer
+still requires the older `examBankIndependent: true` attestation; do not falsely
+set it for reused exam content. The local importer change accepts accurate false
+or omitted provenance, but must be released before such content is imported.
 
 **Authored pictures and listening.**
 The main `content.question` and transfer `content.check` accept the same optional
@@ -5853,7 +5850,7 @@ unknown fields.
 Asset keys use the existing Arena media store. Absolute URLs, traversal, query
 strings, traversal encodings and executable image formats are refused. Existing
 reviewed Arena `img/<path>` and `audio/<path>` keys can be reused after verifying
-content suitability and exam-bank independence; a namespace alone does not prove
+content suitability and source provenance; a namespace alone does not prove
 reuse eligibility. Retain media under unique,
 immutable names; never overwrite an asset after publication. Verify each uploaded
 asset's exact bytes, accessibility and audio/picture fidelity before import. A key
@@ -5897,7 +5894,6 @@ permission to change reward amounts or publish a creator's app.
 
 ```
 lumine admin nonogram status --json
-lumine admin nonogram add --file <pictures.json> --json
 lumine admin nonogram add --file <pictures.json> --confirm --json
 lumine admin nonogram retire <key> [--confirm]
 lumine admin nonogram restore <key> [--confirm]
@@ -5915,7 +5911,7 @@ dry runs; confirmed writes are audited. Retirement affects future assignments
 only, preserving started puzzles and receipt recovery. Status separates total
 active pictures from the least unseen supply for the leading live learners.
 Previews have separate assignments. Solutions stay private; catalog refills
-need no app update. Keep prepared inventory distinct from verified live stock.
+need no app update.
 
 ## Word Search vocabulary upkeep
 
