@@ -4593,10 +4593,9 @@ correct but ignores the bot's earlier reply, repeats it as new, or reads like a
 support ticket or management audit fails this requirement.
 
 Keep participant ownership exact. The `subject.author` (or root post's
-`author`) owns the topic, subject, post, or project. A selected comment's
-`author` owns only that comment. Addressing a commenter does not make the root
-content theirs: never call the root topic, subject, post, or project “yours”
-unless that participant is also its canonical author. Read both author fields
+`author`) owns the topic, subject, post, or project.
+A selected comment's `author` owns only that comment. Addressing a commenter does not make the root
+content theirs: never call the root topic, subject, post, or project “yours” unless that participant is also its canonical author. Read both author fields
 before composing a reply.
 
 **Lumine Build apps and app posts are composed-only, and only after actually looking
