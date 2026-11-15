@@ -44,6 +44,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Costs: AI, Energy, AWS, spending | `ai-costs monthly\|day`, `energy-budget`, `media-costs monthly`, `spending --from … --to …` | [Application AI calendar-month cost](#application-ai-calendar-month-cost-standing-duty-every-full-daily-review), [AI Energy budget health](#ai-energy-budget-health-standing-duty-every-full-daily-review) |
 | Turn JEV images off (no deploy) | `jev-images switch --area all --mode off` | [JEV images](#jev-images-standing-duty-every-full-daily-review-added-2026-11-01) |
 | Notable suggestions for Mikey | `notable suggestions\|add\|review\|dismiss` | [Notable suggestions](#notable-suggestions-the-site-ranks-mikey-decides-added-2026-10-10) |
+| Mikey's Apprentice applicants | `apprentice applicants\|show\|note` | [Mikey's Apprentice applicants](#mikeys-apprentice-applicants-mikey-decides-added-2026-11-15) |
 | Math Lab inventory | `math-lab queue` | [Math Lab content duty in full daily management](#math-lab-content-duty-in-full-daily-management) |
 | Seed a Twinkle.craft universe | `craft seed --build <n> --file pairs.json` (dry run first) | [Twinkle.craft universes](#twinklecraft-universes-seed-audit-revise-any-time-added-2026-10-12-revise---pair-2026-10-16) |
 | Sponsor applications | `sponsor applications list --status pending`, `sponsor integrity` | [Build Workshop sponsor applications and integrity](#build-workshop-sponsor-applications-and-integrity) |
@@ -3776,6 +3777,24 @@ How the scores work:
 - Teacher rewards are not used.
 
 Character is not scored. The daily run records what it notices, with a link to the post, through `notable note`. Notes are observations; nothing excludes anyone automatically, and Mikey decides. The same suggestions are on the management page (Notable Users → Suggested).
+
+## Mikey's Apprentice applicants (Mikey decides; added 2026-11-15)
+
+```bash
+lumine admin apprentice applicants --json          # every sent application: versions, what changed last time, observations, 14-day counts
+lumine admin apprentice show Chu                    # latest version + picks, what changed in each version, activity summary, observations
+lumine admin apprentice note Chu --polarity positive --trait agency \
+  --note "Fixed the broken level select in their app the same day a player reported it." --evidence https://www.twin-kle.com/comments/123
+```
+
+The role page is /apprentice (Mikey's posting: Subject 37282). A member writes a private application (their builds and posts, what they built, a time they just did something, how they use AI, what they would improve) and can send updated versions any time; every version is kept. Only the applicant and Mikey can read it, and unsent drafts stay private (only their number is shown).
+
+- A version Zero or Ciel sent for the member (with their yes, filled in and sent in the page in front of them) shows `sent via Zero or Ciel`.
+- `applicants` reads only sent applications. Its counts are telemetry (page views, forms opened, started, sent, updated, Zero/Ciel advisor reads), counts only.
+- `show` reuses the Notables machinery for the activity summary (facts, trend, character notes) and adds public build/post/comment counts and the last few comments, to judge communication from.
+- `note` records an observation against one of the posted qualities: `agency`, `self-improvement`, `self-awareness`, `independent-thinking`, `builds-for-others`, `adaptability`, `curiosity`, `ai-proficiency`, `communication`, `maturity`. Evidence must be a twin-kle.com link. A note made during a daily run is tied to it; the same note within a day is not recorded twice. Only for members who sent an application (use `notable note` for others).
+
+Nothing here decides, ranks, notifies or contacts anyone. Never message applicants about it or compare them publicly. Mikey reads applications on the Management page and decides. Daily-run duty: agent-guides/lumine-admin.md "Apprentice applicants".
 
 ## Daily brief (management insights)
 
