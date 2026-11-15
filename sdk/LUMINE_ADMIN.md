@@ -5,48 +5,91 @@ not decide whether content is good, harmful, original, deserving of effort, or
 worth commenting on. An LLM or human operator makes those judgments from the
 canonical structured data.
 
+## How do I… (task index)
+
+Exact syntax, flags, refusals and output fields are in the linked section. Write commands load the active `daily-run` and the API refuses a missing, expired or wrong-scope run ([Security and run model](#security-and-run-model)). Add `--json` for machine output.
+
+| Task | Command | Section |
+| --- | --- | --- |
+| Start / finish a daily run (full, featured, newspaper, approvals) | `daily-run start --scope full\|featured\|newspaper\|approvals [--source-run <id>]`, `daily-run report`, `daily-run complete` | [Security and run model](#security-and-run-model), [Identity and daily-run commands](#identity-and-daily-run-commands) |
+| Act on Mikey's decisions after a run | `daily-run start --scope approvals --source-run <id>` | [Security and run model](#security-and-run-model) |
+| Open the management report in Chrome | `report serve --file <dir>/daily-management-report.md [--open]` | [Full management report in Chrome](#full-management-report-in-chrome) |
+| Remove a post from Featured / add one | `subject unfeature <id>` / `subject feature <id>` | [Subject and Featured mutations](#subject-and-featured-mutations) |
+| Change the Featured board (add, reorder, rotate) | `featured add`, `featured reorder`, `featured rotate --remove-subject-ids … --add-subject-ids …` | [Subject and Featured mutations](#subject-and-featured-mutations) |
+| Apply an approved Featured plan exactly | `featured plan …` then `featured apply --file featured-plan.json` | [Exact approved refresh and resumable comment encouragement](#exact-approved-refresh-and-resumable-comment-encouragement) |
+| Reveal a secret post (needed before setting its effort) | `subject reveal <id>` | [Canonical lists and inspection](#canonical-lists-and-inspection), [Subject and Featured mutations](#subject-and-featured-mutations) |
+| Set a Subject's effort/reward level | `subject effort set <id> --level <n>` | [Subject and Featured mutations](#subject-and-featured-mutations) |
+| Mark a Subject as made by its poster | `subject creator set-made-by-poster <id>` | [Subject and Featured mutations](#subject-and-featured-mutations) |
+| Read a post and its comments | `subject get <id> --include-comments`, `subject comments <id> --cursor …` | [Canonical lists and inspection](#canonical-lists-and-inspection) |
+| Publish the daily update article | `subject post-update --file article.json` | [Twinkle Newspaper](#twinkle-newspaper) |
+| Print the newspaper | `news edition`, `news claim`, `news submit --claim claim.json --file editorial.json`, `news print` | [Twinkle Newspaper](#twinkle-newspaper) |
+| Recommend / reward / skip a post | `post recommend <id>`, `post reward <ref> --twinkles <n>`, `post skip <ref>`, `post skip-batch` | [Recommendation, Karma approval, and Twinkle rewards](#recommendation-karma-approval-and-twinkle-rewards), [Skip decisions](#skip-decisions) |
+| Comment / reply as Zero or Ciel | `comment draft <ref> --file …` then `comment post --draft-id <id>`; `comment reply comment:<id> --file …` | [Standalone comment sessions](#standalone-comment-sessions), [Persona-backed comments and replies](#persona-backed-comments-and-replies) |
+| Fix a published bot comment | `correction start` … `comment edit <commentId> --file …` … `correction complete` | [Narrow comment-correction sessions](#narrow-comment-correction-sessions) |
+| Message a member directly / post an announcement | `chat send <userId\|username> --file message.md` / `announcement post --file announcement.md` | [Direct bot chat messages](#direct-bot-chat-messages), [Official announcements](#official-announcements) |
+| Refill a member's Arena Today's Challenge | `arena today-member --user <id>`, `arena today-import --file <reviewed-questions.json> [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
+| Withdraw Today's Challenge questions | `arena today-withdraw --user <id> (--keys … \| --file …) --reason "…" [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
+| Correct a live Arena timed paper | `arena revise --file <revisions.json>` | [Arena timed-bank item revisions](#arena-timed-bank-item-revisions) |
+| Approve / reject a Build reward | `reward-review list\|show\|approve\|propose\|reject\|revoke` | [Build XP/Coin reward approvals](#build-xpcoin-reward-approvals-any-time-also-a-full-daily-review-duty) |
+| Approve a Build unlock (storage, files, …) | `review list\|show\|approve\|reject\|revoke`, e.g. `review approve storage:12 --size 1GB` | [Build review requests](#build-review-requests-one-queue-for-every-unlock-any-time-added-2026-09-28) |
+| Management approvals and teacher checks | `approvals list\|show\|approve\|reject`, `teachers review <userId> --decision legit\|revoke`, `teachers revoke`, `teachers audit` | [Management approvals and the teacher audit](#management-approvals-and-the-teacher-audit-any-time-also-a-full-daily-review-duty-added-2026-10-04) |
+| See what a member's client did (UI report) | `owner-trace --since 30m` | [Owner client trace](#owner-client-trace-any-time-read-only-added-2026-10-06) |
+| Handle members' chat reports / child-safety hold | `chat-reports list\|show\|set\|hold\|release\|export` | [Members' chat reports](#members-chat-reports-any-time-also-a-full-daily-review-duty-added-2026-09-27), [Child-safety holds](#child-safety-holds-evidence-export-and-incident-runbook-mikey-only-added-2026-09-27) |
+| Update a Zero/Ciel follow-up | `followup list\|get\|update <id> --revision <n> --status …` | [Zero and Ciel's personal follow-ups](#zero-and-ciels-personal-follow-ups) |
+| Carry work to the next run | `todo add\|list\|update` | [Operator carryovers](#operator-carryovers) |
+| Escalate to Mikey | `escalation list\|set` | [Escalation to Mikey](#escalation-to-mikey) |
+| Check a member's identity or alts (audited) | `identity inspect <user>`, `identity network`, `economy trace` | [Audited identity inspection](#audited-identity-inspection), [Audited private investigations](#audited-private-investigations) |
+| Restrict an AI bucket | `ai-bucket restrict --bucket-id <n> --mode … --dry-run` | [Restricted buckets](#restricted-buckets-inspect-rules-and-restrictions) |
+| Review bot conduct / API runtime logs | `bot-output`, `runtime-logs start\|read\|finish\|resume\|abandon` | [Bot conduct review](#bot-conduct-review-standing-duty-every-full-daily-review), [API runtime-log review](#api-runtime-log-review-same-phase-every-full-daily-review) |
+| Costs: AI, Energy, AWS, spending | `ai-costs monthly\|day`, `energy-budget`, `media-costs monthly`, `spending --from … --to …` | [Application AI calendar-month cost](#application-ai-calendar-month-cost-standing-duty-every-full-daily-review), [AI Energy budget health](#ai-energy-budget-health-standing-duty-every-full-daily-review) |
+| Turn JEV images off (no deploy) | `jev-images switch --area all --mode off` | [JEV images](#jev-images-standing-duty-every-full-daily-review-added-2026-11-01) |
+| Notable suggestions for Mikey | `notable suggestions\|add\|review\|dismiss` | [Notable suggestions](#notable-suggestions-the-site-ranks-mikey-decides-added-2026-10-10) |
+| Math Lab inventory | `math-lab queue` | [Math Lab content duty in full daily management](#math-lab-content-duty-in-full-daily-management) |
+| Seed a Twinkle.craft universe | `craft seed --build <n> --file pairs.json` (dry run first) | [Twinkle.craft universes](#twinklecraft-universes-seed-audit-revise-any-time-added-2026-10-12-revise---pair-2026-10-16) |
+| Sponsor applications | `sponsor applications list --status pending`, `sponsor integrity` | [Build Workshop sponsor applications and integrity](#build-workshop-sponsor-applications-and-integrity) |
+| Nonogram pictures / Word Search / Korean dictionary | `nonogram add --file … --confirm`; `word-games status\|confirm\|champions`; `dictionary korean-review <file> [--confirm]` | [Nonogram picture collection](#nonogram-picture-collection), [Word Search monthly champions](#word-search-monthly-champions), [Shared Korean dictionary definitions](#shared-korean-dictionary-definitions) |
+| Bridge Builder crew check-ins | `meetup list\|show\|announce-checkins [--send]` | [Bridge Builder crews and check-ins](#bridge-builder-crews-and-check-ins-no-daily-run-required) |
+
 ## Security and run model
 
 - The saved Lumine login always authenticates the real operator. The API reloads
   that user's current role from the writer database on every request.
 - Only the server-configured administrator with authoritative administrator
   management authority may delegate. Effective Level 5 alone is rejected.
-  Only the immutable
-  server-owned Zero and Ciel user IDs are approved. Usernames and CLI flags are
-  not authority.
+  Only the immutable server-owned Zero and Ciel user IDs are approved.
+  Usernames and CLI flags are not authority.
 - `daily-run start` creates or returns a six-hour `delegated-admin` run with
-  one allowlisted run scope and one public actor. `--scope full` is the full
-  daily-management review. `--scope featured` is only an authorization
-  envelope for a specifically requested Featured slice; it does not authorize
-  or imply the newspaper, queues, conduct review, logs, costs, AI Energy
-  budget health, sponsors,
-  carry-over work, or final full-run report. Every run-scoped CLI command loads
-  the canonical active run and sends its ID; the API rejects a missing,
+  one allowlisted run scope and one public actor. Every run-scoped CLI command
+  loads the canonical active run and sends its ID; the API rejects a missing,
   expired, scope-mismatched, or actor-mismatched run.
-- `--scope newspaper` is a newspaper-only authorization envelope. It grants
-  newspaper status/claim/submit/print and completion only, with comment mode
-  `off`. It cannot inspect queues, conduct, logs, Builds, or Featured.
-  Completion does not advance full-review windows or carry-over telemetry.
-  Its distinct `/daily-runs/start/newspaper` endpoint fails closed on older APIs.
-- `--scope approvals [--source-run <id>]` acts on Mikey's decisions whenever
-  he gets to them (Mikey, 10-17: don't be trapped by the morning run). It has
-  a full run's write work: Featured plans and changes, Featured-comment and
-  generic recommendations, rewards, comments (draft, post, edit) and chat. It
-  has none of the newspaper, sponsor scan, bank seeding or reading duties, and
-  never counts as a full review, so review windows don't move.
-  - `--source-run` is optional. It lets the run use that run's prepared
-    Featured plan (same hash) and review receipts for up to 7 days, abandoned
-    runs included. A stale board is still refused at apply, so prepare a new
-    plan then.
-  - Source drafts expire after 30 minutes: re-draft an approved comment with
-    its approved text (with a fresh `builds review` receipt for an app). The
-    API refuses a second published comment by the same identity in the same
-    place for the same source run.
-  - Identity defaults to the source run's (else today's scheduled one) and
-    `--identity` overrides it. Either way it is named explicitly, so Bangkok
-    midnight doesn't end the run. `--comment-mode` defaults to `post`.
-    Its distinct `/daily-runs/start/approvals` endpoint fails closed on older
-    APIs.
+  - `--scope full` is the full daily-management review.
+  - `--scope featured` is only an authorization envelope for a specifically
+    requested Featured slice; it does not authorize or imply the newspaper,
+    queues, conduct review, logs, costs, AI Energy budget health, sponsors,
+    carry-over work, or final full-run report.
+  - `--scope newspaper` is a newspaper-only authorization envelope. It grants
+    newspaper status/claim/submit/print and completion only, with comment mode
+    `off`. It cannot inspect queues, conduct, logs, Builds, or Featured.
+    Completion does not advance full-review windows or carry-over telemetry.
+    Its distinct `/daily-runs/start/newspaper` endpoint fails closed on older APIs.
+  - `--scope approvals [--source-run <id>]` acts on Mikey's decisions whenever
+    he gets to them (Mikey, 10-17: don't be trapped by the morning run). It has
+    a full run's write work: Featured plans and changes, Featured-comment and
+    generic recommendations, rewards, comments (draft, post, edit) and chat. It
+    has none of the newspaper, sponsor scan, bank seeding or reading duties, and
+    never counts as a full review, so review windows don't move. Its distinct
+    `/daily-runs/start/approvals` endpoint fails closed on older APIs.
+    - `--source-run` is optional. It lets the run use that run's prepared
+      Featured plan (same hash) and review receipts for up to 7 days, abandoned
+      runs included. A stale board is still refused at apply, so prepare a new
+      plan then.
+    - Source drafts expire after 30 minutes: re-draft an approved comment with
+      its approved text (with a fresh `builds review` receipt for an app). The
+      API refuses a second published comment by the same identity in the same
+      place for the same source run.
+    - Identity defaults to the source run's (else today's scheduled one) and
+      `--identity` overrides it. Either way it is named explicitly, so Bangkok
+      midnight doesn't end the run. `--comment-mode` defaults to `post`.
 - **Complete a full run when its report is delivered** (`daily-run complete`),
   even with Mikey's decisions still pending. Do not hold it open for them: an
   expired run can never be completed, so the review would not count, its
@@ -57,16 +100,14 @@ canonical structured data.
 - Delegated HTTP work never authenticates as the bot, opens a bot socket, changes
   bot sessions, or updates bot presence/typing state. Normal content mutations
   still emit Twinkle's canonical real-time content events.
-- One deliberate exception to the last-seen rule: a delegated mutation that
-  actually changed something stamps the acting bot's `users.lastActive`, so
-  Zero's and Ciel's public "last online" reflects the real day they commented on
-  and rewarded kids' posts instead of whenever a socket last closed. It is
-  written after the audit transaction commits, throttled to once a minute, and
-  best-effort — it can never fail or deadlock the content mutation. Presence is
-  still untouched: no socket is opened and no `online_status_changed` is emitted,
-  so the bots remain absent from the online list. Note that `lastActive` is the
-  ordering key for the People directory, so the bots now surface there after a
-  run; that is the intended consequence of the timestamp being truthful.
+- One exception to the last-seen rule: a delegated mutation that actually
+  changed something stamps the acting bot's `users.lastActive`, so Zero's and
+  Ciel's public "last online" reflects the real day they commented and rewarded.
+  It is written after the audit transaction commits, throttled to once a minute,
+  and best-effort (it can never fail or deadlock the mutation). Presence is
+  untouched: no socket is opened and no `online_status_changed` is emitted, so
+  the bots stay off the online list. `lastActive` is the ordering key for the
+  People directory, so the bots surface there after a run; that is intended.
 - A later human reply to a delegated Zero/Ciel comment enters the existing
   server-side autonomous comment-assistant pipeline. For Build threads this is
   limited to comments carrying the private reviewed-management provenance
@@ -87,12 +128,12 @@ retry, read-only, or resumed run started on one date uses that date's same
 actor; a skipped date still counts in the alternation. Completing, failing,
 abandoning, or expiring a run never changes the schedule. An explicit
 `--identity zero` or `--identity ciel` is an auditable override for that run
-only: it does not rewrite the scheduled identity. Automatic runs expire at the
+only; it does not rewrite the scheduled identity. Automatic runs expire at the
 next Bangkok midnight so yesterday's actor cannot continue as today's
 automatic identity. Reusing a live run key still returns the original run and
 identity. `identity use zero|ciel` is the separate, explicit persistent
-override for future starts; it remains in force until `identity use auto`, and
-does not alter the underlying calendar schedule reported by status commands.
+override for future starts; it stays in force until `identity use auto` and
+does not alter the calendar schedule reported by status commands.
 
 Comment mode is stored only on the current run:
 
@@ -103,11 +144,12 @@ Comment mode is stored only on the current run:
 A Featured-only run always uses comment mode `off` and grants Featured
 subject inspection, subject reveal, Featured mutation, review-bound Featured
 comment encouragement (`featured:comments`), and run completion. It does not
-grant generic recommendation/reward authority or comment publication. It can complete
-without a sponsor-integrity scan. Completing it does not advance any full-run
-content/cost/conduct window, queue-coverage record, last-completed identity, or
-carry-over surfacing telemetry. Start one only when Mikey requested that slice; never turn a small
-request into a full review merely because the technical command needs a run.
+grant generic recommendation/reward authority or comment publication. It can
+complete without a sponsor-integrity scan. Completing it does not advance any
+full-run content/cost/conduct window, queue-coverage record, last-completed
+identity, or carry-over surfacing telemetry. Start one only when Mikey
+requested that slice; never turn a small request into a full review merely
+because the technical command needs a run.
 The API enforces these scopes, and the CLI also rejects out-of-scope operations
 before calling endpoints outside the Lumine Admin router (notably Build review).
 
@@ -122,7 +164,7 @@ Equal-size replacements and complete-set reorders accept up to the website's
 ### Private AI-bucket maintenance
 
 AI identity buckets are private operator bookkeeping, not a Zero/Ciel public
-action. They therefore do not require or attach to a delegated daily run:
+action. They do not require or attach to a delegated daily run:
 
 ```bash
 lumine admin ai-bucket create --label Lemon \
@@ -147,12 +189,12 @@ batch before writing, adds one exact canonical user rule per requested account,
 re-attributes current-day AI usage, and returns the canonical bucket members.
 It never infers or adds email aliases: shared verified addresses can belong to
 unrelated accounts, so email rules require a separate explicit operator action.
-The command is idempotent to retry. The API records the real operator in the
-private Lumine audit log; no public bot identity is involved.
+It is idempotent to retry. The API records the real operator in the private
+Lumine audit log; no public bot identity is involved.
 
 `note set` records up to 255 characters of private operational context on the
-canonical bucket. Use it to distinguish quota bookkeeping from moderation;
-the note itself changes no access, ban, or identity rules.
+canonical bucket, to distinguish quota bookkeeping from moderation; the note
+changes no access, ban, or identity rules.
 
 The commands above are quota bookkeeping only. They cannot ban accounts, block signup,
 add IP/device/risk-key rules, or infer an account family (the explicit
@@ -181,7 +223,7 @@ must already have an active **signup-only** restriction. This cannot turn on
 a bucket ban, change full-site bans, add network rules or infer membership.
 The response confirms the canonical rule and restriction without returning the
 raw device ID. The private audit records the request before evidence is read
-and records successful completion separately. Routine reviews still never
+and records successful completion separately. Routine reviews never
 auto-enforce; this action requires Mikey's explicit instruction for the device.
 
 ### Restricted buckets: inspect, rules and restrictions
@@ -216,10 +258,11 @@ members, every account a full restriction would reach, and for each member
 (first 25) their devices (inspection keys, never raw IDs) and network
 addresses with how many accounts share each. A device or address used by many
 accounts (an academy, a school) is counted, marked shared and never listed or
-treated as family evidence. Addresses and email-rule addresses (in evidence, rules and rule notes)
-are masked unless `--include-private-evidence`; every other output, and the
-audit, keeps them masked (with a keyed hash in the audit). `--reason` is required; the API commits an
-access receipt before reading evidence.
+treated as family evidence. Addresses and email-rule addresses (in evidence,
+rules and rule notes) are masked unless `--include-private-evidence`; every
+other output, and the audit, keeps them masked (with a keyed hash in the
+audit). `--reason` is required; the API commits an access receipt before
+reading evidence.
 
 `--dry-run` on `restrict`, `rule add` and `rule disable` is a read: it returns
 the current and resulting restriction, the accounts newly affected or released,
@@ -265,10 +308,10 @@ result instead of running again.
 
 ### Shared verified-email policies
 
-A verified address proves that an account can use that mailbox; it does not
-always prove that every account using the mailbox is one person. When a teacher,
-school, or other provisioning owner intentionally verifies separate people's
-accounts with one address, record that confirmed operational fact explicitly:
+A verified address proves that an account can use that mailbox, not that every
+account using it is one person. When a teacher, school, or other provisioning
+owner intentionally verifies separate people's accounts with one address,
+record that confirmed operational fact explicitly:
 
 ```bash
 lumine admin ai-email-policy get --email teacher@example.com --json
@@ -288,8 +331,8 @@ devices, IPs, or email-provider heuristics.
 
 The CLI accepts a successful `set` only when the writer response confirms the
 requested policy and reports every matching account on its exact expected
-durable projection. A missing or mismatched projection fails closed instead of
-letting an operator mistake a stored policy row for completed account repair.
+durable projection. A missing or mismatched projection fails closed, so a
+stored policy row is never mistaken for completed account repair.
 
 Use `--mode automatic` with a new explanatory `--note` to restore Twinkle's
 default verified-email grouping. Both modes are durable and apply to later
@@ -316,13 +359,12 @@ The default result resolves the exact username or user ID from the writer,
 returns the canonical current AI bucket, orders candidate accounts oldest
 first, identifies the oldest account within the strongest canonical family
 boundary (bucket before email; never device alone) when that family fits in the
-bounded evidence set, reports whether each
-account has a DOB, and explains whether the link
-came from explicit bucket membership, a verified-email match, or bounded exact-
-device evidence. It does **not** reveal email addresses, DOB values, device IDs,
-IP evidence, private messages, or unrelated activity. `--include-private-evidence`
-adds DOB values and verified email addresses only; exact device IDs are never
-returned.
+bounded evidence set, reports whether each account has a DOB, and explains
+whether the link came from explicit bucket membership, a verified-email match,
+or bounded exact-device evidence. It does **not** reveal email addresses, DOB
+values, device IDs, IP evidence, private messages, or unrelated activity.
+`--include-private-evidence` adds DOB values and verified email addresses only;
+exact device IDs are never returned.
 
 `sharedDevices[].usage` reports recorded event counts, first/last observed Unix
 timestamps, an `eventsByType` breakdown, and the same details per account. These
@@ -349,9 +391,9 @@ owner-only (0600) permissions, and nowhere else.
 Every inspection requires a concrete `--reason`. Before loading the evidence,
 the API commits a private `identity.inspect` audit receipt containing the real
 operator, requested target, reason, and whether private evidence was requested.
-The evidence itself is deliberately not copied into the audit log. Inspection
-is run-independent and has no public actor. Results are **candidate accounts
-for human judgment**, not an automatic ownership finding and never automatic
+The evidence itself is not copied into the audit log. Inspection is
+run-independent and has no public actor. Results are **candidate accounts for
+human judgment**, not an automatic ownership finding and never automatic
 grounds for moderation, bans, or bucket changes.
 
 ### Audited private investigations
@@ -371,8 +413,8 @@ account. It returns an exact action/target breakdown for the window, the largest
 ledger entries, direct transfer counterparties, AI Card sale/offer provenance,
 and whether a counterparty is already in the same effective exact-account AI
 bucket. It never reads or returns chat messages, bucket labels, verified
-addresses, device evidence, or private identity values. Same-bucket transfers and concentration are
-investigation signals, not automatic abuse findings.
+addresses, device evidence, or private identity values. Same-bucket transfers
+and concentration are investigation signals, not automatic abuse findings.
 
 `rescue wordle-audit` separates expired unredeemed Wordle/strict-Wordle rescue
 offers from offers still inside their seven-day promise and from redeemed
@@ -382,10 +424,9 @@ stored offer-time streak snapshot is reported as the broken streak length.
 `claim_ready` requires a durable first user exchange in Lumine history; a
 reservation claim is reported separately and is not treated as completion. An
 open offer is never labelled a refusal, and non-redemption does not establish
-intent. The underlying rescue table stores one current row per account; an
-expired row may be replaced by a later offer, so the command reports exact
-current-row evidence and explicitly marks that it is not a complete immutable
-history of every offer ever shown.
+intent. The rescue table stores one current row per account and an expired row
+may be replaced by a later offer, so the command reports exact current-row
+evidence and is not a complete immutable history of every offer ever shown.
 
 Both commands are run-independent private operator actions. Each requires a
 concrete reason and commits a minimized private access receipt before loading
@@ -402,9 +443,9 @@ as the posting-date and lifetime-history gates for a new Featured addition.
 
 Public text authored as Ciel must be English. This is an operator and generation
 instruction, not a script or keyword test: writing systems do not identify a
-language reliably, and the API must not pretend otherwise. This is a
-presentation rule, not an invitation to correct or lecture a member who writes
-in another language; reply naturally in concise English.
+language reliably, and the API must not pretend otherwise. It is a presentation
+rule, not an invitation to correct or lecture a member who writes in another
+language; reply naturally in concise English.
 
 **Twinkle is not Reddit.** Do not rank a run's attention by popularity,
 recommendation count, or polish. Most users here are young children, and the
@@ -419,21 +460,19 @@ the most thought-provoking posts.
   than another well-liked post that already has a lively thread.
 - **Clumsy is not the same as low-effort.** Bad spelling, a one-line
   description, a title that is just "hi", a drawing that did not come out right
-  — these are usually a child trying, not a child spamming. Read for the real
-  thing they were reaching for and respond to that.
-- **Zero engagement is a reason to act, not to skip.** A post sitting at no
+  are usually a child trying, not spamming. Read for the real thing they were
+  reaching for and respond to that.
+- **Zero engagement is a reason to act, not to skip.** A post with no
   recommendations and no comments is the strongest signal in the queue that
   someone should notice it.
 - **Thought-provoking posts deserve substantive replies.** When a child asks
   a real question or makes a real argument and the thread is empty, it is a
   strong case for a Zero/Ciel reply, not an automatic top Featured ranking.
-  Engage with the idea itself: answer it,
-  add a perspective or a counter-consideration, and leave the author somewhere
-  to go next. A good question that nobody answered teaches a child that thinking
-  hard is not worth it; that is the outcome these runs exist to prevent. This
-  cuts both ways with the point above — the two ends of the queue, the beginner
-  nobody noticed and the strong idea nobody engaged, both outrank the popular
-  post that already has a lively thread.
+  Engage with the idea itself: answer it, add a perspective or a
+  counter-consideration, and leave the author somewhere to go next. An unanswered good
+  question teaches a child that thinking hard is not worth it. Together with the point above, both ends of
+  the queue, the beginner nobody noticed and the strong idea nobody engaged,
+  outrank the popular post that already has a lively thread.
 - **Always answer Twinkle usage questions.** "How do I change my username",
   "why can't I reward", "what unlocks the Summoner" — a child stuck on the site
   cannot use it. Answer concretely and verify anything you are unsure of against
@@ -443,21 +482,20 @@ the most thought-provoking posts.
   mention is what notifies him (`postComment` runs `processMentions` /
   `postMentions` and emits `new_targeted_upload`), so a bug-report comment
   without `@mikey` fails its main job. Restate what the child observed; never
-  promise a fix or a timeline. This reporting duty does not suspend the acting
-  bot's character: the public comment must still sound like Zero or Ciel
-  talking naturally to that member, not like an operator, ticket, or incident
-  report. Read the full thread first. If the bot already noticed, explained, or
-  apologized for the bug, do not post another reply that treats it as a fresh
-  discovery or repeats the same acknowledgement. Continue from what the bot
-  already said and add only what is missing, such as naturally bringing
-  `@mikey` into the conversation. Put the formal defect summary, evidence, and
-  review request in the private run escalation.
+  promise a fix or a timeline. The public comment must still sound like Zero or
+  Ciel talking naturally to that member, not like an operator, ticket, or
+  incident report. Read the full thread first. If the bot already noticed,
+  explained, or apologized for the bug, do not post another reply that treats it
+  as a fresh discovery or repeats the acknowledgement; continue from what the
+  bot said and add only what is missing, such as naturally bringing `@mikey`
+  into the conversation. Put the formal defect summary, evidence, and review
+  request in the private run escalation.
 - **Guide users through the website, without waiting to be asked.** A post can
   show that a child is stuck, confused, or unaware a feature exists without ever
   containing a question — someone begging for coins who does not know about
   daily rewards, someone reposting because they could not find their own post.
   Give them a short, friendly crash course on the exact thing they are stuck on.
-  Teaching a child to use the site is worth more than any single recommend.
+ 
 - **Reserve `post skip` for genuine noise** — card-sale and coin-begging spam,
   keyboard mash, duplicates, engagement farming — not for sincere posts that
   merely look unimpressive.
@@ -466,8 +504,8 @@ the most thought-provoking posts.
   it pairs well with a warm comment. Judge the depth the Subject invites, not
   merely the number of words in its prompt: a genuinely thought-provoking
   question should normally receive Level 3. Level 3 is the highest delegated
-  setting, and the level tells respondents that substantial, carefully
-  reasoned answers are wanted.
+  setting, and tells respondents that substantial, carefully reasoned answers
+  are wanted.
 - **Ongoing series are participation, not noise.** Daily records, journals,
   logs, recurring updates, and serialized creative work are not spam, filler,
   engagement farming, or duplicates merely because they reuse a title or
@@ -479,8 +517,7 @@ the most thought-provoking posts.
 - **Sincere requests for personal help are Featured material.** Posts asking
   the community for advice about school, friendships, loneliness, or other
   ordinary real-life problems embody Twinkle's purpose; being personal is never
-  a reason to suppress them or judge them unsuitable. Receiving meaningful
-  support does not reduce their value. They still participate in the daily
+  a reason to suppress them or judge them unsuitable. Receiving support does not reduce their value. They still participate in the daily
   Featured refresh below: rotating the spotlight is not withdrawing support,
   and a good post does not require an indefinite pin.
 - **Speculative privacy is never an editorial signal.** Do not lower, remove,
@@ -525,19 +562,17 @@ the most thought-provoking posts.
   "recently" means the preceding seven calendar days; do not widen into older
   inventory merely to fill capacity or produce a longer proposal list. Absence
   from the current `featured list` proves only that a Subject is not Featured
-  now — it does not prove that the Subject has never been Featured. Verify
-  lifetime Featured history from canonical evidence before recommending or
-  adding it. If the available CLI/API cannot prove that history, leave the
-  candidate out and report the capability gap instead of guessing. Quality is
-  still required after both eligibility gates pass; recent and never-Featured
-  does not make filler acceptable.
+  now, not that it has never been. Verify lifetime Featured history from
+  canonical evidence before recommending or adding it. If the available CLI/API
+  cannot prove that history, leave the candidate out and report the capability
+  gap instead of guessing. Quality is still required after both gates pass;
+  recent and never-Featured does not make filler acceptable.
 - **The live Featured board is Mikey's word.** Do not remove or reorder a
   currently Featured subject without first showing Mikey the planned removals
   and replacements and getting his go-ahead. Additions have standing approval
   when a fresh `featured list` is below its delegated-admin maximum: proactively
   feature genuinely reviewed, editorially strong new subjects without asking
-  case by case. This is judgment, not a quota — never add filler merely because
-  capacity exists. If a subject that was Featured or pinned during an earlier
+  case by case. Judgment, not a quota: never add filler. If a subject that was Featured or pinned during an earlier
   run is no longer on `featured list`, treat that as Mikey having removed it
   deliberately — never re-feature it to "restore" the board, even when space
   is available, and never treat any subject as a permanent fixture from memory
@@ -589,40 +624,40 @@ it never authorizes unrelated daily work or generic recommendation commands.
 3. **Separate encouragement from reward eligibility.** The ordinary action is
    a selected item in `featured comments recommend --file <decisions.json>`,
    omitting `anyoneCanReward` and `rewardTwinkles` (defaults: `false` and `0`).
-   Turn on the UI's "everyone can
-   reward" option (`anyoneCanReward: true`) only when the comment independently
-   deserves that stronger endorsement; direct Twinkle rewards are selective
-   too. Do not withhold a basic recommendation just because rewards are not
-   deserved, and do not mass-enable rewards to satisfy this duty. Honor
-   canonical Zero/Ciel deduplication: already-recommended comments still get
-   read, but do not need a second recommendation or daily reward. A bare
-   recommend does not revoke an existing reward permission; never claim it
-   switched one off. This duty is not authority to downgrade past decisions.
-4. **Propose the whole daily refresh, get approval, then execute it.** Identify carryover
-   pins from the saved board and canonical Featured history, without assuming
-   missing pins should be restored. Review replacements under the recency and
-   never-Featured gates above and rank them by the engagement they invite.
-   Show Mikey a specific old-Subject -> new-Subject mapping with titles, IDs,
-   canonical URLs, reasons, and the proposed final order, plus any retained
+   Turn on the UI's "everyone can reward" option (`anyoneCanReward: true`) only
+   when the comment independently deserves that stronger endorsement; direct
+   Twinkle rewards are selective too. Do not withhold a basic recommendation
+   just because rewards are not deserved, and do not mass-enable rewards to
+   satisfy this duty. Honor canonical Zero/Ciel deduplication: already-
+   recommended comments still get read, but need no second recommendation or
+   daily reward. A bare recommend does not revoke an existing reward
+   permission; never claim it switched one off. This duty is not authority to
+   downgrade past decisions.
+4. **Propose the whole daily refresh, get approval, then execute it.** Identify
+   carryover pins from the saved board and canonical Featured history, without
+   assuming missing pins should be restored. Review replacements under the
+   recency and never-Featured gates above and rank them by the engagement they
+   invite. Show Mikey a specific old-Subject -> new-Subject mapping with titles,
+   IDs, canonical URLs, reasons, and the proposed final order, plus any retained
    pins and specific constraints. Explicitly ask for his go-ahead and wait
-   before performing the proposed rotation. Daily freshness
-   and giving new conversations a turn are sufficient editorial reasons; a
-   prior Subject need not become bad or unsuitable first. Keep existing
-   removal/reorder approval and addition-capacity boundaries intact. After
-   Mikey approves the exact plan, autonomously perform **all approved swaps
-   and the approved ordering**, without per-item approval or asking him to
-   operate the website. Prepare the server-stored `featured plan` before
-   presenting it, then use `featured apply --file <plan.json> --approve <hash>`
-   only after that exact plan gets his go-ahead. Membership and final ordering
-   commit together; the server rechecks the original board, history revision,
-   and new-candidate eligibility inside the board transaction.
-   Verify the exact final membership and order from the server, then report
-   completion. Recover retryable failures within the approved scope; if
-   intervening owner changes, eligibility changes, or an API limit require a
-   materially different plan, preserve the new state, report what actually
-   completed, and seek approval for that difference instead of substituting
-   candidates or overwriting changes. Report proposals separately from
-   completed actions. Approval is for the presented plan, not future boards.
+   before performing the rotation. Daily freshness and giving new conversations
+   a turn are sufficient editorial reasons; a prior Subject need not become bad
+   or unsuitable first. Keep existing removal/reorder approval and
+   addition-capacity boundaries intact. After Mikey approves the exact plan,
+   autonomously perform **all approved swaps and the approved ordering**,
+   without per-item approval or asking him to operate the website. Prepare the
+   server-stored `featured plan` before presenting it, then use
+   `featured apply --file <plan.json> --approve <hash>` only after that exact
+   plan gets his go-ahead. Membership and final ordering commit together; the
+   server rechecks the original board, history revision, and new-candidate
+   eligibility inside the board transaction. Verify the exact final membership
+   and order from the server, then report completion. Recover retryable
+   failures within the approved scope; if intervening owner changes,
+   eligibility changes, or an API limit require a materially different plan,
+   preserve the new state, report what actually completed, and seek approval
+   for that difference instead of substituting candidates or overwriting
+   changes. Report proposals separately from completed actions. Approval is for
+   the presented plan, not future boards.
 5. **Make coverage and encouragement auditable.** In the final full-run report,
    state Subjects covered, comments read, new basic recommendations,
    already-recommended comments, selective reward-eligibility grants/direct
@@ -657,33 +692,33 @@ scheduler, delegated API scope, or automatic extension of admin permissions.
 Use the expressly authorized owner Build workflow for Math Lab; retain the
 normal Zero/Ciel actor separation for other administration.
 
-Mikey authorized Math Lab's initial launch, completed on 2026-09-12. Routine
-refills follow the standing duty but still need his exact-version approval
-and explicit publication authorization. Local edits
-and draft saves do not require release approval. Real XP/Coins may be changed
-only by the currently published, approved artifact through server-verified
-reward claims; private builds, previews, local tests, unpublished branches, and
-superseded versions cannot award real balances. These reward controls are a
-required design contract, not a claim that a reward SDK or server enforcement
-has already been implemented. See the guide before adding reward capabilities.
+Math Lab's initial launch (2026-09-12) was authorized. Routine refills follow
+the standing duty but still need Mikey's exact-version approval and explicit
+publication authorization. Local edits and draft saves do not require release
+approval. Real XP/Coins may be changed only by the currently published,
+approved artifact through server-verified reward claims; private builds,
+previews, local tests, unpublished branches, and superseded versions cannot
+award real balances. These reward controls are a required design contract, not
+a claim that a reward SDK or server enforcement is already implemented. See the
+guide before adding reward capabilities.
 
 ## Escalation to Mikey
 
-Before closing a full run, reconcile three explicit handoffs: pending reward approvals (`rewardReviews` in intake/report), every carryover todo (with new evidence or a concrete blocker and next action), and earlier-day telemetry that meets a reopening condition. `carryoverWithoutProgressThisRun` in the report identifies surfaced todos without a progress update. A pending human decision can remain open; it must be named with its exact request/version, recommendation and next owner. Never equate reading a summary with inspecting frozen implementation, clearing a stuck flag with producing the intended image, or deploying code with verifying its live outcome. The September 14 omissions were execution failures under already explicit duties; these fields make them visible, not optional.
+Before closing a full run, reconcile three explicit handoffs: pending reward approvals (`rewardReviews` in intake/report), every carryover todo (with new evidence or a concrete blocker and next action), and earlier-day telemetry that meets a reopening condition. `carryoverWithoutProgressThisRun` in the report identifies surfaced todos without a progress update. A pending human decision can remain open; it must be named with its exact request/version, recommendation and next owner. Never equate reading a summary with inspecting frozen implementation, clearing a stuck flag with producing the intended image, or deploying code with verifying its live outcome. These fields make omissions visible, not optional.
 
-A full daily management run is not finished when the mutations are done. Curation surfaces things only
-a human owner can decide, and a finding nobody reports is a finding that did not
-happen. **Every full run ends with an escalation list**, and it belongs in the run's
-final report whether or not anyone asks for it.
+A full daily management run is not finished when the mutations are done. Curation
+surfaces things only a human owner can decide, and an unreported finding did not
+happen. **Every full run ends with an escalation list** in its final report,
+whether or not anyone asks.
 
-Keep that list narrow enough to be useful. Escalate concrete child-safety,
-exploitation, targeted harassment, or platform/system-abuse risk — not
-ordinary children experimenting, arguing, making rumors, proposing informal
-in-site loans or contests, asking where media can be found, or making an
-unverified ownership claim. Those may merit a normal age-appropriate response,
-but they are not escalations without credible harmful conduct or a real victim.
-Hypothetical identifiability and ordinary school, city, class, or location
-references are not escalation signals.
+Keep that list narrow. Escalate concrete child-safety, exploitation, targeted
+harassment, or platform/system-abuse risk — not ordinary children
+experimenting, arguing, making rumors, proposing informal in-site loans or
+contests, asking where media can be found, or making an unverified ownership
+claim. Those may merit a normal age-appropriate response, but are not
+escalations without credible harmful conduct or a real victim. Hypothetical
+identifiability and ordinary school, city, class, or location references are
+not escalation signals.
 
 Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
 `/comments/<id>` URL, a one-line summary, and why it needs him:
@@ -708,33 +743,31 @@ Escalate, with the canonical `https://www.twin-kle.com/subjects/<id>` or
   ago (the API maturity gate should make that last case impossible). A new
   member's one first exchange is intended onboarding and is not suspicious by
   itself. The daily battery is real provider money; treat farming signatures
-  with the same seriousness as coin farming. Escalate the account list and
-  evidence; never auto-enforce.
+  as seriously as coin farming. Escalate the account list and evidence; never
+  auto-enforce.
 - **Bug reports** the run encountered, even secondhand in a comment thread.
 
 Two rules that keep the list worth reading:
 
 - **Check the thread before escalating.** If Mikey already replied in it, the
-  matter is his and it is closed unless something new happened after his reply —
-  re-reporting it wastes the one channel that is supposed to mean "look at this."
-  Say so explicitly when a post looks alarming but he already handled it.
+  matter is his and closed unless something new happened after his reply;
+  re-reporting wastes the one channel that means "look at this." Say so
+  explicitly when a post looks alarming but he already handled it.
 - **Check `operatorViewed` too.** Every Subject, Comment, StandalonePost, and
   queue item reports whether Mikey has opened that content and when. Silence is
-  not the same as not having seen it — he often reads without replying. Lead the
-  escalation list with items where `viewed` is false, and mark the rest as
-  already-seen rather than dropping them, since he may have looked before the
-  thing you are escalating happened. `lumine admin subjects candidates --unviewed`
-  and `lumine admin recommendations list --unviewed` filter a page down to what
+  not the same as not having seen it. Lead the escalation list with items where
+  `viewed` is false, and mark the rest as already-seen rather than dropping
+  them, since he may have looked before the thing you are escalating happened.
+  `lumine admin subjects candidates --unviewed` and
+  `lumine admin recommendations list --unviewed` filter a page down to what
   he has not opened (`--viewed` inverts it). The flags are supported by the
   recommendation, Subject, Featured, and comment-list commands only; they are
   rejected before any request on every other command.
 
-  Two limits make this a strong negative signal and a weak positive one: a view
-  is recorded only when the content **page** is opened, so reading a post inline
-  in a feed records nothing, and a user's view of their **own** content is never
-  recorded. So `viewed: true` reliably means he opened it; `viewed: false` means
-  "no page open recorded", not "he never saw it". Never tell a child, in public,
-  whether Mikey has or has not looked at their post.
+  A view is recorded only when the content **page** is opened (reading a post
+  inline in a feed records nothing), and a user's view of their **own** content
+  is never recorded. So `viewed: true` reliably means he opened it; `viewed: false` means "no page open recorded", not "he never saw it". Never tell a
+  child, in public, whether Mikey has or has not looked at their post.
 
 - **Escalate; do not moderate.** Zero and Ciel have no moderation verbs here by
   design. Do not delete, hide, argue with, or publicly accuse anyone, and do not
@@ -776,9 +809,7 @@ type Success<D> = {
 };
 ```
 
-Failures print one JSON value to stdout and exit nonzero. A failing `--all`
-scan may already have written bounded page progress to stderr; stdout remains
-protocol-clean:
+Failures print one JSON value to stdout and exit nonzero. A failing `--all` scan may already have written bounded page progress to stderr; stdout stays protocol-clean:
 
 ```ts
 type Failure = {
@@ -1034,10 +1065,7 @@ type IdentityCandidate = {
 };
 ```
 
-`identity use zero|ciel` changes the explicit persistent override for future
-starts; `identity use auto` returns future starts to the Bangkok calendar
-schedule. It never changes an active run, alters the reported scheduled
-identity, or advances rotation.
+`identity use zero|ciel` sets the explicit persistent override for future starts; `identity use auto` returns future starts to the Bangkok calendar schedule. Neither changes an active run, alters the reported scheduled identity, or advances rotation.
 
 ```bash
 lumine admin daily-run start --identity auto --comment-mode off --json
@@ -1105,9 +1133,7 @@ type DailyRunEscalationAdd = Success<{
 
 ### Build Workshop sponsor applications and integrity
 
-This is the approved Zero/Ciel Build Workshop sponsor role, not the ordinary
-AI Energy sponsor flow. Applications originate only from `lumine sponsor`.
-Website-management agents review them inside an active full daily run:
+This is the approved Zero/Ciel Build Workshop sponsor role, not the ordinary AI Energy sponsor flow. Applications originate only from `lumine sponsor`. Website-management agents review them inside an active full daily run:
 
 ```bash
 lumine admin sponsor applications list --status pending --json
@@ -1121,60 +1147,15 @@ lumine admin sponsor integrity get 34 --json
 lumine admin sponsor integrity review 34 --decision clear --json
 ```
 
-Run `sponsor integrity scan` until its bounded snapshot reaches
-`awaiting_review` or `completed`. Every pending completed handoff receives the
-deterministic checks. Probationary work, hard-flagged evidence, and a stable
-random sample become review cases; clean trusted work outside the sample is
-cleared automatically. A case includes the approved structured relay, canonical
-artifact snapshot, branch-notice evidence, and requested/resolved provider,
-model, effort, service-tier, runtime, usage, and agent-tree records. It never
-includes raw Zero/Ciel chat.
+Run `sponsor integrity scan` until its bounded snapshot reaches `awaiting_review` or `completed`. Every pending completed handoff gets the deterministic checks. Probationary work, hard-flagged evidence and a stable random sample become review cases; clean trusted work outside the sample is cleared automatically. A case includes the approved structured relay, canonical artifact snapshot, branch-notice evidence, and requested/resolved provider, model, effort, service-tier, runtime, usage and agent-tree records. It never includes raw Zero/Ciel chat.
 
-`clear` qualifies a contribution to another user for its flat 50 KP award;
-self-sponsored testing remains ineligible even when its integrity evidence is
-cleared.
+`clear` qualifies a contribution to another user for its flat 50 KP award; self-sponsored testing stays ineligible even when its integrity evidence is cleared.
 `disqualify` makes it ineligible. `hold` and `flag` require an evidence note and
-remain open. The scan itself never changes sponsor status or applies a sanction.
-Use the separate, audited `sponsor status set` command for an explicit human
-decision. Full `daily-run complete` is rejected until the scan has covered its full
-snapshot and no pending, held, or flagged case remains.
+remain open. The scan never changes sponsor status or applies a sanction; use the separate, audited `sponsor status set` command for an explicit human decision. Full `daily-run complete` is rejected until the scan has covered its full snapshot and no pending, held, or flagged case remains.
 
-During a full review, record only qualifying escalations as they are confirmed.
-`daily-run report`
-then composes the active run's canonical audit events, successful mutations,
-completed queue scans, recorded escalations, and the most useful brief deltas
-into one result. Generate it before `complete`, because run-scoped reads require
-the current active run. After completion,
-`daily-run report --run <completed-run-id>` is the run-independent recovery
-path. It reconstructs immutable run/audit/coverage/escalation evidence and the
-closed-day calendar cost view at the run's completion boundary. It labels that
-basis `historical_reconstruction`: later canonical ledger corrections to those
-closed days are reflected, while the boundary day's then-open cost bucket is
-omitted. The former live brief, carry-over-todo snapshot, and pending sponsor-
-application count are returned as unavailable rather than being synthesized
-from today's state; sponsor scan/case status is explicitly labeled as current
-canonical state for that run's scan. Queue coverage is
-written automatically only after an
-`--all` traversal reaches canonical exhaustion; an interrupted scan remains in
-its local checkpoint and cannot be misreported as complete.
+During a full review, record only qualifying escalations as they are confirmed. `daily-run report` composes the active run's canonical audit events, successful mutations, completed queue scans, recorded escalations and the most useful brief deltas into one result. Generate it before `complete`: run-scoped reads need the current active run. After completion, `daily-run report --run <completed-run-id>` is the run-independent recovery path. It reconstructs immutable run/audit/coverage/escalation evidence and the closed-day calendar cost view at the run's completion boundary, labelled `historical_reconstruction`: later canonical ledger corrections to those closed days are reflected, while the boundary day's then-open cost bucket is omitted. The former live brief, carry-over-todo snapshot and pending sponsor-application count are returned as unavailable, not synthesized from today's state; sponsor scan/case status is labelled as current canonical state for that run's scan. Queue coverage is written automatically only after an `--all` traversal reaches canonical exhaustion; an interrupted scan stays in its local checkpoint and cannot be misreported as complete.
 
-**Every agent-authored final full-management report includes a `Featured rotation`
-section.** Base it on the dated starting board, a fresh `featured list`, and
-canonical history. Report the target of replacing **all previous-day pins**,
-the exact proposed/completed outgoing-to-incoming mapping, and each retained
-pin with its reason. Rank new candidates by likely genuine member engagement,
-not thoughtfulness. Include the all-Featured-comment coverage and encouragement
-counts described above. When genuine capacity exists, make and report strong
-additions under the standing approval above; do not defer those as proposals.
-Every proposed or completed new addition must include its posting date and
-canonical never-Featured evidence; omit it when either gate is unverified.
-If a complete refresh is constrained, state the shortfall, including inadequate
-eligible inventory, inaccessible context, specific keep instructions, or pending
-approval. Do not report `None` merely because yesterday's posts are still good
-or have received support. Removing or reordering pins remains a proposal until
-Mikey gives his go-ahead; a pending proposal is not a completed refresh. After
-approval, execute the entire approved plan and verify it without asking for
-each swap again. Never omit this section from a full-run report.
+**Every agent-authored final full-management report includes a `Featured rotation` section.** Base it on the dated starting board, a fresh `featured list` and canonical history. Report the target of replacing **all previous-day pins**, the exact proposed/completed outgoing-to-incoming mapping, and each retained pin with its reason. Rank new candidates by likely genuine member engagement, not thoughtfulness. Include the all-Featured-comment coverage and encouragement counts described above. When genuine capacity exists, make and report strong additions under the standing approval above; do not defer them as proposals. Every proposed or completed new addition must include its posting date and canonical never-Featured evidence; omit it when either gate is unverified. If a complete refresh is constrained, state the shortfall, including inadequate eligible inventory, inaccessible context, specific keep instructions, or pending approval. Do not report `None` merely because yesterday's posts are still good or have received support. Removing or reordering pins remains a proposal until Mikey gives his go-ahead; a pending proposal is not a completed refresh. After approval, execute and verify the entire approved plan without asking again for each swap. Never omit this section from a full-run report.
 
 ### Daily-run conveniences (CLI 0.2.95)
 
@@ -1186,30 +1167,17 @@ lumine admin report serve --file <dir>/daily-management-report.md [--port <n>] [
 ```
 
 These compose the documented commands in this contract, running them as child processes, so every scope check, audit and pagination rule applies unchanged.
-- **Arena members waiting for papers come first.** `arena paper-queue --cursor <member-id> --limit <1-100> --json` lists members blocked by the lack of a fresh complete published paper, using the member-facing pass/retry and solo-mastery rules. Follow every `nextCursor`, including after an empty page; require `demandBasis: waiting-published-papers-v1`. Group all pages by exam/difficulty and prioritize these waiting members before generic unseen-question depth. Failed ordinary papers remain retryable; open/pending-marking sittings are not publication waits. Ten successful distinct Full Hard clears, with Zero/Ciel allowed, are needed between solo mastery attempts. The pass and full-marks 20× XP/Coins rewards are separately reserved, each once. Publish complete independently reviewed papers and verify the same members can advance. `gather` collects this queue first as `arena-paper-queue-N.json`, with `paperQueue.complete/pages/waitingTracks`; missing/malformed/partial coverage must not be reported as an empty healthy queue. Use the workspace CLI until npm publication is verified. This step grants no new authoring spend or publication authority.
-- **`gather`** saves its fixed set of read-only reports into `<dir>`, including the canonical published Math Lab queue in `math-lab-queue.json` and all types of pending Build review requests in `build-reviews-N.json`. Build reviews follow `nextCursor` to exhaustion; `gather.json` → `buildReviews` records `complete`, attempted `pages` and collected `items`. A failed/malformed page, cursor loop or 100-page bound reports incomplete coverage, never an empty healthy queue. Read the current collection once; it replaces the rewards-only list. Older packages without `buildReviews` need a separate `review list --status pending` collection through cursor exhaustion. Previous queue receipts remain on disk as history but do not become current evidence or duplicate reading duties after a new gather. It is not the complete daily checklist: app refills/usage, individual review assessments, sponsor integrity and other duties need their own steps. Repository agents follow the current full-run coverage index in `agent-guides/lumine-admin.md`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. Total/per-step `durationMs`, attempts and recovered reads make recurring slow or failing collection steps visible during the daily review. It also creates `review-state.json`: collection never acknowledges reading. While it runs, `gather.json` is rewritten after every step with `inProgress: true` and the steps so far; the final summary replaces it with `inProgress: false`. An `inProgress: true` file means the collection was interrupted: rerun the same gather with `--resume`. A hang-up from a closing parent shell no longer stops it. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
+- **Arena members waiting for papers come first.** `arena paper-queue --cursor <member-id> --limit <1-100> --json` lists members blocked by the lack of a fresh complete published paper, using the member-facing pass/retry and solo-mastery rules. Follow every `nextCursor`, including after an empty page; require `demandBasis: waiting-published-papers-v1`. Group all pages by exam/difficulty and prioritize these waiting members before generic unseen-question depth. Failed ordinary papers remain retryable; open/pending-marking sittings are not publication waits. Ten successful distinct Full Hard clears, with Zero/Ciel allowed, are needed between solo mastery attempts. The pass and full-marks 20× XP/Coins rewards are separately reserved, each once. Publish complete independently reviewed papers and verify the same members can advance. `gather` collects this queue first as `arena-paper-queue-N.json`, with `paperQueue.complete/pages/waitingTracks`; missing, malformed or partial coverage must not be reported as an empty healthy queue. Use the workspace CLI until npm publication is verified. This step grants no new authoring spend or publication authority.
+- **`gather`** saves its fixed set of read-only reports into `<dir>`, including the canonical published Math Lab queue in `math-lab-queue.json` and all types of pending Build review requests in `build-reviews-N.json`. Build reviews follow `nextCursor` to exhaustion; `gather.json` → `buildReviews` records `complete`, attempted `pages` and collected `items`. A failed/malformed page, cursor loop or 100-page bound reports incomplete coverage, never an empty healthy queue. Read the current collection once; it replaces the rewards-only list. Older packages without `buildReviews` need a separate `review list --status pending` collection through cursor exhaustion. Previous queue receipts stay on disk as history but are not current evidence and add no reading duty after a new gather. It is not the complete daily checklist: app refills/usage, individual review assessments, sponsor integrity and other duties need their own steps. Repository agents follow the current full-run coverage index in `agent-guides/lumine-admin.md`. It follows `bot-output` to exhaustion and renders `bot-chats.txt`, then lists any failed step in `gather.json`. Total/per-step `durationMs`, attempts and recovered reads make recurring slow or failing collection steps visible during the daily review. It also creates `review-state.json`: collection never acknowledges reading. While it runs, `gather.json` is rewritten after every step with `inProgress: true` and the steps so far; the final summary replaces it with `inProgress: false`. An `inProgress: true` file means the collection was interrupted: rerun the same gather with `--resume`. A hang-up from a closing parent shell does not stop it. Children bypass update checks, require matching fresh stdout/file receipts, and retry an unconfirmed opted-in read at most once. Mutations never auto-retry. It needs the active run for run-scoped reads.
 - **`progress`** reads local review state and explicit operator acknowledgments, writes private `progress.json`, and keeps reading, canonical effort mutations, the run lease, and browser checks separate. `collectionFailures` includes failures without a page file, such as a cursor loop; acknowledging the available files cannot make an incomplete collection complete. A fresh successful gather clears those failures. Add all required duties for the actual run scope and its carryovers; collection alone is not a full review. A completed run lease cannot complete a pending duty. Reading acknowledgments bind to the current file bytes and are operator attestations, not proof of comprehension.
-- **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured. Each one comes with its human/bot comment counts, explicit comment truncation/completeness, and whether Mikey has viewed it. Counts from truncated context are partial. An unavailable Subject context fails the collection. Eligibility only: ranking stays editorial.
+- **`featured candidates`** returns Subjects posted after the Bangkok-midnight cutoff that are off the board and provably never Featured, each with its human/bot comment counts, explicit comment truncation/completeness, and whether Mikey has viewed it. Counts from truncated context are partial. An unavailable Subject context fails the collection. Eligibility only: ranking stays editorial.
 - **`report serve`** detaches a loopback server that answers only `/`, `marked.min.js` and the report Markdown. `--open` opens Chrome and reports whether the OS accepted the request. Render, navigation and original-source verification remain pending until actually checked. Startup failures stop only the child this command started.
 
 ### Durable recovery and explicit duty evidence (CLI 0.3.5)
 
-Default checkpoints, mutation intents, runtime-log evidence and Build reviews live
-under `work/lumine-admin` in the invocation directory, with private permissions.
-When the invocation directory is inside an app's Lumine project workspace (a
-`.twinkle/lumine-project.json` there or above), they live in `~/.twinkle/lumine-admin`
-instead, never among the app's files; `lumine save` skips any `work/lumine-admin`
-folder an older CLI left in a workspace and says so once.
-Explicit persistent output/checkpoint paths take priority. Older automatic
-checkpoints in OS temp storage are copied with their candidate spools to persistent
-storage before resuming; the existing scope/hash checks still apply.
+Default checkpoints, mutation intents, runtime-log evidence and Build reviews live under `work/lumine-admin` in the invocation directory, with private permissions. When the invocation directory is inside an app's Lumine project workspace (a `.twinkle/lumine-project.json` there or above), they live in `~/.twinkle/lumine-admin` instead, never among the app's files; `lumine save` skips any `work/lumine-admin` folder an older CLI left in a workspace and says so once. Explicit persistent output/checkpoint paths take priority. Older automatic checkpoints in OS temp storage are copied with their candidate spools to persistent storage before resuming; the existing scope/hash checks still apply.
 
-Generic mutations persist their exact operation/account/run/session key before
-sending. A missing receipt leaves that key pending; rerunning the exact command
-reuses it instead of issuing a fresh mutation. Changed bodies or authorities get
-different keys. A canonical receipt is archived privately before printing, and
-the pending pointer closes only after successful output. Existing Featured,
-batch-skip and runtime-log workflows retain their own recovery contracts.
+Generic mutations persist their exact operation/account/run/session key before sending. A missing receipt leaves that key pending; rerunning the exact command reuses it instead of issuing a fresh mutation. Changed bodies or authorities get different keys. A canonical receipt is archived privately before printing, and the pending pointer closes only after successful output. Existing Featured, batch-skip and runtime-log workflows keep their own recovery contracts.
 
 `duty-evidence.json` is local operator evidence, for example:
 
@@ -1224,82 +1192,27 @@ batch-skip and runtime-log workflows retain their own recovery contracts.
 }
 ```
 
-Use actual byte counts/digests and only acknowledge work performed. Every evidence
-reference stays inside the run directory. Changed files invalidate reading
-acknowledgments. Effort totals use the canonical report's `subject.effort.set`
-audit counts, including failed attempts separately; unavailable receipts remain
-unknown.
+Use actual byte counts/digests and acknowledge only work performed. Every evidence reference stays inside the run directory. Changed files invalidate reading acknowledgments. Effort totals use the canonical report's `subject.effort.set` audit counts, with failed attempts counted separately; unavailable receipts remain unknown.
 
 ### Full management report in Chrome
 
-1. Save the complete report as
-   `/Users/mikey/Developer/twinkle/work/daily-management-YYYY-MM-DD/daily-management-report.md`, using the
-   run's Bangkok date. Include every required reporting section, coverage gap,
-   pending decision and carryover. Reflect later owner decisions accurately.
-2. Render the entire Markdown into a readable HTML page with section links,
-   usable tables and access to the original Markdown. Preserve complete
-   appendices and flagged rows; navigation or collapsible details must not
-   discard them. Use local assets so the report does not depend on a CDN.
-3. Serve the view on `127.0.0.1` using an available port. Expose only the HTML,
-   its required assets and the report Markdown through a dedicated directory
-   or explicit routes; do not serve the surrounding private evidence folder.
-   Keep the server available after the response so Mikey can browse it.
+1. Save the complete report as `/Users/mikey/Developer/twinkle/work/daily-management-YYYY-MM-DD/daily-management-report.md`, using the run's Bangkok date. Include every required reporting section, coverage gap, pending decision and carryover. Reflect later owner decisions accurately.
+2. Render the entire Markdown into a readable HTML page with section links, usable tables and access to the original Markdown. Preserve complete appendices and flagged rows; navigation or collapsible details must not discard them. Use local assets, not a CDN.
+3. Serve the view on `127.0.0.1` using an available port. Expose only the HTML, its required assets and the report Markdown through a dedicated directory or explicit routes; do not serve the surrounding private evidence folder. Keep the server available after the response so Mikey can browse it.
 
-For a follow-up that only opens or updates an existing report, reuse that
-report and its existing tab/server where available. This does not authorize
-starting another management run or repeating unrelated daily duties.
+For a follow-up that only opens or updates an existing report, reuse that report and its existing tab/server where available. This does not authorize starting another management run or repeating unrelated daily duties.
 
-Creating an escalation belongs to the active run; acknowledging, annotating,
-resolving, or reopening it does not. Use the run-independent `escalation`
-commands after Mikey responds instead of starting a follow-up delegated run.
+Creating an escalation belongs to the active run; acknowledging, annotating, resolving, or reopening it does not. Use the run-independent `escalation` commands after Mikey responds instead of starting a follow-up delegated run.
 
-`lastRun` makes a lost-response retry of `complete` or `fail` possible after
-the active pointer has been cleared. Other run-scoped commands accept only the
-current unexpired `active` run. Completion first finalizes any mutation whose
-content change committed but whose audit bookkeeping was still pending,
-counting it toward the run's rotation signal. It then rejects only while a
-mutation from the last ten minutes is genuinely in flight (the 409 lists the
-pending mutations and a `retryAfterSeconds`); older in-flight rows are treated
-as orphans of a dead process and no longer block completion. `fail` remains
-available to abandon a run without advancing rotation, including a run whose
-six-hour authorization has expired; an expired run can never be completed.
-A TTL-expired run is reported with status `expired` even before the next
-start reaps it, so `daily-run status` never shows an unusable run as
-`active`.
+`lastRun` makes a lost-response retry of `complete` or `fail` possible after the active pointer has been cleared. Other run-scoped commands accept only the current unexpired `active` run. Completion first finalizes any mutation whose content change committed but whose audit bookkeeping was still pending, counting it toward the run's rotation signal. It then rejects only while a mutation from the last ten minutes is genuinely in flight (the 409 lists the pending mutations and a `retryAfterSeconds`); older in-flight rows are treated as orphans of a dead process and no longer block completion. `fail` remains available to abandon a run without advancing rotation, including a run whose six-hour authorization has expired; an expired run can never be completed. A TTL-expired run is reported with status `expired` even before the next start reaps it, so `daily-run status` never shows an unusable run as `active`.
 
-Starting with a run key that belongs to a finished or expired run fails with
-`CLI_ADMIN_RUN_KEY_ALREADY_USED`; supply a fresh `--run-key` (for example
-`daily:2026-08-07:2`) to start again the same day. Reusing the key of the
-live active run returns that run only when the requested `--comment-mode`
-and `--scope`, plus any explicit `--identity`, match it; otherwise the start fails with
-`CLI_ADMIN_RUN_SETTINGS_MISMATCH` instead of silently returning a run with
-different scopes. The same check applies when a start without the active
-run's key would fall back to that active run.
+Starting with a run key that belongs to a finished or expired run fails with `CLI_ADMIN_RUN_KEY_ALREADY_USED`; supply a fresh `--run-key` (for example `daily:2026-08-07:2`) to start again the same day. Reusing the key of the live active run returns that run only when the requested `--comment-mode` and `--scope`, plus any explicit `--identity`, match it; otherwise the start fails with `CLI_ADMIN_RUN_SETTINGS_MISMATCH`. The same check applies when a start without the active run's key would fall back to that active run.
 
-The default full-run key is `daily:YYYY-MM-DD` in Asia/Bangkok. Scoped Featured
-runs receive a fresh `scoped:featured:...` key so completing one slice cannot
-consume the day's full-run key or prevent a later explicitly requested slice.
-They also use a dedicated API start endpoint, so an older API cannot ignore the
-scope and silently create a full run; it fails before creating any run instead.
-Supply `--run-key` for a separate explicit run. `--idempotency-key` may be supplied to any
-mutation when a caller needs the same retry identity across processes. The CLI
-generates a fresh key for every mutation invocation; if a mutation fails, its
-JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
+The default full-run key is `daily:YYYY-MM-DD` in Asia/Bangkok. Scoped Featured runs receive a fresh `scoped:featured:...` key so completing one slice cannot consume the day's full-run key or prevent a later explicitly requested slice. They also use a dedicated API start endpoint, so an older API cannot ignore the scope and silently create a full run; it fails before creating any run instead. Supply `--run-key` for a separate explicit run. `--idempotency-key` may be supplied to any mutation when a caller needs the same retry identity across processes. The CLI generates a fresh key for every mutation invocation; if a mutation fails, its JSON error includes `details.retryIdempotencyKey` for a safe exact retry.
 
 ### Build review requests: one queue for every unlock (any time; added 2026-09-28)
 
-Everything a creator asks Mikey to unlock is one review request with a type:
-`rewards` (XP & Coin rewards, below), `project-limit` (more project room),
-`storage-limit` (more Lumine file storage, per creator), `cardcraft` (an AI
-Card crafting recipe) and `soundtrack` (soundtrack requests). Mikey sees them in one list (Management → **Build
-approvals**, or the CLI below), gets the same DM card for each, and decides
-them the same way. Each type keeps its own rules: reward approvals carry the
-earning rules and publish the frozen version; storage approvals take a size
-(500 MB / 1 GB / 2 GB tiers, any size up to the 2 GB cap, never lowering an
-existing approval); project room approvals raise Main to the fixed bounds;
-card crafting approvals make the recipe live in the published app without a
-new release. Rewards, card crafting and soundtrack approvals can be revoked. The
-older per-type commands (`reward-review`, `cardcraft-review`, `storage
+Everything a creator asks Mikey to unlock is one review request with a type: `rewards` (XP & Coin rewards, below), `project-limit` (more project room), `storage-limit` (more Lumine file storage, per creator), `cardcraft` (an AI Card crafting recipe) and `soundtrack` (soundtrack requests). Mikey sees them in one list (Management → **Build approvals**, or the CLI below), gets the same DM card for each, and decides them the same way. Each type keeps its own rules: reward approvals carry the earning rules and publish the frozen version; storage approvals take a size (500 MB / 1 GB / 2 GB tiers, any size up to the 2 GB cap, never lowering an existing approval); project room approvals raise Main to the fixed bounds; card crafting approvals make the recipe live in the published app without a new release. Rewards, card crafting and soundtrack approvals can be revoked. The older per-type commands (`reward-review`, `cardcraft-review`, `storage
 approve|reject|list`) are aliases of these routes and keep working.
 
 ```bash
@@ -1332,7 +1245,7 @@ lumine admin teachers review --all-flagged --expect <id[:fp],...> --note <text>
 lumine admin identity network <userId|username> --reason <text> [--include-private-evidence]
 ```
 
-**Network evidence** (`users_actions` addresses, added 2026-10-04): the account's most recently used addresses (up to 8), and for each one who else acted from it.
+**Network evidence** (`users_actions` addresses): the account's most recently used addresses (up to 8), and for each one who else acted from it.
 - An address more than 8 other accounts use is a **shared network** (an academy, a school, a café): it is only counted, never listed, because it links strangers. Teachers and students at the same academy share one.
 - An address 8 or fewer other accounts use is a **small network** (a home): every account on it is listed with its age, role and account type. The person's own linked accounts (email, device, bucket) are marked `their linked account` and never raise a flag; logged-out visits are not accounts. If the addresses cannot be read (time cap), the pack still answers, with `network_evidence_unavailable`.
 - Addresses are masked (`58.151.x.59`) with a stable `addressId` for comparing reports; `--include-private-evidence` on `identity network` shows the full address. `identity network` commits a server-side access audit row with your reason before reading anything, like `identity inspect`; neither leaves a local copy unless you pass `--output <file>`.
@@ -1345,7 +1258,7 @@ lumine admin identity network <userId|username> --reason <text> [--include-priva
 
 - Flags are pointers, not verdicts: a school device can link strangers. Judge each case, recommend, and act only on Mikey's decision.
 - `teachers audit` reads approved teachers a page at a time (newest approval first, up to 100 per page; `--cursor` continues, `--all` pages through every teacher). Each page lists, in this order: flagged and never reviewed (`NEW`), reviewed but materially changed since (`CHANGED`, each change listed), reviewed and unchanged (one line, no evidence), then teachers with no flags. `--all` merges the pages in that order. Counts: `audited`, `flagged`, `newlyFlagged`, `changedSinceReview`, `reviewedUnchanged`. Each entry carries its `fingerprint`.
-- `teachers review` records Mikey's review (added 2026-10-07) of the facts he was shown. The fingerprint covers the flag set and the linked accounts (who, linked how, and whether each has a recorded age under 14 or under 18). Activity, last-active time, addresses and shared-device counts are not part of it. **Accounts that only share a network with the teacher count only when they change a network flag** (`shares_small_network_with_…`): a new sibling on a home address that already raised the member flag does not reopen a review, by design, because network sharers churn. The latest review per teacher wins; a teacher reappears when those facts change, or when a teacher reviewed as `revoke` holds the status again.
+- `teachers review` records Mikey's review of the facts he was shown. The fingerprint covers the flag set and the linked accounts (who, linked how, and whether each has a recorded age under 14 or under 18). Activity, last-active time, addresses and shared-device counts are not part of it. **Accounts that only share a network with the teacher count only when they change a network flag** (`shares_small_network_with_…`): a new sibling on a home address that already raised the member flag does not reopen a review, by design, because network sharers churn. The latest review per teacher wins; a teacher reappears when those facts change, or when a teacher reviewed as `revoke` holds the status again.
   - `review <userId>` reads and prints that teacher's current entry, then sends its fingerprint; `--fingerprint <fp>` sends the one from the audit Mikey read instead. If the facts changed since, nothing is recorded (409: read it again).
   - `--decision legit` keeps the teacher. `--decision revoke` **requires `--fingerprint`** from the entry Mikey decided on, then runs the same clean removal as `teachers revoke` (the note is its reason) and records the review.
   - `--all-flagged --expect <id[:fp],...>` pages the whole audit, prints it, and reviews as legit, with one note, only the `--expect` teachers that it shows as new or changed. Give each as `id:<fingerprint prefix>` (8+ hex from the audit Mikey read) to pin the facts he judged. Anything else is listed and not reviewed: new or changed but not expected; expected but its fingerprint moved; expected but not new or changed now. The server also skips, and lists, any whose facts changed between the printed audit and the write, whose last review was a revoke, or whose evidence is incomplete. Sent in batches of 25.
@@ -1361,7 +1274,7 @@ lumine admin identity network <userId|username> --reason <text> [--include-priva
 
 ### Teacher branches (Mikey only, any time; added 2026-10-08)
 
-Which Twinkle branch each approved teacher works at, confirmed by Mikey through the academy networks teachers use. The branch a teacher typed when they applied is only a hint: many typed nothing, two branches, "Substitute", or an alias.
+Which Twinkle branch each approved teacher works at, confirmed by Mikey through the academy networks teachers use. The branch a teacher typed when applying is only a hint: many typed nothing, two branches, "Substitute", or an alias.
 
 ```bash
 lumine admin teachers branches suggest
@@ -1402,32 +1315,7 @@ lumine admin teachers branches list [--branch <name>|none] [--json]
 
 ### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
 
-The creator's Lumine designs the rewards and writes them into the app. The
-app declares its economy in `rewards.json` at the project root (rule ids,
-titles, XP, Coins, tries, retry share, budgets); quiz rules get their questions
-and answer keys from a private question sheet the creator's Lumine uploads with
-`lumine rewards sheet <file.json>` (never a project file: published source is
-readable by every player). **Send for review** (website, or `lumine rewards review` from the workspace) freezes the code and proposes
-`rewards.json` merged with the sheet. Approval is Mikey's decision: read the
-frozen code, check that the amounts are right and that the app cannot be
-farmed, change anything that is wrong, approve. A plain `completion` rule
-checks only time: when it pays for something the app could check (a puzzle,
-a level, a win), propose a completionProof instead of approving it. For an
-app's own check (`app-check-v1`), read `/rewards.verify.js`: `check` must test
-the player's record against the dealt puzzle, never a client flag, and its
-refusal `reason` (shown to players) must never reveal the answer; a hidden-answer
-quiz needs a small maxAttempts. `show`
-prints a WARNING when the server's self-test caught it paying a record that
-proves nothing. **Approval publishes** (since
-2026-09-15): the exact frozen snapshot goes live in the same transaction, with
-no Publish click by the creator; the app's previous release stays up until
-that commit lands. Instead of approving, the reviewer may **propose changes**:
-edit a copy of the frozen snapshot and offer it as the condition of approval.
-The creator sees every changed line and either accepts (the proposed version
-is approved and published) or declines (the request is rejected). Nothing in
-that flow joins the creator's team. These commands need no daily run and can
-be used whenever a request arrives (the reviewer also receives a DM card per
-request).
+The creator's Lumine designs the rewards and writes them into the app. The app declares its economy in `rewards.json` at the project root (rule ids, titles, XP, Coins, tries, retry share, budgets); quiz rules get their questions and answer keys from a private question sheet the creator's Lumine uploads with `lumine rewards sheet <file.json>` (never a project file: published source is readable by every player). **Send for review** (website, or `lumine rewards review` from the workspace) freezes the code and proposes `rewards.json` merged with the sheet. Approval is Mikey's decision: read the frozen code, check that the amounts are right and that the app cannot be farmed, change anything that is wrong, approve. A plain `completion` rule checks only time: when it pays for something the app could check (a puzzle, a level, a win), propose a completionProof instead of approving it. For an app's own check (`app-check-v1`), read `/rewards.verify.js`: `check` must test the player's record against the dealt puzzle, never a client flag, and its refusal `reason` (shown to players) must never reveal the answer; a hidden-answer quiz needs a small maxAttempts. `show` prints a WARNING when the server's self-test caught it paying a record that proves nothing. **Approval publishes**: the exact frozen snapshot goes live in the same transaction, with no Publish click by the creator; the app's previous release stays up until that commit lands. Instead of approving, the reviewer may **propose changes**: edit a copy of the frozen snapshot and offer it as the condition of approval. The creator sees every changed line and either accepts (the proposed version is approved and published) or declines (the request is rejected). Nothing in that flow joins the creator's team. These commands need no daily run and can be used whenever a request arrives (the reviewer also receives a DM card per request).
 
 ```bash
 lumine admin reward-review list --json                       # pending (default)
@@ -1447,12 +1335,7 @@ lumine admin reward-review reject 2 --reason "Rewards fire on game over; nothing
 lumine admin reward-review revoke 2 --reason "Farmable; pausing until redesigned" --json
 ```
 
-A proposal can also offer the app a new name (`--title`, at most 100
-characters) and a new thumbnail (`--thumbnail <jpg|png|webp>`, uploaded to your
-proposal workspace copy first; `--thumbnail workspace` offers the one already
-set on that copy, e.g. from the website). Both are frozen with the offer and
-applied together with the files and rules when the creator accepts. An offer
-may change only the name or thumbnail; the files can then stay as submitted.
+A proposal can also offer the app a new name (`--title`, at most 100 characters) and a new thumbnail (`--thumbnail <jpg|png|webp>`, uploaded to your proposal workspace copy first; `--thumbnail workspace` offers the one already set on that copy, e.g. from the website). Both are frozen with the offer and applied together with the files and rules when the creator accepts. An offer may change only the name or thumbnail; the files can then stay as submitted.
 
 `show --dir` writes the exact reviewed snapshot (private files, including the
 app's own `rewards.json`) so the agent can read it like a pulled workspace. The
@@ -1463,25 +1346,11 @@ lifetime totals and what this review has already paid out.
 
 Review questions to settle with Mikey before approving:
 
-- Is the reward tied to real play or learning, or does it fire on trivial or
-  losing moments (a timer, a game over, the first minute of play)?
-- Completion rules (`verifier: "completion"`) prove nothing but elapsed time:
-  the app calls `start` when an activity begins and `claim` when it ends, and
-  the server only checks `minSeconds`, once per learner per day, and the
-  budgets. Read the code for where those calls sit, and keep the amounts and
-  `userDailyXP` small enough that a player scripting the calls would not
-  matter. Arcade Typing's stage clears are the reference: up to 10,000 XP a
-  day across twelve stages.
-- Quiz rules: fixed questions reachable in seconds are farmable; dated sets
-  or `progression: "until-earned"` sets (a set stays up until somebody earns
-  it, then the next one comes up the following site day (UTC midnight, 9:00 AM Korea)) keep them honest.
-- Do the rule IDs in `rewards.json` match what the code starts? Unknown IDs
-  simply never pay.
-- Are the amounts and the per-learner daily budgets right for what the app
-  actually asks of people? There is no app-wide budget, per day or lifetime:
-  a good app keeps paying everyone who plays it. Older configs may still
-  carry `dailyXP`/`dailyCoins`/`lifetimeXP`/`lifetimeCoins`; the API accepts
-  and ignores them, so never add or tune them.
+- Is the reward tied to real play or learning, or does it fire on trivial or losing moments (a timer, a game over, the first minute of play)?
+- Completion rules (`verifier: "completion"`) prove nothing but elapsed time: the app calls `start` when an activity begins and `claim` when it ends, and the server only checks `minSeconds`, once per learner per day, and the budgets. Read the code for where those calls sit, and keep the amounts and `userDailyXP` small enough that a player scripting the calls would not matter. Arcade Typing's stage clears are the reference: up to 10,000 XP a day across twelve stages.
+- Quiz rules: fixed questions reachable in seconds are farmable; dated sets or `progression: "until-earned"` sets (a set stays up until somebody earns it, then the next one comes up the following site day (UTC midnight, 9:00 AM Korea)) keep them honest.
+- Do the rule IDs in `rewards.json` match what the code starts? Unknown IDs simply never pay.
+- Are the amounts and the per-learner daily budgets right for what the app actually asks of people? There is no app-wide budget, per day or lifetime: a good app keeps paying everyone who plays it. Older configs may still carry `dailyXP`/`dailyCoins`/`lifetimeXP`/`lifetimeCoins`; the API accepts and ignores them, so never add or tune them.
 
 `rules.json` (what `--config` takes, and what the app's `rewards.json` plus
 sheet compose into):
@@ -1530,14 +1399,7 @@ Arcade Typing (Mikey, 2026-09-12): XP for clearing campaign stages, up to
 10,000 Coins per rule and per learner per day. No app-wide ceiling exists,
 per day or lifetime.
 
-Approval freezes these rules with the reviewed snapshot and publishes that
-snapshot immediately (the result carries `published.version`); an approval
-without at least one rule is refused, and an approval whose creator has saved
-past the frozen version is refused as `build_reward_review_stale` (the request
-also closes itself on that save). Rejection and revocation require a
-`--reason` the creator reads verbatim in their workspace. A later code save
-needs a new request. Never approve without reading the code; never approve a
-request whose `isLatest` is false.
+Approval freezes these rules with the reviewed snapshot (the result carries `published.version`); an approval without at least one rule is refused, and an approval whose creator has saved past the frozen version is refused as `build_reward_review_stale` (the request also closes itself on that save). Rejection and revocation require a `--reason` the creator reads verbatim in their workspace. A later code save needs a new request. Never approve without reading the code; never approve a request whose `isLatest` is false.
 
 Mikey-owned apps automatically attempt approval and publication when the owner
 requests reward review. Before that write, run
@@ -1565,18 +1427,7 @@ submitted. The website equivalent is the Management panel's "Edit a copy to
 propose changes" (a private workspace copy owned by the reviewer) followed by
 "Offer my copy with these rules".
 
-**Try this version (since 2026-09-26, API 3c08af5d / vite 2.2.86).** While an
-offer is `changes_offered`, the creator and the reviewer (and nobody else) get
-a **Try this version** button on the chat card, in the creator's reward
-settings and in the Management approvals panel. It plays the offered
-`proposalSnapshot` as a normal app preview through
-`GET /build/preview/build/:buildId/reward-proposal/:reviewId`, with a token of
-its own scope (`reward-proposal:preview`, bound to viewer, build, review and
-revision; re-checked on every file request). XP and Coins inside it are
-simulated against the offered rules and never pay. The app's own SDK data
-calls (privateDb, sharedDb…) still reach the build's real data as the viewer,
-like a draft preview, and the modal says so. A newer revision or an answered
-offer closes the preview (409).
+**Try this version.** While an offer is `changes_offered`, the creator and the reviewer (and nobody else) get a **Try this version** button on the chat card, in the creator's reward settings and in the Management approvals panel. It plays the offered `proposalSnapshot` as a normal app preview through `GET /build/preview/build/:buildId/reward-proposal/:reviewId`, with a token of its own scope (`reward-proposal:preview`, bound to viewer, build, review and revision; re-checked on every file request). XP and Coins inside it are simulated against the offered rules and never pay. The app's own SDK data calls (privateDb, sharedDb…) still reach the build's real data as the viewer, like a draft preview, and the modal says so. A newer revision or an answered offer closes the preview (409).
 
 Each offer has a server-owned revision. Changing the files, rules or note
 creates a new revision; a creator looking at an older comparison or decline
@@ -1638,26 +1489,22 @@ ms since navigation start). Published 0.3.55 also includes `scroll-perf`
 need separate types or the explicit daily collection request; `--perf` alone
 does not establish device context or complete coverage.
 
-CLI 0.3.57 includes the following wake-viewport additions and their daily
-coverage report. Older 0.3.55 packages do not contain them; upgrade or use
-the current repository CLI (`node lumine-cli/bin/lumine.js`).
+CLI 0.3.57 adds the wake-viewport events and their daily coverage report. Older 0.3.55 packages lack them; upgrade or use the repository CLI (`node lumine-cli/bin/lumine.js`).
 `--wake` includes `session`, `wake`, `wake-viewport` and `trace-dropped`.
 `wake-viewport` is bounded owner-only geometry on load/return/`pageshow`, at
-250ms/1s/3s/20s and once when backgrounded. It records viewport sizes/offsets,
-nav and shell bounds, scroll, keyboard inset and focused-control type, never
-control contents. Normal wakes are retained for comparison. `--perf` also
+250ms/1s/3s/20s and once when backgrounded: viewport sizes/offsets, nav and shell bounds, scroll, keyboard inset and focused-control type, never control contents. Normal wakes are retained for comparison. `--perf` also
 includes the geometry rows. The session's `viewportTrace: 1` marks support;
-older tabs do not acquire it until they load a version containing the change.
+older tabs lack it until they load a version containing the change.
 
 The October 26 expanded recorder keeps that v1 event compatible and adds
 `layout.v: 2` (`viewportDetail: 2` on the session): body/root bounds, nav padding,
 orientation and bounded ancestor CSS-effect flags. Mobile load/return cycles
 also capture one first-touch/300ms pair and at most four debounced
 resize/scroll/orientation bursts. `signals` and `activity` retain event counts,
-the cap and skipped/pending events; optional context can explicitly report
+the cap and skipped/pending events; optional context can report
 `omitted: "payload-budget"`. No page content, screenshot or automatic correction
 is included. Check `work/mobile-bottom-gap-20261026/telemetry/STATUS.md` for
-actual release status; use the workspace CLI for this expanded summary until
+release status; use the workspace CLI for this expanded summary until
 an npm release containing it is recorded there.
 
 The daily summary's `detail` reports expanded coverage, capped/omitted samples,
@@ -1745,7 +1592,7 @@ lumine admin craft revise --build 1499 --pair 4821 --why "<text>" --confirm     
 - `revise` changes an item's `--why` (the explanation on its card: the pair
   that first made it), `--emoji` or `--category`, through the same checks. The
   name never changes: players hold it. Audited as `craft.revise`.
-- `revise --pair` (added 2026-10-16) changes one pair's `--why`: the line a
+- `revise --pair` changes one pair's `--why`: the line a
   player sees when they make THAT pair (an item made by several pairs has one
   why per pair, and `--item` reaches only the first). The pair is its id (the
   `#n` in `stats`' newest AI answers) or `"A + B"` by item names, in either
@@ -1757,7 +1604,7 @@ lumine admin craft revise --build 1499 --pair 4821 --why "<text>" --confirm     
 - Expansion: `stats` shows the frontier (items no pair uses yet, and untried
   pairs); seed pairs that use frontier items so Today's Star has fresh targets.
 
-Take-down and repair (added 2026-10-13):
+Take-down and repair:
 
 ```bash
 lumine admin craft retire --build 1499 --item "<name or id>" --reason "Not suitable for children"            # dry run
@@ -1803,11 +1650,7 @@ lumine admin craft unfizzle --build 1499 --since 2026-10-13T00:00:00Z --confirm
 
 ### Reward question-bank inspection and optional seeding
 
-**Math Studio #2655 seeding was stopped by Mikey on October 4.** Its coverage
-and learner-health report remain daily duties. The `seed` command below is a
-technical capability, not permission to run it: neither a full daily run nor
-missing bank slots resumes the stopped seeding plan. Any resumption needs
-Mikey's explicit app, scope and spending instruction.
+**Math Studio #2655 seeding was stopped by Mikey on October 4.** Its coverage and learner-health report remain daily duties. The `seed` command below is a technical capability, not permission to run it: neither a full daily run nor missing bank slots resumes the stopped plan. Any resumption needs Mikey's explicit app, scope and spending instruction.
 
 `generated-quiz` rules fill a question bank on the server: a question is
 written for one declared topic at one ladder step (GPT-6.1 Sol) and kept only
@@ -1924,7 +1767,7 @@ open the player with `admin identity inspect` before proposing anything, and
 propose to Mikey (revoke the app's rule, or a bucket ban) rather than acting.
 Never revoke an approval from a daily run.
 
-The same report carries `reviewLifecycle` (added 2026-09-15): the reviews'
+The same report carries `reviewLifecycle`: the reviews'
 audit trail counted per UTC day (`byDay`) and for the window (`totals`).
 `actions` counts every event: `request`, `approve`/`reject`/`revoke`,
 `publish` (the approved version went live), `propose`, `proposal_viewed` (the
@@ -1974,9 +1817,7 @@ otherwise act against either member without Mikey's explicit go-ahead.
 
 > Not legal advice. Have a Korean lawyer review this procedure.
 
-Mikey, 2026-09-27: "if someone did something wrong - especially if for
-example a teacher was being inappropriate to a kid - shouldnt we be able to
-help police investigate?"
+Mikey, 2026-09-27: Twinkle must be able to help police investigate wrongdoing, especially an adult or teacher acting inappropriately toward a child.
 
 **Automatic holds.** A report for sexual content or asking for personal
 info, or any report between a minor and an adult where both ages are known
@@ -2069,7 +1910,7 @@ lumine admin followup update 17 --revision 2 --status completed --note "Played t
 
 For an individually authorized task outside a full run, choose its owner
 explicitly. `get` reads the current revision; list and update use `--direct`
-to distinguish them from the existing run-bound commands:
+to distinguish them from the run-bound commands:
 
 ```bash
 lumine admin followup list --direct --identity zero --json
@@ -2077,11 +1918,11 @@ lumine admin followup get 17 --identity zero --json
 lumine admin followup update 17 --direct --identity zero --revision 2 --status blocked --note "Waiting for the published version." --json
 ```
 
-The direct path does not start or change a daily run, and its update records
-the selected bot, the operator, the evidence and a runless event in the audit
-trail. It does not authorize any reply or other action by itself. It requires
-the matching API deployment and CLI release; an older server rejects the new
-path and the CLI does not fall back to a full-run operation.
+The direct path does not start or change a daily run; its update records the
+selected bot, the operator, the evidence and a runless event in the audit
+trail. It does not authorize any reply or other action. It requires the
+matching API deployment and CLI release; an older server rejects it and the CLI
+does not fall back to a full-run operation.
 
 Read the original context, do the promised work, keep evidence, and report the
 real result to the member in the original context under the existing reply
@@ -2090,8 +1931,8 @@ require exact-version review evidence. Record `blocked` with a concrete next
 step when access, the creator, or Mikey's decision is needed. A completed
 daily run never completes promises automatically. All updates require the
 current revision and the correct bot; stale or sibling updates are refused.
-Updates without `--direct` continue to use the assigned bot's active full run.
-Daily reports include pending follow-ups and their latest progress.
+Updates without `--direct` use the assigned bot's active full run. Daily
+reports include pending follow-ups and their latest progress.
 
 Apply `add-ai-daily-followups.sql` before deploying this API/CLI capability.
 
@@ -2114,10 +1955,10 @@ lumine admin todo update 12 --status completed \
 ```
 
 Todos are private operator work, not Zero/Ciel public actions. They persist
-independently of daily runs and are therefore available before a run starts and
+independently of daily runs, so they are available before a run starts and
 after it closes. Creating or updating one uses the run-independent transactional
 audit path: canonical todo state and its private `todo.create` / `todo.update`
-audit response commit together, and no public bot, public mutation count, or
+audit response commit together; no public bot, public mutation count, or
 rotation signal is involved.
 
 Track implementation, release and verification separately when a carryover
@@ -2145,23 +1986,23 @@ is `pending` or `passed`. Any unfinished phase needs a concrete `nextAction`;
 passed verification needs `evidence`. Completion requires implementation ready
 (or unnecessary), release live (or unnecessary), and verification passed.
 Keep physical-device checks and observation windows pending until they happen.
-Legacy todos have `workflow: null`, which means unknown, never verified. An
+Legacy todos have `workflow: null`, meaning unknown, never verified. An
 update without `--workflow` preserves an existing workflow and cannot bypass
 its completion requirements.
 
-Every successful full `daily-run start` response automatically includes all
-unfinished items under `data.carryoverTodos`. The same run ID increments an
-item's surfacing telemetry at most once, even when start is retried. This is the
-canonical handoff: read it before discretionary new work, resume what can safely
+Every successful full `daily-run start` response includes all unfinished items
+under `data.carryoverTodos`. The same run ID increments an item's surfacing
+telemetry at most once, even when start is retried. This is the canonical
+handoff: read it before discretionary new work, resume what can safely
 progress after the run's mandatory newspaper/brief/conduct/log-review/cost/
-energy-budget duties, and record a
-concrete progress note before the run closes. The daily-run report includes the
-still-unfinished set again. Completing a daily run never silently completes its
-todos. A CLI carrying this contract rejects a start response that does not echo
-the canonical handoff, so a newer CLI against an API deployed before the todo
-migration cannot quietly treat unsupported telemetry as an empty list.
-A Featured-only start instead returns an explicitly suppressed, empty handoff
-and performs no todo reads, writes, capacity checks, or surfacing increments.
+energy-budget duties, and record a concrete progress note before the run
+closes. The daily-run report includes the still-unfinished set again.
+Completing a daily run never silently completes its todos. A CLI carrying this
+contract rejects a start response that does not echo the canonical handoff, so
+a newer CLI against an API deployed before the todo migration cannot quietly
+treat unsupported telemetry as an empty list. A Featured-only start returns an
+explicitly suppressed, empty handoff and performs no todo reads, writes,
+capacity checks, or surfacing increments.
 
 Evidence-dependent investigations must have a durable collection plan. Do not
 carry “still no recycle-under-load evidence” forward without checking the
@@ -2197,7 +2038,7 @@ next safe action. `unavailable`, `stale` or `incomplete` means investigate the
 collection gap. A healthy collector with no qualifying recycle means keep
 collecting, not stall or claim a failure. Save the relevant summary in the todo
 before the seven-day retention window passes. Missing/stale active-work or OOM
-observations remain unknown; they are never zero or idle by default.
+observations remain unknown, never zero or idle by default.
 
 Set investigation-specific acceptance criteria before interpreting results.
 For memory/recycle investigations, distinguish a long-lived steady-memory
@@ -2213,11 +2054,11 @@ and update todos; fixes and releases follow the project's existing authority rul
 `kind` is `task` or `experiment`. New items may start `open`, `in_progress`, or
 `blocked`; updates may also use `completed` or `cancelled`. A progress note is
 required for every update. For experiments, put the acceptance criteria in the
-initial details and use evidence—not implementation status—as the completion
-boundary. In particular, an AI-cost experiment is not complete until old-vs-new
+initial details and use evidence, not implementation status, as the completion
+boundary. An AI-cost experiment is not complete until old-vs-new
 response-quality parity is demonstrated; a cheaper but weaker user response is
 a failed experiment. Up to 50 unfinished items may be carried so the automatic
-start payload remains complete and bounded.
+start payload stays complete and bounded.
 
 ```ts
 type AdminTodo = {
@@ -2355,36 +2196,35 @@ timestamp and traverse descending IDs; bounded scans keep creation timestamps
 inside that confirmed interval. Bounded recommendation cursors freeze both the
 feed-ID high-water mark and the server timestamp, then traverse the indexed
 `(timeStamp, id)` order; this also catches a Daily Reflection whose old feed
-row moved forward when it was reshared. Explicit legacy scans retain the
-descending primary-key walk. A page
-can be empty while `hasMore` remains true; continue until `exhausted`. `--all`
-does that automatically, fsyncs each confirmed page to a private NDJSON
-candidate spool, and writes only bounded cursor, boundary, count, byte-length,
-and digest metadata to the private checkpoint. `--resume` continues only when
-the checkpoint belongs to the same API, run, and exact request and its confirmed
-spool prefix still matches those metadata; an unconfirmed fsynced tail is
-discarded before the next request. The final JSON collection is streamed from
-the spool and can be copied to a separate `--output` file, while `--checkpoint`
-remains resumable operational state. Subject `--after` is inclusive, and every
-opaque cursor is bound to its original filters.
+row moved forward when it was reshared. Explicit legacy scans keep the
+descending primary-key walk. A page can be empty while `hasMore` remains true;
+continue until `exhausted`. `--all` does that automatically, fsyncs each
+confirmed page to a private NDJSON candidate spool, and writes only bounded
+cursor, boundary, count, byte-length, and digest metadata to the private
+checkpoint. `--resume` continues only when the checkpoint belongs to the same
+API, run, and exact request and its confirmed spool prefix still matches those
+metadata; an unconfirmed fsynced tail is discarded before the next request. The
+final JSON collection is streamed from the spool and can be copied to a
+separate `--output` file, while `--checkpoint` remains resumable operational
+state. Subject `--after` is inclusive, and every opaque cursor is bound to its
+original filters.
 
 An automatic checkpoint filename includes a fingerprint of the exact request,
 so two scans with the same operation name and run ID but different subjects,
 server filters, client-side view filters, or result-transform inputs cannot
-overwrite one another. An exclusive adjacent lock rejects a
-second process using the same checkpoint while the first scan is active and
-recovers a lock only when its recorded process no longer exists. Resume still
-recognizes the pre-fingerprint default filename, validates its stored request
-fingerprint, and migrates it through the existing checkpoint path.
-Legacy Build-candidate checkpoints intentionally fail that validation because
-they did not bind the Site URL used to materialize candidate links; start those
-scans fresh so one result cannot mix origins.
+overwrite one another. An exclusive adjacent lock rejects a second process
+using the same checkpoint while the first scan is active and recovers a lock
+only when its recorded process no longer exists. Resume still recognizes the
+pre-fingerprint default filename, validates its stored request fingerprint, and
+migrates it through the existing checkpoint path. Legacy Build-candidate
+checkpoints intentionally fail that validation because they did not bind the
+Site URL used to materialize candidate links; start those scans fresh so one
+result cannot mix origins.
 
 For `--all --json`, stdout remains exactly one JSON value. Scan-start, first-
 page, every-tenth-page, and exhaustion progress is written to **stderr** with
-only page/scanned/candidate counts and the private checkpoint path. A long
-traversal therefore no longer looks stalled, while piping stdout to `jq` or a
-file remains safe.
+only page/scanned/candidate counts and the private checkpoint path, so piping
+stdout to `jq` or a file is safe.
 
 `Ctrl+C` and `SIGTERM` abort the in-flight page request, leave the last
 server-confirmed page fsynced in the private checkpoint/spool, and release the
@@ -2396,14 +2236,13 @@ another page. An interrupted request is never counted as queue coverage.
 Recommendations default to `--since-run`: the server uses the previous
 completed full run's start time, even if that gap exceeds 30 days. On a first
 run, the fallback begins seven days before the current run's stored start, so
-it cannot drift between pages. Insight reports retain their separate 30-day
-limit. That deliberate start-to-start overlap gives the queue
-at-least-once coverage when content arrives after the prior snapshot but before
-that run completes. `--after` supplies an explicit inclusive timestamp.
-All-history traversal is deliberately available only through
-`--include-legacy`. The CLI requires the API to echo the canonical `after`
-boundary for bounded modes, so deploying a new CLI against an older API cannot
-silently fall back to a million-row historical scan.
+it cannot drift between pages. Insight reports keep their separate 30-day
+limit. The start-to-start overlap gives the queue at-least-once coverage when
+content arrives after the prior snapshot but before that run completes.
+`--after` supplies an explicit inclusive timestamp. All-history traversal is
+available only through `--include-legacy`. The CLI requires the API to echo the
+canonical `after` boundary for bounded modes, so a new CLI against an older API
+cannot silently fall back to a million-row historical scan.
 
 `recommendations list` is the Earn Recommend picker, not a "new comments"
 feed: it returns only comments on subjects with an assigned effort level,
@@ -2411,23 +2250,22 @@ whose length exceeds that level's threshold (>100 / >250 / >450 / >700
 characters for effort ≤2 / 3 / 4 / 5), with no skip row and no existing
 recommendation from any effective Level 5+ user (1000+ AP or Teacher
 authority), Zero, or Ciel. Community-recommended and short comments are
-deliberately absent, so an empty page or an empty window is normal and is
-not evidence of a broken walk; Featured-subject comments are reviewed through
-the Featured comment scan instead. A successful `post recommend` does not
-imply the target was queue-eligible.
+deliberately absent, so an empty page or window is normal and not evidence of a
+broken walk; Featured-subject comments are reviewed through the Featured
+comment scan instead. A successful `post recommend` does not imply the target
+was queue-eligible.
 
 After upgrading the API and CLI to the stable run-start window, start a fresh
 `--since-run` scan with a new checkpoint path, without `--resume`. Older
 since-run checkpoints are rejected even when already exhausted: they may have
 captured the former 30-day reporting cap. They are left intact as evidence.
-Explicit `--after` and `--include-legacy` checkpoints retain their contracts.
+Explicit `--after` and `--include-legacy` checkpoints keep their contracts.
 
-Subject candidates follow the same window contract. They default to the
-previous completed full run's start (with the seven-day first-run fallback),
-accept an explicit inclusive `--after`, and require `--include-legacy` for a
-lifetime traversal. `--since-run`, `--after`, and `--include-legacy` are
-mutually exclusive. The CLI also requires the API to echo the bounded Subject
-window before accepting a page.
+Subject candidates follow the same window contract: default to the previous
+completed full run's start (seven-day first-run fallback), accept an explicit
+inclusive `--after`, and require `--include-legacy` for a lifetime traversal.
+`--since-run`, `--after`, and `--include-legacy` are mutually exclusive. The CLI
+requires the API to echo the bounded Subject window before accepting a page.
 
 `builds candidates` uses the admin publication-window endpoint, ordered by
 `publishedAt` and Build ID, not workspace `updatedAt`. Like Subject discovery,
@@ -2497,7 +2335,7 @@ of:
 
 The whole script is capped at **60 s**; it stops at the first failed step
 (element not found/not visible, budget exhausted, frame unreachable). Console
-evidence stays bounded exactly as before. `review.json` gains
+evidence stays bounded. `review.json` gains
 `screenshots: [{ label, path, bytes }]` (script screenshots only; the start
 screen stays in `screenshot`) and
 `interaction: { path, stepsPlanned, stepsCompleted, status, failedStep, frame,
@@ -2506,7 +2344,7 @@ path for screenshots, the error for a failed step). Both are `[]`/`null`
 without `--interact`. The review remains one receipt bound to one artifact: the
 published version is re-read after the script finishes, and a script that did
 not complete makes the receipt `failed` with
-`CLI_ADMIN_BUILD_REVIEW_INTERACTION_FAILED` (the completed steps and their
+`CLI_ADMIN_BUILD_REVIEW_INTERACTION_FAILED` (completed steps and their
 screenshots are still listed) so a draft can never cite interactions that did
 not happen. `comment draft --review-receipt` accepts a receipt only when every
 listed screenshot still exists unchanged and the script completed.
@@ -2610,11 +2448,11 @@ lumine admin post comments build:884 --all --output build-comments.json --json
 Build comment inspection accepts `build:<id>`, a public `/app/<id>` URL, or
 `--type build`. It reads all root-thread comments and replies through a
 snapshot-bound cursor, with full text and `parentCommentId`/`replyToCommentId`
-relationships.
-Only public, published, canonical owner Builds qualify; contribution branches
-and private/unpublished Builds are rejected. This is thread inspection, not
-evidence of having reviewed the published app. Build-comment publication still
-requires its separate version-bound review evidence.
+relationships. Only public, published, canonical owner Builds qualify;
+contribution branches and private/unpublished Builds are rejected. This is
+thread inspection, not evidence of having reviewed the published app.
+Build-comment publication still requires its separate version-bound review
+evidence.
 
 Schemas:
 
@@ -2799,18 +2637,17 @@ type FeaturedRotate = FeaturedList & {
 `reveal` publishes the existing hidden “viewed without responding” notification
 as the selected bot, with the ordinary notification and socket side effects.
 Effort assignment rejects an unrevealed secret subject. Creator attribution
-requires an attachment. Both effort assignment and creator attribution enforce
-the website's moderator-precedence rule: when a strictly higher-level
-moderator recorded the current value, the mutation fails with
-`CLI_ADMIN_MODERATOR_PRECEDENCE` (the bots compare at the shared canonical
-effective level). Every response is reloaded from the writer.
+requires an attachment. Both enforce the website's moderator-precedence rule:
+when a strictly higher-level moderator recorded the current value, the mutation
+fails with `CLI_ADMIN_MODERATOR_PRECEDENCE` (the bots compare at the shared
+canonical effective level). Every response is reloaded from the writer.
 
 Featured reorder is a complete-set replacement: it rejects duplicates,
 unknown/deleted IDs, missing current members, non-subject rows, and more than
 100 subjects. Permanent pins and editorial ordering policy are deliberately not
 hardcoded.
 
-When `lumine admin featured history` omits `--subject-ids`, the CLI reads the current Featured board once and requests history for those IDs in board order. Human output explicitly says that it defaulted to the current board; JSON and `--output` include `data.subjectSelection` with `source: "current-featured-board"`, `subjectIds`, and the same message. An empty board succeeds with empty subjects/events and `coverage: null`, explicitly stating that no history was requested. A failed or malformed board read fails rather than being treated as empty. Explicit `--subject-ids` keeps its existing behavior and skips the board read. Pagination retains the resolved IDs for the entire scan. A no-ID `--all --resume` requires the same board IDs in the same order; a changed board is rejected by checkpoint scope validation. If the board changes, use the previous result's explicit `subjectIds` for `--cursor`, or start a fresh `--all` scan with those IDs and a new checkpoint. An empty board cannot resume a prior scan or supply IDs for its cursor.
+When `lumine admin featured history` omits `--subject-ids`, the CLI reads the current Featured board once and requests history for those IDs in board order. Human output says it defaulted to the current board; JSON and `--output` include `data.subjectSelection` with `source: "current-featured-board"`, `subjectIds`, and the same message. An empty board succeeds with empty subjects/events and `coverage: null`, stating that no history was requested. A failed or malformed board read fails rather than being treated as empty. Explicit `--subject-ids` skips the board read. Pagination retains the resolved IDs for the entire scan. A no-ID `--all --resume` requires the same board IDs in the same order; a changed board is rejected by checkpoint scope validation. If the board changes, use the previous result's explicit `subjectIds` for `--cursor`, or start a fresh `--all` scan with those IDs and a new checkpoint. An empty board cannot resume a prior scan or supply IDs for its cursor.
 
 `featured history` is the compact canonical evidence path. It returns only
 coverage metadata, per-subject lifetime summaries, and paginated mutation
@@ -2818,7 +2655,7 @@ events; it does not repeat full audit before/after board snapshots. An event of
 any action proves the subject has appeared on Featured. `neverFeatured: true`
 is returned only when no event exists and the subject was created strictly
 after the finalized coverage boundary. `null` means the subject predates provable
-coverage—never convert that unknown into “never Featured.” Both the website
+coverage; never convert that unknown into “never Featured.” Both the website
 editor and Lumine mutations write this append-only history in the same
 transaction as the canonical board replacement.
 Each API read accepts up to **100 subject IDs**, independently of the
@@ -2826,9 +2663,9 @@ Each API read accepts up to **100 subject IDs**, independently of the
 lists (up to 20,000 IDs), exhausts every batch's event pages, and retains all
 per-subject summaries. Use the exact command with `--resume` after interruption;
 confirmed pages are not replayed. Single-batch `--cursor` remains available,
-but cannot be combined with `--all`. Multi-batch results explicitly use
+but cannot be combined with `--all`. Multi-batch results use
 `pagination.snapshotScope: "per-batch"`; events are ordered by input batch,
-then descending event ID within that batch—not by one global snapshot.
+then descending event ID within that batch, not by one global snapshot.
 `data.scan.batches` records each batch's coverage, snapshot and private spool.
 Deploy the matching API before using the expanded read bound.
 For a retry whose board transaction committed but whose canonical detail reload
@@ -2870,20 +2707,21 @@ The server also enforces live, recent, provably never-Featured additions. Pass
 defaults to seven days before the current Bangkok day's midnight. The exact
 approved-plan workflow below always requires an explicit cutoff.
 
-This mutation deliberately does not choose candidates or override the
-editorial gates above. Before invoking it, the management agent must have
-freshly reviewed the board, shown Mikey the removals and replacements, received
-his go-ahead, and verified that every proposed new addition is recent and has
-never previously been Featured from canonical evidence.
+This mutation does not choose candidates or override the editorial gates above.
+Before invoking it, the management agent must have freshly reviewed the board,
+shown Mikey the removals and replacements, received his go-ahead, and verified
+that every proposed new addition is recent and has never previously been
+Featured from canonical evidence.
 
 ### Exact approved refresh and resumable comment encouragement
 
 Keep current manual pins from the past two days (Mikey, October 13, 2026).
 Verify canonical pin history and exclude those subjects from removal proposals.
-Subject3529, “What is special about Twinkle?”, had an October13 keep instruction,
-but Mikey removed it on October19 at06:28:27UTC (canonical event2504).
-Do not restore it from that superseded keep note. An absent pin is still never restored. This supersedes the older
-instruction to offer yesterday's manual pins for rotation.
+Subject 3529, “What is special about Twinkle?”, had an October 13 keep
+instruction, but Mikey removed it on October 19 at 06:28:27 UTC (canonical event
+2504). Do not restore it from that superseded keep note. An absent pin is still
+never restored. This supersedes the older instruction to offer yesterday's
+manual pins for rotation.
 
 For the daily old-to-new proposal, prepare a canonical plan without changing pins:
 
@@ -2949,7 +2787,7 @@ coverage. A download alone never counts as a read or grants recommendations.
 After a resumed scan fills a gap, read those pages and acknowledge again.
 
 Acknowledge returns `data.reviewedCoverage` (the coverage receipt; its `id` is
-the `coverageId` the recommend step needs — it is a different audit row from
+the `coverageId` the recommend step needs, a different audit row from
 the review ID) and a ready-to-fill `data.decisionsTemplate`
 `{ reviewId, coverageId, selections: [] }`. With `--decisions-template <file>`
 the CLI also writes that template as a private mode-0600 file; only
@@ -3013,7 +2851,6 @@ counts describe canonical outcomes, not attempted commands or downloaded rows.
 Read comments that are already recommended too; use the page evidence for
 already-recommended and skipped-category totals rather than treating the
 report's selected `alreadyDone` actions as all previously recommended comments.
-
 ## Recommendation, Karma approval, and Twinkle rewards
 
 ```bash
@@ -3030,11 +2867,10 @@ Numeric targets default to `subject`. Use `subject:<id>`, `comment:<id>`,
 `--type`.
 
 For daily Featured-comment encouragement, prefer the review-bound
-`featured comments` workflow above so coverage and outcomes remain linked.
-The generic bare comment recommendation has the same basic default, but is
-not available in a Featured-only run. `--anyone-can-reward` and
-`--reward-twinkles` are separate, selective judgments, not required flags for an
-ordinary worthwhile comment.
+`featured comments` workflow above so coverage and outcomes stay linked.
+The generic bare comment recommendation is not available in a Featured-only run.
+`--anyone-can-reward` and `--reward-twinkles` are separate, selective judgments,
+not required for an ordinary worthwhile comment.
 Follow **Daily Featured comments and refresh** for full-thread coverage and
 the intentionally generous basic-recommendation threshold.
 
@@ -3098,9 +2934,8 @@ type RewardThree = Success<
 ```
 
 Zero/Ciel are normalized to effective Level 5 only inside the shared canonical
-recommendation-approval decision. This narrow rule does not grant delegation,
-management authority, or any other permission. A newly activated qualifying
-recommendation
+recommendation-approval decision. This grants no delegation, management
+authority, or other permission. A newly activated qualifying recommendation
 approves eligible earlier lower-level recommenders through the existing
 `users_rewards` recommendation mechanism and multiplier. It excludes the
 content author's self-recommendation, the approving bot, both management bots,
@@ -3110,11 +2945,10 @@ writer-locked state. A new approval reports the canonical 10-point contribution;
 a retry reports zero newly awarded and the same confirmed absolute balance.
 
 Recommendation history is checked across both management bots, so rotation
-does not recommend the same target again — unless the request asks for
-`--anyone-can-reward` and the other bot's recommendation does not carry that
-permission, in which case the actor proceeds with its own recommendation so
-the requested permission and paired reward are honored rather than silently
-dropped. When the other bot's recommendation does satisfy the request, the
+does not recommend the same target again. Exception: the request asks for
+`--anyone-can-reward` and the other bot's recommendation lacks that permission;
+then the actor makes its own recommendation so the permission and paired reward
+are honored. When the other bot's recommendation does satisfy the request, the
 `managementBotDeduplication` payload is returned and any requested 3-Twinkle
 reward is still processed. A bare recommend never downgrades an existing
 recommendation's anyone-can-reward permission; only an explicit
@@ -3125,18 +2959,18 @@ attempts cannot insert the same approval twice.
 
 Both the standalone and combined reward paths also inspect existing 3-Twinkle
 management rewards across Zero and Ciel. A canonical three from either bot is
-reported as already rewarded instead of adding another management reward.
+reported as already rewarded; no second management reward is added.
 
 The separate 3-Twinkle reward targets the worthwhile canonical post or comment.
 It uses the selected bot and Twinkle's ordinary canonical Level and recipient
 rules; Mikey is never charged while Zero/Ciel is displayed. Zero and Ciel are
 exempt from recommendation and reward coin charges in the shared canonical
 mutation helpers, so neither `insufficient_coins` nor a bot balance decrease
-can occur for these actors; every human actor still pays under the existing
-Level-based rules. The
-reward transaction serializes the rewarder and cap-bearing content row, then
-adds only the amount needed for that actor to total exactly three. Existing
-three is `already_done`; a cap is `maximum_reached`.
+can occur for them; every human actor still pays under the existing
+Level-based rules. The reward transaction serializes the rewarder and
+cap-bearing content row, then adds only the amount needed for that actor to
+total exactly three. Existing three is `already_done`; a cap is
+`maximum_reached`.
 If recommendation succeeds but reward fails, the command exits nonzero with
 `partial_failure` and `retrySafe: true`.
 
@@ -3151,23 +2985,23 @@ lumine admin post skip-batch --target-file skip-targets.json \
   --checkpoint skip-progress.json --resume --json
 ```
 
-A skip records that the management rotation has judged a recommend-queue item
-and decided not to act, so neither bot's queue resurfaces it. It writes the
+A skip records that the management rotation judged a recommend-queue item and
+decided not to act, so neither bot's queue resurfaces it. It writes the
 same canonical `users_earn_skip_status` row the website's Earn page writes
 (`earnType 'karma'`, `action 'recommendation'`) under the acting bot, and the
-queue eligibility predicates honor either bot's row. Human moderators' own
-Earn queues are deliberately unaffected: the bots are not database supermods,
-so a bot skip never hides content from a human, who may judge differently.
+queue eligibility predicates honor either bot's row. Human moderators' Earn
+queues are deliberately unaffected: the bots are not database supermods, so a
+bot skip never hides content from a human, who may judge differently.
 
 Targets are `comment`, `aiStory`, and `dailyReflection` only; subjects leave
 their queue through effort assignment. Skipping an already-skipped item (by
 either bot) returns `already_done` with `changed: false`. The optional
 `--reason` (at most 500 characters) is stored in the private audit row's
-metadata — it is the agent's memory of the judgment, not public content.
+metadata as the agent's memory of the judgment, not public content.
 The skip requires the `recommendation:write` scope and is audited like every
 other mutation.
 
-`skip-batch` accepts either a JSON array (strings or `{ "target", "reason" }`
+`skip-batch` accepts a JSON array (strings or `{ "target", "reason" }`
 objects), `{ "targets": [...] }`, or one target per text line. It deduplicates
 targets, submits them sequentially through the same canonical audited endpoint,
 and checkpoints only after each response is confirmed. `--resume` verifies the
@@ -3199,7 +3033,7 @@ from the claim digest and include the linked article on every front page; use
 it as the lead only when its significance warrants it. Verify author, level,
 source link and printed placement, and avoid duplicate posts or repeated release
 coverage. If no relevant changes shipped, say so briefly without inventing news.
-The standing instruction authorizes this scoped post and coverage; it grants no
+The standing instruction authorizes this scoped post and coverage only, no
 unrelated release authority. Keep release evidence and private diagnostics out
 of the public article. Follow the repository's daily website-code update
 procedure and the existing dated-revision contract for an approved correction.
@@ -3221,15 +3055,15 @@ and `releaseEvidence`: an array of `{repository, commit, deployedAt, summary}`.
 Use full Git commit hashes and verified deployment times inside the completed
 coverage interval. The evidence stays private; put only useful member-facing
 information in the article. An empty evidence array is allowed when no relevant
-changes shipped, and the article should say that briefly. The command does not
-independently verify GitHub/Vercel receipts: the operator must do that first.
+changes shipped; the article should say that briefly. The command does not
+verify GitHub/Vercel receipts: the operator must do that first.
 
 One canonical article is permitted per scheduled editorial day. An identical
 retry returns its existing Subject instead of notifying members again; a
 changed payload, changed duty bot or edited/deleted post requires inspection
 and is not silently overwritten or recreated. Preview reports any existing
-Subject. The already-published October28 article is reserved as a legacy post;
-reuse Subject37265 rather than trying to republish it with this new command.
+Subject. The already-published October 28 article is a reserved legacy post;
+reuse Subject 37265 rather than republishing it with this command.
 
 **Audience (Mikey, 2026-09-15): children and young Twinkle users aged 10–15.**
 Choose and write stories for what these readers would voluntarily spend time
@@ -3249,7 +3083,7 @@ them to founder biography or an administrative announcement.
 
 **Editorial judgment (Mikey, 2026-10-15):** a Masterpiece grade never automatically
 earns a front-page slot or the lead. Use the project's canonical `CORE_VALUES.md`
-to assess the actual story's relevance to the community and its culture, alongside
+to assess the story's relevance to the community and its culture, alongside
 the other eligible stories. Give the substantive reason for the placement;
 neither the grade nor Mikey's authorship supplies that reason.
 
@@ -3273,8 +3107,8 @@ lumine admin news print --json
 `news edition` is read-only. It returns the printed edition for the day
 (default today): edition id, revision, coverage window, the lead, and every
 story with its section (`front`, `community`, ...) and position, URL, author
-and cited/covered event keys, plus briefs, announcements and source keys. Use it
-to confirm what is on the front page, such as the daily update article's URL.
+and cited/covered event keys, plus briefs, announcements and source keys. Use
+it to confirm what is on the front page, such as the daily update article's URL.
 `printed: false` means no edition exists for that day.
 
 When there is nothing to claim (today's paper is already printed, or the next
@@ -3286,9 +3120,8 @@ UTC (09:00 KST).
 
 The Twinkle Newspaper (Build app 1929) is normally printed by a community
 member spending their own AI Energy. Making sure today's paper exists is part
-of every delegated website-management run: check `lumine admin news` early in
-the run, and if `printedToday` is false with no edition `pending` or
-`generating`, print it.
+of every delegated website-management run: check `lumine admin news` early, and
+if `printedToday` is false with no edition `pending` or `generating`, print it.
 
 **Preferred: write the editorial yourself.** `news claim` reserves today's
 edition under the server's generation lease and returns the exact canonical
@@ -3303,13 +3136,12 @@ explicit `--edition-id` / `--lease-token` form remains available for backwards
 compatibility.
 
 Write a `GeneratedEditorial` JSON and send it back within the ten-minute lease.
-The server still treats the editorial as untrusted regardless of author: every
-story must cite an exact `eventKey`
-from the digest, front-page `sourceQuote`s must be verbatim contiguous
-passages of the cited event's summary (invalid quotes are replaced with
-canonical text), section and page layout are server-enforced, announcements
-are appended verbatim outside your output, and source visibility is
-re-checked transactionally at commit.
+The server treats the editorial as untrusted regardless of author: every
+story must cite an exact `eventKey` from the digest, front-page `sourceQuote`s
+must be verbatim contiguous passages of the cited event's summary (invalid
+quotes are replaced with canonical text), section and page layout are
+server-enforced, announcements are appended verbatim outside your output, and
+source visibility is re-checked transactionally at commit.
 
 ```ts
 type GeneratedEditorial = {
@@ -3351,46 +3183,44 @@ Subjects and shared Daily Reflections. A bounded digest dominated by experiment
 videos does not establish that the day has no other stories. Check the available
 canonical sources within the coverage window, and keep replacement stories within
 the claim and citation contract. Do not stop at deletion when suitable material
-is available, or invent filler to reach an article count.
+is available, and do not invent filler to reach an article count.
 
 - **`coveredEventKeys`** — an arc story may list the other events it narrates
   (an app's release + its update stream + its open-sourcing; one member's
-  related posts). Covered events are omitted from the layout — the arc IS
+  related posts). Covered events are omitted from the layout; the arc is
   their coverage. Rules: a covered key must exist in the digest; a story
   cannot cover itself, the lead event, or any event that has its own story
   (citation wins); update/score/market notices are freely coverable; a
   Subject or shared Daily Reflection is coverable only by another primary
-  story **by the same author** — one member's story can never absorb another
-  member's post (that would be curation-by-omission through the back door).
+  story **by the same author**, so one member's story can never absorb another
+  member's post.
 - **Automatic roundups** — uncited app-UPDATE events (never new releases)
   and uncited score events fold into one compact "Workshop updates" /
-  "The rest of the scoreboard" story per page (one line each) instead of a
-  wall of template stubs. Uncited new releases, open-source listings, and
-  market sales still appear as individual stubs. So: write real stories for
-  what matters, use `coveredEventKeys` for arcs, and let the roundup absorb
-  the rest — but a post you'd rather not amplify still cannot be omitted;
-  flag it to Mikey instead.
+  "The rest of the scoreboard" story per page (one line each). Uncited new
+  releases, open-source listings, and market sales still appear as individual
+  stubs. So: write real stories for what matters, use `coveredEventKeys` for
+  arcs, and let the roundup absorb the rest. A post you would rather not
+  amplify still cannot be omitted; flag it to Mikey instead.
 
 Editorial rules (the same ones the server's own model works under): use only
-the supplied events — never world news, invented names, invented statistics,
+the supplied events, never world news, invented names, invented statistics,
 or unsupported claims. Subjects and shared Daily Reflections are the primary
 authored material; only a `section: "front"` event may be the lead. Preserve
 substance, names, and numbers. Do not mention official announcements (the
 server adds them), and give non-front events an empty `sourceQuote`.
 
-**Editorial craft.** The rules above make an edition valid; they do not make
-it good. The server already used the digest's `priority` numbers to select
-the bounded set of eligible events; those numbers do not do the editor's job
-within the returned digest. On a typical day every front subject arrives with
-the same priority, so treat a tied score (or recency) as no signal at all and
-make the call by reading:
+**Editorial craft.** The rules above make an edition valid, not good. The
+server already used the digest's `priority` numbers to select the bounded set
+of eligible events; they do not do the editor's job within the returned digest.
+On a typical day every front subject arrives with the same priority, so treat a
+tied score (or recency) as no signal and make the call by reading:
 
 - **Choose the lead for readers aged 10–15.** Lead with the eligible front
   event whose substance is most likely to catch their interest and reward
   reading, weighing community significance as well as immediate appeal.
   A substantive statement of shared values or purpose, a thoughtful
-  conversation, a funny or relatable reflection, a
-  striking creation, or an inviting community challenge can all qualify.
+  conversation, a funny or relatable reflection, a striking creation, or an
+  inviting community challenge can all qualify.
   Read the source and any supplied replies to understand the appeal; priority,
   recency, and the mere presence of an argument do not decide the lead.
 - **Thread a theme through the paper.** Pick the strongest idea of the day
@@ -3400,46 +3230,45 @@ make the call by reading:
   keep each story's meaning intact and avoid forcing a moral lesson.
 - **Cross-reference events into arcs.** The same thing often appears in the
   digest several times (an app's release, its open-sourcing, and its maker's
-  Daily Reflection about it). Write those as one story arc — the origin
-  story up front, the notices pointing back to it — instead of three
-  disconnected blurbs. Each story still cites only its own `eventKey`.
+  Daily Reflection about it). Write those as one story arc, origin
+  story up front and notices pointing back, instead of disconnected blurbs.
+  Each story still cites only its own `eventKey`.
 - **Headlines tell the story; they do not restate the title.** "Logged Out
   and Briefly Panicked, X Confirms: Twinkle Is 5% of Life" beats repeating
-  the post's title. Keep every fact traceable to digest text — the craft is
-  in selection and framing, never in invention.
+  the post's title. Keep every fact traceable to digest text; the craft is
+  in selection and framing, never invention.
 - **Work mechanics under the ten-minute lease.** Dump every front event's
   full summary to a file immediately after claiming, before writing a word.
-  Copy `sourceQuote`s byte-exact from the summary — curly apostrophes,
+  Copy `sourceQuote`s byte-exact from the summary: curly apostrophes,
   markdown asterisks, ellipsis dots and all (an inexact quote is silently
   replaced with canonical text). An event with an empty summary gets an
   empty `sourceQuote`; restate its title's facts in your story summary
   instead.
 
 Claim edge cases: a quiet day (no editorial events) is committed as the
-canonical quiet edition at claim time — no editorial needed, the response
+canonical quiet edition at claim time; no editorial is needed and the response
 says so. If the claim is not submitted before the lease expires, the server's
 press worker falls back to generating the edition itself. `news submit`
-failing with `CLI_ADMIN_NEWS_CLAIM_LOST` means the lease was superseded —
+failing with `CLI_ADMIN_NEWS_CLAIM_LOST` means the lease was superseded:
 re-check `lumine admin news` and claim again only if the paper still needs
 printing.
 
 **Repairing or revising an edition.** `news claim --date YYYY-MM-DD` leases an
 existing edition row, including a failed or pending day that never reached
 print, and returns a fresh digest of its coverage window (primary
-Subjects/Reflections are re-projected from canonical tables, and anything
+Subjects/Reflections are re-projected from canonical tables; anything
 since deleted or made private drops out). Submitting writes the first revision
-or appends the next one — every prior press run stays browsable in the archive,
+or appends the next one; every prior press run stays browsable in the archive,
 and later revisions never re-notify subscribers (only a day's first revision
 does).
 `--date` with **today's** date revises today's printed paper the same way,
 additionally extending the coverage window to claim time so the revision is
-written from the complete canonical day so far; this replaces the old
-owner-website-refresh dance and, unlike a refresh, spends no AI Energy
-(composed editorials never invoke a model). An unexpired in-flight press run
-still blocks the claim. Repair a historical edition only when it is genuinely
-degraded (missing masthead, missing lead, empty pages), not to rewrite
-history editorially; revising today to materially raise its editorial quality
-is a legitimate management action.
+written from the complete canonical day so far. Unlike an owner website
+refresh, this spends no AI Energy (composed editorials never invoke a model).
+An unexpired in-flight press run still blocks the claim. Repair a historical
+edition only when it is genuinely degraded (missing masthead, missing lead,
+empty pages), not to rewrite history editorially; revising today to materially
+raise its editorial quality is a legitimate management action.
 
 **Fallback: queue the server's own model.** `news print` reserves the edition
 and lets the server's press worker write it (spends provider credits). It is
@@ -3450,9 +3279,9 @@ paper is printed or being typeset.
 A dateless `news claim` and `news print` never reprint or refresh an
 already-printed edition; only the explicit dated repair/revision path above
 can append another revision. The acting bot is recorded as the requester, and
-the management bots are exempt from AI Energy for newspaper generation: the
-platform absorbs the cost, exactly like their coin-exempt recommends and
-rewards. When a day's first edition is printed, the server notifies the app's
+the management bots are exempt from AI Energy for newspaper generation (the
+platform absorbs the cost, as with their coin-exempt recommends and
+rewards). When a day's first edition is printed, the server notifies the app's
 notification subscribers (users can mute the app or unsubscribe in the app;
 the bots never need to send anything). All three mutations require the
 `news:print` scope (in every full run's base scopes) and are audited as `news.print`
@@ -3531,25 +3360,24 @@ last completed full review.**
 
 **Ordinary wrong answers and hallucinations are expected model limitations,
 not website incidents.** A factual error, mistaken puzzle answer, or imperfect
-reasoning alone does not warrant an escalation, engineering todo, or a code
+reasoning alone does not warrant an escalation, engineering todo, or code
 patch. Model quality improves through LLM upgrades; do not add hard-coded
 answer validators, secondary graders, forced research, correctness retry loops,
 or subject-specific rules to compensate. A normal conversational correction is
 enough when appropriate. This does not excuse actual harmful conduct or
 application failures, nor weaken security, permissions, billing, or canonical
-server-state checks: investigate those distinct problems on concrete evidence.
+server-state checks: investigate those on concrete evidence.
 
-The bots talk to children constantly — chat replies, Daily Reflection
-responses, autonomous comment-assistant comments — and a harmful message must
+The bots talk to children constantly (chat replies, Daily Reflection
+responses, autonomous comment-assistant comments), and a harmful message must
 never depend on a kid being brave enough to report it (real incident,
 2026-08-11: the reflection pipeline had Ciel scold a member on day 31 of his
-streak — "I'm telling you: Stop", guilt framing, ordering him to quit Daily
-Reflections — and it surfaced only because the kid showed Mikey).
+streak, "I'm telling you: Stop", with guilt framing and orders to quit Daily
+Reflections; it surfaced only because the kid showed Mikey).
 
 `bot-output` returns, windowed since the operator's last completed full run
-(`--days 1..30` overrides; the bare form sends no `days` parameter at all, so
-the API applies that default window — an older CLI wrongly validated the empty
-default and failed with "--days must be an integer"): `chatMessages` (every stored Zero/Ciel chat and
+(`--days 1..30` overrides; the bare form sends no `days` parameter, so
+the API applies its default window): `chatMessages` (every stored Zero/Ciel chat and
 reflection reply, with full text and recipient metadata when its best-effort
 prompt audit exists) and `comments`
 (every public bot comment/reply). Individual utterances are returned in full;
@@ -3562,17 +3390,17 @@ original time window and cannot be combined with `--days`. Do not complete the
 run while either flag remains true. The default window deliberately overlaps
 from the previous completed run's start, so output created after its review
 snapshot but before completion is reviewed again instead of being lost. Run it
-right after the brief, and **read every row** — the tool deliberately does no
+right after the brief, and **read every row**: the tool does no
 filtering, scoring, or keyword matching, because the judgment is the reviewing
 agent's.
 
-Chat output now also includes `messageKind`, `attachment`, and the stored
+Chat output also includes `messageKind`, `attachment`, and the stored
 `generation` outcome (success, failure, cancelled, generating, or unresolved).
 This is stored-message evidence, not a live request-guard check: do not call
 an empty row an orphan solely from its text. Hidden attachment locations and
 arbitrary settings/request keys are never returned. `source: voice` identifies
 newly recorded voice transcripts, while typed input during a call says `typed`;
-older replies correctly say `not-recorded`
+older replies say `not-recorded`
 because the historical schema did not distinguish typed text from voice.
 
 `bot-output context <messageId>` is a private, **run-independent** investigation.
@@ -3624,10 +3452,10 @@ Each unexpected exit is followed by a `[cluster] worker last work slot=… pid=�
 in_flight=[…] recent=[…]` line (added 2026-09-19). The worker writes that trail
 synchronously as each piece of work begins and ends, so it survives an abort
 inside a single synchronous burst. `in_flight` names the requests or socket
-events that were running when the process died; `recent` lists the last
+events running when the process died; `recent` lists the last
 sixteen begin/label/end records with their age before exit. Quote both lists
-verbatim in the report and in the todo: they are the evidence that pinpoints
-the code path. `unavailable (no trail file)` means the worker died before its
+verbatim in the report and in the todo: they pinpoint the code path.
+`unavailable (no trail file)` means the worker died before its
 trail existed or an older generation is still running; say so rather than
 guessing.
 
@@ -3647,8 +3475,8 @@ refuses without that headroom. The retention investigation uses the
 The bot-conduct review also owns a bounded production API log review. Bot
 responses, community-management reads, and delegated mutations can succeed at
 the HTTP layer while stdout records a degraded fallback/retry loop or stderr
-records a side-effect failure. Reviewing only `bot-output` can therefore miss
-the other half of what happened.
+records a side-effect failure, so reviewing only `bot-output` can miss
+the other half.
 
 For passive RSS/recycle investigations, use the read-only command independently
 of a daily run or production-log review:
@@ -3663,7 +3491,7 @@ different host. `collecting`, `incomplete`, `stale`, and `unavailable` describe
 evidence coverage, not a verdict that the system is healthy. A 404 means the
 API route is not deployed; an old primary generation can also lack collector
 samples after workers update. Record that activation gap and arrange an
-authorized release—do not silently close the investigation or force a recycle.
+authorized release; do not silently close the investigation or force a recycle.
 An observed topology recovery alone does not prove interrupted user work
 survived. Keep the evidence cutoff, gaps and actual outcomes in the relevant
 todo so the next run can continue.
@@ -3740,8 +3568,8 @@ snapshot, returns it as `needs_review`, and stops before taking another action.
 
 A dropped `start` response is the one case with no session file yet. The CLI
 persists its start request key (`runtime-log-review-start-intent.json` under
-`--output-dir`, next to `--review-session`, or — with neither flag — a
-per-account file in the OS temp directory) before sending, so simply rerunning
+`--output-dir`, next to `--review-session`, or, with neither flag, a
+per-account file in the OS temp directory) before sending, so rerunning
 the same `start` command replays that key and the API answers with the same
 review. The key survives only transport failures, timeouts, and 5xx answers; a
 definitive 4xx clears it, and a key that belongs to a finished review is
@@ -3787,15 +3615,15 @@ older `success` envelope. A review clears
 boundary is still stable, i.e. every byte now in the API error log arrived
 after that clear and was captured and acknowledged; errors that arrive before
 the boundary settles produce another `needs_review` snapshot first. Bytes still
-in the file at completion were reviewed but not cleared — the response reports
+in the file at completion were reviewed but not cleared: the response reports
 them as `retainedErrorBytes` and the next review's baseline captures them
-again — which is what keeps a steadily erroring service from turning the
+again, which keeps a steadily erroring service from turning the
 review into an endless clear/capture/acknowledge loop. Normal output after the
 acknowledged post-clear snapshot is outside that finite review cutoff and
-belongs to the next review. The `needs_review` loop itself is bounded only by
+belongs to the next review. The `needs_review` loop is bounded only by
 the review's 24-hour lifetime: if errors arrive faster than a finish
 round-trip, every `finish` returns another snapshot and the boundary never
-settles. `abandon` is the escape in that case — it releases the review without
+settles. `abandon` is the escape then: it releases the review without
 clearing anything, and the next review's baseline picks the bytes up again.
 Never delete, recreate, editor-save, or manually truncate a live log, and never
 clear stdout or optimizer logs through this workflow.
@@ -3830,7 +3658,7 @@ an actionable finding has not been recorded.
 **Purpose and privacy boundary:** this audits how Twinkle's bots treated
 members; it is not thought-policing or a moderation queue for members' private
 use of the tool. The question is whether Zero or Ciel inflicted, encouraged,
-or operationally facilitated potential harm — not whether a member's private
+or operationally facilitated potential harm, not whether a member's private
 idea is taboo, upsetting, sexual, violent, or angry. Treat private human
 messages and creative work as confidential context. Read every bot-authored
 row, but inspect adjacent human messages only when the minimum necessary
@@ -3857,8 +3685,8 @@ abuse, or another actual crime is categorically different from fantasy. A bot
 that supplies such operational instructions commits an urgent conduct
 violation. A bot that refuses and redirects safely has behaved correctly; the
 member's request becomes a separate private safety escalation only when the
-available context shows a concrete, credible bridge to real-world harm — such
-as an identifiable target, expressed intent, means, planning, or concealment —
+available context shows a concrete, credible bridge to real-world harm, such
+as an identifiable target, expressed intent, means, planning, or concealment,
 not merely because a disturbing thought or fictional premise exists.
 
 **Position-of-trust safeguarding rule (Mikey's direction, 2026-08-19):** an
@@ -3866,7 +3694,7 @@ adult teacher, or another adult in a comparable position of authority and
 direct access to children, creating or requesting sexual content about an
 underage child is always a private safeguarding escalation, even when framed
 as fiction. The mandatory flag follows from the adult's power, duty of care,
-and access to students — not from treating sex as uniquely taboo. Preserve only
+and access to students, not from treating sex as uniquely taboo. Preserve only
 the minimum necessary evidence and report it privately to Mikey so he can tell
 Andrew and decide the response. A flag is not a public accusation or automatic
 finding of guilt; do not contact the teacher, students, or families without
@@ -3882,19 +3710,19 @@ minimal review, but it never authorizes browsing unrelated private activity.
 
 Judge against the same values the editorial priorities encode:
 
-- **premises must be real.** The 08-11 message didn't merely choose a bad
-  tone — it fabricated the entire crisis that justified the tone: nothing the
-  child said showed reflections hurting his studying, and a 31-day streak
-  proves only consistency. Check every factual claim a bot makes about a
-  child's life ("this is taking too much of your time", "this is hurting
-  your grades") against what the child actually said; advice built on an
-  invented premise is a violation even when gently worded;
+- **premises must be real.** The 08-11 message fabricated the entire crisis
+  that justified its tone: nothing the child said showed reflections hurting
+  his studying, and a 31-day streak proves only consistency. Check every
+  factual claim a bot makes about a child's life ("this is taking too much of
+  your time", "this is hurting your grades") against what the child actually
+  said; advice built on an invented premise is a violation even when gently
+  worded;
 - warmth and encouragement, never pressure, guilt, or shame;
-- a bot never commands a child — not to stop a habit, not to start one;
+- a bot never commands a child, not to stop a habit and not to start one;
   advice offers, it does not order ("I'm telling you: Stop" is over the line
   no matter how caring the intent);
 - no emotional-burden framing ("I can't do this anymore", "that's my fault,
-  I should have been stronger") — the bots must not make a child responsible
+  I should have been stronger"); the bots must not make a child responsible
   for the bot's feelings;
 - no value inversion: Twinkle encourages curiosity, creativity, reflection,
   and personal agency. A bot ranking a child's priorities for them (exams
@@ -3907,8 +3735,8 @@ Judge against the same values the editorial priorities encode:
   still helping you, or would a break feel better?"), never a decree.
 
 A bot-conduct violation or mandatory safeguarding signal goes on the
-escalation list with the smallest excerpt and identity needed to evaluate it —
-top of the list when urgent. Do not apologize as the bot, edit, contact the
+escalation list with the smallest excerpt and identity needed to evaluate it,
+at the top of the list when urgent. Do not apologize as the bot, edit, contact the
 member, or otherwise clean up without Mikey's direction; he decides the
 remedy. When he explicitly directs a private correction, use the composed-only
 existing-DM path (no model and no AI Energy):
@@ -3922,7 +3750,6 @@ and only works when that bot and member already have a direct channel. It
 never opens a new conversation. The message is audited and idempotent, reopens
 the existing DM canonically, and leaves the child's unread pointer untouched.
 A full-run report that skipped the conduct review is incomplete.
-
 ## Notable suggestions (the site ranks, Mikey decides; added 2026-10-10)
 
 ```bash
@@ -3936,7 +3763,7 @@ lumine admin notable note Chu --polarity positive --trait "helps others" \
 lumine admin notable dismiss Chu --note "not yet"  # Mikey declined; suggested again only after a clear rise
 ```
 
-Four kinds of valuable person (Mikey's standard). Each kind is ranked separately, and a member is notable for any one:
+Four kinds of valuable person (Mikey's standard). Each kind is ranked separately; a member is notable for any one:
 - **builder:** building days, builds improved over 3+ days, distinct players, other kids earning in their builds, merged contributions, readers of their chapters.
 - **adapter:** activity kinds used, tools new to them, apps earned in, unfamiliar Bounties apps tried.
 - **thinker:** puzzles others had failed that they solved, first-ever solves, solves after misses, hardest puzzle rating, grammar skills mastered, thoughtful daily answers, Grammarbles level.
@@ -3963,85 +3790,20 @@ lumine admin notable add 12647 --note "Top authored-activity kid of the window: 
 lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
 
-Read-only management insights for the delegated workflow, windowed since the
-operator's last completed full run by default (`--days 1..30` overrides;
-capped at 30 days). Call it early in every full daily review — right after the
-newspaper check — and end every full-run report with an **"Insights for
-Mikey"** section carrying only
-the deltas and anomalies worth his time, next to the escalation list. Never
-dump raw sections at him.
+Read-only management insights, windowed since the operator's last completed full run by default (`--days 1..30` overrides; capped at 30 days). Call it early in every full daily review, right after the newspaper check. End every full-run report with an **"Insights for Mikey"** section, next to the escalation list, carrying only the deltas and anomalies worth his time. Never dump raw sections at him.
 
 ### Jev serving and audits (standing duty, every full daily review; updated 2026-09-23)
 
-**September 23, 2026: LLM audits retired.** Mikey judged the Jev experiment a
-success and asked to drop the LLM comparison on served routes. Comments, chat
-routing and Lumine Auto no longer run any background LLM audit; the LLM runs
-only when Jev cannot decide. From that day, audit coverage, paired/served
-disagreements and the `jev_reply_gate_audit`, `jev_chat_routing_audit` and
-`jev_lumine_model_audit` operations read zero by design; do not report that as
-missing evidence. Report fallback rates and reasons instead. Auto rows served
-without a comparison carry `baselineStatus: not_run`; its fallback LLM spend is
-`lumine_model_fallback`. The eight comparison-only routing families below are
-unchanged. Chat routing is also off since September 23
-(`JEV_CHAT_ROUTING_ENABLED`, default off; Jev served ~1% of chats and could not
-judge when a reply needs older history), so zero chat serving rows is expected.
-The current daily procedure follows. Paired reaction/emoji checks and the 5%
-served-route audit belong to the historical pilot, not new daily evidence.
+**September 23, 2026: LLM audits retired** (Mikey). Comments, chat routing and Lumine Auto run no background LLM audit; the LLM runs only when Jev cannot decide. Audit coverage, paired/served disagreements and the `jev_reply_gate_audit`, `jev_chat_routing_audit` and `jev_lumine_model_audit` operations read zero by design: do not report that as missing evidence; report fallback rates and reasons instead. Auto rows served without a comparison carry `baselineStatus: not_run`; its fallback LLM spend is `lumine_model_fallback`. The eight comparison-only routing families below are unchanged. Chat routing is off (`JEV_CHAT_ROUTING_ENABLED`, default off), so zero chat serving rows is expected. Paired reaction/emoji checks and the 5% served-route audit are historical pilot, not new daily evidence.
 
-Read `data.jevPilot` from `lumine admin brief --json` and carry it into
-the full report for Mikey. The active `daily-run report --json` also includes
-`data.report.brief.jevPilot`. This duty does not authorize a separate full run.
-If the deployed API lacks the field, say the telemetry is not deployed; do not
-treat a missing section as zero traffic or a healthy pilot.
+Read `data.jevPilot` from `lumine admin brief --json` and carry it into the full report for Mikey (the active `daily-run report --json` also has `data.report.brief.jevPilot`). This duty does not authorize a separate full run. If the deployed API lacks the field, say the telemetry is not deployed; a missing section is not zero traffic or a healthy pilot.
 
-State the configuration and operating status even when off/blocked/awaiting
-samples. Headline the named last completed UTC day, compare with the trailing
-seven completed days, and keep the in-progress day separate. Separate
-`bySurface.comment` from `bySurface.chat`. Report real selections, fallback
-rates and reasons, `serving.decisionLatencyMs` p50/p95, provider failures,
-pending observations, unknown usage and ledger gaps. Calls avoided are a count,
-not measured dollar savings. No chat selections while routing is off and no
-served-route audit comparisons are expected; do not manufacture missing-data
-findings from them. Identify synthetic deployment probes separately.
-Mikey explicitly requested all eligible requests with no daily request cap
-(`dailyLimit: 0`) and a cost report during every full website-management run.
-Run `lumine admin ai-costs day YYYY-MM-DD --json` for the last completed UTC day.
-Report the canonical `data.dailyAiCosts.byOperation` USD totals for enabled serve
-and shadow operations, including Auto and its fallback. Keep any historical
-baseline-audit costs separate; new served-route audit calls are not expected.
-Report unfinished selection telemetry; synthetic probes are
-excluded from performance metrics but included in daily request and cost counts.
-If `telemetryStatus: partial` or `telemetryComplete: false`, detail metrics are a
-bounded recent sample, not full-day performance or cost; use the canonical daily
-AI-cost report for complete cost totals and record the coverage gap.
-Known Jev spend and `jev_reply_gate_audit` calls are already in application AI
-costs: never add them again or infer net savings from Jev cost alone. Agreement
-is not accuracy; confidence is not a measured success rate.
+State the configuration and operating status even when off/blocked/awaiting samples. Headline the named last completed UTC day, compare with the trailing seven completed days, and keep the in-progress day separate. Separate `bySurface.comment` from `bySurface.chat`. Report real selections, fallback rates and reasons, `serving.decisionLatencyMs` p50/p95, provider failures, pending observations, unknown usage and ledger gaps. Calls avoided are a count, not measured dollar savings. While routing is off, no chat selections or served-route audit comparisons are expected; do not manufacture missing-data findings from them. Identify synthetic deployment probes separately.
+Mikey requested all eligible requests with no daily request cap (`dailyLimit: 0`) and a cost report during every full website-management run. Run `lumine admin ai-costs day YYYY-MM-DD --json` for the last completed UTC day and report the canonical `data.dailyAiCosts.byOperation` USD totals for enabled serve and shadow operations, including Auto and its fallback. Keep historical baseline-audit costs separate; new served-route audit calls are not expected. Report unfinished selection telemetry; synthetic probes are excluded from performance metrics but included in daily request and cost counts. If `telemetryStatus: partial` or `telemetryComplete: false`, detail metrics are a bounded recent sample, not full-day performance or cost: use the canonical daily AI-cost report for complete totals and record the coverage gap. Known Jev spend and `jev_reply_gate_audit` calls are already in application AI costs: never add them again or infer net savings from Jev cost alone. Agreement is not accuracy; confidence is not a measured success rate.
 
-Privately inspect the bounded `reviewCandidates` when needed, name what was
-actually reviewed, and account for edited comments or chat messages. Use the
-candidate's surface and target ID to find the correct canonical record. Ordinary model disagreements
-are evaluation findings; outages, stuck telemetry or missing ledger entries are
-operational findings. Report a recommendation to continue, adjust or stop, without
-automatically changing mode, scope or caps.
+Privately inspect the bounded `reviewCandidates` when needed, name what was actually reviewed, and account for edited comments or chat messages. Use the candidate's surface and target ID to find the correct canonical record. Ordinary model disagreements are evaluation findings; outages, stuck telemetry or missing ledger entries are operational findings. Report a recommendation to continue, adjust or stop, without automatically changing mode, scope or caps.
 
-For actual comparisons from the separate shadow families or retained historical
-pilot, preserve Mikey's September 21 case-review requirement. For each reviewed event give the minimum
-relevant excerpt/context, field name and plain-language meaning, exact baseline
-and JEV values, selected value/source and fallback, observed outcome, and your
-assessment with evidence. Explicitly allow “both defensible” or “insufficient
-evidence”; the existing LLM is not ground truth. State reviewed/total coverage and
-rubric version. A bad delivered answer does not establish which routing choice
-caused it, and the alternative model's answer was not necessarily generated.
-`requiresPreviousMessages` means additional retrieval beyond supplied recent
-context; `requiresMathVerification` also covers answer/tutoring verification in
-non-math subjects. Historical v1/v2 telemetry records both decisions and source
-IDs, not original conversation text, model explanations or human verdicts. Read
-canonical context privately and qualify historical reconstruction when edited,
-deleted or missing. The September 21 expansion adds bounded, expiring private
-input snapshots as described below.
-See `twinkle-api/JEV_PILOT.md` for configuration,
-the synthetic evaluation step and release checks.
+For actual comparisons from the separate shadow families or retained historical pilot, keep Mikey's September 21 case-review requirement. For each reviewed event give the minimum relevant excerpt/context, field name and plain-language meaning, exact baseline and JEV values, selected value/source and fallback, observed outcome, and your assessment with evidence. Explicitly allow "both defensible" or "insufficient evidence"; the existing LLM is not ground truth. State reviewed/total coverage and rubric version. A bad delivered answer does not establish which routing choice caused it, and the alternative model's answer was not necessarily generated. `requiresPreviousMessages` means additional retrieval beyond supplied recent context; `requiresMathVerification` also covers answer/tutoring verification in non-math subjects. Historical v1/v2 telemetry records both decisions and source IDs, not original conversation text, model explanations or human verdicts. Read canonical context privately and qualify historical reconstruction when edited, deleted or missing. The September 21 expansion adds bounded, expiring private input snapshots as described below. See `twinkle-api/JEV_PILOT.md` for configuration, the synthetic evaluation step and release checks.
 
 ### JEV images (standing duty, every full daily review; added 2026-11-01)
 
@@ -4056,95 +3818,25 @@ lumine admin jev-images decide --area thumbnail --key subject:37265 --decision k
 lumine admin jev-images switch --area sdk_decide --build <id> --mode on|off   # one app's image decisions (no per-app cap)
 ```
 
-JEV image checks (Mikey, November 1) send pictures to JEV (`jev-1.13.0`,
-pinned) with the `TypeSafe-Danger-Zone-Images` opt-in. The vendor marks images
-experimental. **Every answer is advisory:** never the only gate, never a
-child-safety decision and never a reason to pay or withhold a reward (standing
-ruling 11-01). Areas: `arena_paper` (paper-upload pre-screen notes in
-`approvals show`), `arena_picture` (picture-bank audit), `thumbnail` (Featured
-thumbnail notes, on by default, cap 2000/day) and `sdk_decide`
-(`Twinkle.ai.decide` with images, a preview, **off** until Mikey turns it on).
-`study_record` has no caller: study-record-v1 records are text only, so there
-are no photos to check, and the area stays off.
+JEV image checks (Mikey, November 1) send pictures to JEV (`jev-1.13.0`, pinned) with the `TypeSafe-Danger-Zone-Images` opt-in. The vendor marks images experimental. **Every answer is advisory:** never the only gate, never a child-safety decision and never a reason to pay or withhold a reward (standing ruling 11-01). Areas: `arena_paper` (paper-upload pre-screen notes in `approvals show`), `arena_picture` (picture-bank audit), `thumbnail` (Featured thumbnail notes, on by default, cap 2000/day) and `sdk_decide` (`Twinkle.ai.decide` with images, a preview, **off** until Mikey turns it on). `study_record` has no caller: study-record-v1 records are text only, so there are no photos to check, and the area stays off.
 
-Each check carries a small coloured square and asks its colour. A wrong or
-unsure colour, or an answer from a different model, means the pictures were
-dropped. The check is retried once (`droppedRetries`), then returns
-`images_dropped`. An unavailable check (off, capped, timeout, provider error,
-dropped images, tables missing) leaves the caller exactly as it was before.
+Each check carries a small coloured square and asks its colour. A wrong or unsure colour, or an answer from a different model, means the pictures were dropped. The check is retried once (`droppedRetries`), then returns `images_dropped`. An unavailable check (off, capped, timeout, provider error, dropped images, tables missing) leaves the caller exactly as it was before.
 
-`daily-run gather` saves the report as `jev-images.json`. Give the full report a
-**JEV images** section:
-- per area: mode and source, daily cap and today's use, checks, errors,
-  timeouts, dropped-image retries and give-ups, latency p50/p95, tokens and cost;
-- agreement between advisories and final decisions (`agreed/scored`), every
-  listed disagreement and the flagged items still awaiting a decision;
-- every `escalations` entry. Thresholds (`thresholds` in the JSON): error rate
-  above 20% or timeouts above 10% (at least 5 sent checks), dropped-image retries
-  above 5% of requests or any give-up, daily cost above $0.10 and 3x the previous
-  7-day average, daily cost above $2, agreement below 80% over at least 10
-  decided items, and any check skipped at the cap.
+`daily-run gather` saves the report as `jev-images.json`. Give the full report a **JEV images** section:
+- per area: mode and source, daily cap and today's use, checks, errors, timeouts, dropped-image retries and give-ups, latency p50/p95, tokens and cost;
+- agreement between advisories and final decisions (`agreed/scored`), every listed disagreement and the flagged items still awaiting a decision;
+- every `escalations` entry. Thresholds (`thresholds` in the JSON): error rate above 20% or timeouts above 10% (at least 5 sent checks), dropped-image retries above 5% of requests or any give-up, daily cost above $0.10 and 3x the previous 7-day average, daily cost above $2, agreement below 80% over at least 10 decided items, and any check skipped at the cap.
 
-`coverage.status: store_unavailable` means the tables are not migrated: report
-"not deployed", not a quiet day. A failed gather step is unavailable evidence.
-JEV image spend is also in the AI ledger (`surface: jev_images`), so never add
-it to the AI cost total a second time. Agreement is not accuracy: a
-disagreement can be JEV's mistake or the reviewer's, so read the item before
-saying which.
+`coverage.status: store_unavailable` means the tables are not migrated: report "not deployed", not a quiet day. A failed gather step is unavailable evidence. JEV image spend is also in the AI ledger (`surface: jev_images`), so never add it to the AI cost total a second time. Agreement is not accuracy: a disagreement can be JEV's mistake or the reviewer's, so read the item before saying which.
 
-**Paper pre-screen.** For a pending `arenaPaper`, `approvals show <id>` adds a
-`prescreen` block: per page, whether it looks like a test page, legibility, a
-guess at the exam family and printed year, whether it fits its tags, plus
-blank-looking and duplicate pages (plain image arithmetic). Results are saved
-per page, so a second `show` makes no new call (`(saved)`). Add
-`?prescreen=off` to the API read to skip it. The approval criterion is
-unchanged (a real exam paper matching its tags, ruling 10-29): read every page
-yourself. Approve/reject records the final decision for agreement.
+**Paper pre-screen.** For a pending `arenaPaper`, `approvals show <id>` adds a `prescreen` block: per page, whether it looks like a test page, legibility, a guess at the exam family and printed year, whether it fits its tags, plus blank-looking and duplicate pages (plain image arithmetic). Results are saved per page, so a second `show` makes no new call (`(saved)`). Add `?prescreen=off` to the API read to skip it. The approval criterion is unchanged (a real exam paper matching its tags, ruling 10-29): read every page yourself. Approve/reject records the final decision for agreement.
 
-**Picture-bank audit.** `arena picture-audit` reads live items with a picture
-and asks fixed questions. For 수능 listening #4 it asks which labelled object
-mismatches the script, whether the keyed object is drawn as briefed, whether
-the ① to ⑤ labels are present, and whether there is stray text. For picture
-choices it asks which picture matches the heard sentence and whether every
-picture is readable. For other single pictures it asks whether the picture is
-readable and whether there is stray text. Picture choices are drawn by the web,
-so pass `--renders <dir>` containing `<itemId>.png` renders of the item as
-printed, for example from an Arena render script. Without one, the item is
-listed under `needsRender`. The command never retires or edits an item. Read
-each `review` item yourself. Record `keep`, `fix` or `retired` with
-`jev-images decide`. Retiring an item through `arena status` records `retired`
-automatically. Fixing or retiring live items needs the usual authorization.
+**Picture-bank audit.** `arena picture-audit` reads live items with a picture and asks fixed questions. For 수능 listening #4: which labelled object mismatches the script, whether the keyed object is drawn as briefed, whether the ① to ⑤ labels are present, and whether there is stray text. For picture choices: which picture matches the heard sentence and whether every picture is readable. For other single pictures: whether the picture is readable and whether there is stray text. Picture choices are drawn by the web, so pass `--renders <dir>` containing `<itemId>.png` renders of the item as printed, for example from an Arena render script. Without one, the item is listed under `needsRender`. The command never retires or edits an item. Read each `review` item yourself. Record `keep`, `fix` or `retired` with `jev-images decide`. Retiring an item through `arena status` records `retired` automatically. Fixing or retiring live items needs the usual authorization.
 
-**Featured thumbnails.** `featured candidates` adds a `thumbnailCheck` to each
-eligible candidate and a `thumbnailChecks` summary; `jev-images thumbnails
---featured` does the same for the current board. Each card's picture (the post's
-own picture, or the cover of the app it is about) gets notes: blank, error or
-loading screen, placeholder, mostly empty at card size, garbled or interface
-text, a watermark, and for an app whether it shows the app. Only
-Twinkle-hosted pictures are read; link previews and videos say
-`external_thumbnail`, and a secret attachment is never looked at. Answers are
-saved per picture, so a re-run makes no new call. The notes are never a ranking
-or eligibility input and nothing is replaced or unfeatured because of them.
-When you look at a flagged picture, record `keep` or `replace` with
-`jev-images decide --area thumbnail --key subject:<id>` (or `build:<id>`).
-Pilot (11-01, app covers only): 43/45 on a held-out set, every good cover
-passed, 2 of 4 bad ones caught. A pass does not mean the picture is fine.
+**Featured thumbnails.** `featured candidates` adds a `thumbnailCheck` to each eligible candidate and a `thumbnailChecks` summary; `jev-images thumbnails --featured` does the same for the current board. Each card's picture (the post's own picture, or the cover of the app it is about) gets notes: blank, error or loading screen, placeholder, mostly empty at card size, garbled or interface text, a watermark, and for an app whether it shows the app. Only Twinkle-hosted pictures are read; link previews and videos say `external_thumbnail`, and a secret attachment is never looked at. Answers are saved per picture, so a re-run makes no new call. The notes are never a ranking or eligibility input and nothing is replaced or unfeatured because of them. When you look at a flagged picture, record `keep` or `replace` with `jev-images decide --area thumbnail --key subject:<id>` (or `build:<id>`). Pilot (11-01, app covers only): 43/45 on a held-out set, every good cover passed, 2 of 4 bad ones caught. A pass does not mean the picture is fine.
 
-**Image decisions in apps (preview).** `Twinkle.ai.decide({ state, questions,
-images })` lets an app ask about up to four pictures (its own uploads or a
-canvas). Pictures are bounded: an upload at most 5 MB, a snapshot at most 3 MB
-(5 MB of snapshots), and 10 MB for all pictures of one decision; a larger call
-is refused with a plain "Image too large" message before it is fully read. It
-is free for viewers like text decisions. There are no per-app or
-per-viewer daily caps (a decision costs a fraction of a cent); the area's daily
-cap and the cost alarm in the daily report are the spending guard. Bursts are
-limited instead: one image decision in flight per viewer, eight per app, and
-600 a minute per app (per API instance, so up to about twice that across the
-cluster; a class of 30 deciding every ~20 s is about 90 a minute). A throttled call is refused at once as `ai_decision_unavailable` with
-reason `rate_limited`. It never falls back to a text-only answer: when off,
-throttled or failing it returns `ai_decision_unavailable` with a reason.
-`switch --area sdk_decide --build <id> --mode off` switches one app off (or
-`on` to undo it). The report shows its use under `sdk_decide`.
+**Image decisions in apps (preview).** `Twinkle.ai.decide({ state, questions, images })` lets an app ask about up to four pictures (its own uploads or a canvas). Size limits: an upload at most 5 MB, a snapshot at most 3 MB (5 MB of snapshots), and 10 MB for all pictures of one decision; a larger call is refused with a plain "Image too large" message before it is fully read. It is free for viewers like text decisions. There are no per-app or per-viewer daily caps (a decision costs a fraction of a cent); the area's daily cap and the cost alarm in the daily report are the spending guard. Bursts are limited instead: one image decision in flight per viewer, eight per app, and 600 a minute per app (per API instance, so up to about twice that across the cluster; a class of 30 deciding every ~20 s is about 90 a minute). A throttled call is refused at once as `ai_decision_unavailable` with reason `rate_limited`. It never falls back to a text-only answer: when off, throttled or failing it returns `ai_decision_unavailable` with a reason.
+`switch --area sdk_decide --build <id> --mode off` switches one app off (or `on` to undo it). The report shows its use under `sdk_decide`.
 
 ### Spending by calendar month
 
@@ -4154,97 +3846,38 @@ lumine admin spending --month 2026-09 --json --output work/spending-september.js
 lumine admin spending --aws-profile <profile> --json
 ```
 
-This owner-only read needs no delegated run. With no dates, it reports the
-previous and current UTC calendar months. Use `--month` for one month, or both
-`--from` and `--to` for an inclusive range of up to 12 months. Future months
-are refused. Current-month AI and AWS usage ends at today's UTC midnight;
-today's partial AI usage is returned separately and excluded from totals.
-Paid reimbursements include today's settled payments through the report time.
-Their separate cutoff is explicit in the table and JSON.
+This owner-only read needs no delegated run. With no dates, it reports the previous and current UTC calendar months. Use `--month` for one month, or both `--from` and `--to` for an inclusive range of up to 12 months. Future months are refused. Current-month AI and AWS usage ends at today's UTC midnight; today's partial AI usage is returned separately and excluded from totals. Paid reimbursements include today's settled payments through the report time; their separate cutoff is explicit in the table and JSON.
 
-The default output is a table separating AI costs after promotional credits,
-AWS infrastructure including tax, and reimbursements, with a combined total.
-It also shows gross AI usage, credits, and AI-service versus infrastructure
-reimbursements. JSON includes provider and AWS-service details and the paid
-invoice references and dates. AI is a usage-based estimate. Credits follow
-the server's private billing policy and account for usage earlier in the same
-credit cycle, even when that usage predates the requested calendar month.
+The default output is a table separating AI costs after promotional credits, AWS infrastructure including tax, and reimbursements, with a combined total. It also shows gross AI usage, credits, and AI-service versus infrastructure reimbursements. JSON includes provider and AWS-service details and the paid invoice references and dates. AI is a usage-based estimate. Credits follow the server's private billing policy and account for usage earlier in the same credit cycle, even when that usage predates the requested calendar month.
 
-The API supplies the canonical AI ledger and paid reimbursement history.
-Reimbursements use settlement dates, including old invoices paid later, and
-include all known subscription histories and invoice pages. They are gross
-paid amounts, not Stripe fee/refund or bank-payout reconciliation. Failed,
-expired and pending attempts are excluded; no payment or subscription action
-is performed. Reimbursements are a separate category included in the total;
-`providerOperatingCostUsd` also provides AI plus AWS without reimbursements.
+The API supplies the canonical AI ledger and paid reimbursement history. Reimbursements use settlement dates, including old invoices paid later, and include all known subscription histories and invoice pages. They are gross paid amounts, not Stripe fee/refund or bank-payout reconciliation. Failed, expired and pending attempts are excluded; no payment or subscription action is performed. Reimbursements are a separate category included in the total; `providerOperatingCostUsd` is AI plus AWS without reimbursements.
 
-AWS reads use the installed AWS CLI and the existing billing profile, or
-`--aws-profile`. The command checks the required account and principal before
-querying Cost Explorer, paginates service groups, validates exact UTC periods
-and USD currency, and preserves provisional billing status. It never changes
-AWS credentials or infrastructure. Cost Explorer's ordinary query fees apply.
-AWS authentication stays local; it is not uploaded to Twinkle.
+AWS reads use the installed AWS CLI and the existing billing profile, or `--aws-profile`. The command checks the required account and principal before querying Cost Explorer, paginates service groups, validates exact UTC periods and USD currency, and preserves provisional billing status. It never changes AWS credentials or infrastructure. Cost Explorer's ordinary query fees apply. AWS authentication stays local; it is not uploaded to Twinkle.
 
-`data.spending` is versioned with `schemaVersion: 1`. `months` contains each
-month's `ai`, `aws`, `reimbursements`, `providerOperatingCostUsd`, and
-`totalIncludingReimbursementsUsd`; `totals` sums the selected period. Missing
-sources are `null`, never zero. A partial report preserves available data,
-sets `complete: false` and receipt `status: "partial"`, saves with `--output`,
-and exits nonzero. Unknown provider attribution or AWS-billed AI can make a
-combined total unavailable until the credit/overlap is reconciled. Zero usage
-on the first UTC day means no completed days, not a full-month forecast;
-reimbursements paid on that day still contribute to the total.
+`data.spending` is versioned with `schemaVersion: 1`. `months` contains each month's `ai`, `aws`, `reimbursements`, `providerOperatingCostUsd`, and `totalIncludingReimbursementsUsd`; `totals` sums the selected period. Missing sources are `null`, never zero. A partial report preserves available data, sets `complete: false` and receipt `status: "partial"`, saves with `--output`, and exits nonzero. Unknown provider attribution or AWS-billed AI can make a combined total unavailable until the credit/overlap is reconciled. Zero usage on the first UTC day means no completed days, not a full-month forecast; reimbursements paid on that day still contribute to the total.
 
-This report does not replace the existing AI run-rate projections or AWS
-remaining-period forecast required for a full daily-management review.
-Release dependency: deploy the owner-authorized `/cli/admin/spending` API
-before publishing the CLI that calls it. No new database migration, npm
-dependency or server-side AWS permission is required.
+This report does not replace the AI run-rate projections or AWS remaining-period forecast required for a full daily-management review. Release dependency: deploy the owner-authorized `/cli/admin/spending` API before publishing the CLI that calls it. No new database migration, npm dependency or server-side AWS permission is required.
 
 ### Application AI calendar-month cost (standing duty, every full daily review)
 
-Run `lumine admin ai-costs monthly --json` during every full daily management
-review. This read-only command does not require or attach to a delegated run.
-It returns one server-owned calendar summary from the canonical deduplicated application AI-
-cost ledger. It deliberately takes no `--days`: all boundaries are UTC calendar
-months, so the result is directly comparable from one run to the next.
+Run `lumine admin ai-costs monthly --json` during every full daily management review. This read-only command does not require or attach to a delegated run. It returns one server-owned calendar summary from the canonical deduplicated application AI-cost ledger. It deliberately takes no `--days`: all boundaries are UTC calendar months, so results compare from run to run.
 
-The previous month is a closed-calendar-month estimated total. Current-month
-MTD contains only completed UTC days and names its inclusive `throughDayKey`.
-The current UTC day's still-filling bucket is returned separately as
-`inProgressDay`; **never add it to MTD or either projection**. A missing daily
-aggregate inside the covered calendar is a recorded zero-cost day, not a
-reason to shrink the denominator.
+The previous month is a closed-calendar-month estimated total. Current-month MTD contains only completed UTC days and names its inclusive `throughDayKey`. The current UTC day's still-filling bucket is returned separately as `inProgressDay`; **never add it to MTD or either projection**. A missing daily aggregate inside the covered calendar is a recorded zero-cost day, not a reason to shrink the denominator.
 
-Two clearly different full-month projections are returned:
+Two full-month projections are returned:
 
-- `allCompletedDaysPace` retains completed-day spend, then applies the average
-  across every completed calendar day (including recorded zero days) to the
-  current and remaining UTC days;
-- `recentSevenCompletedDaysPace` retains completed-day spend, then applies the
-  average of the latest seven completed UTC days to the current and remaining
-  days. It is `null` until seven days have completed.
+- `allCompletedDaysPace` retains completed-day spend, then applies the average across every completed calendar day (including recorded zero days) to the current and remaining UTC days;
+- `recentSevenCompletedDaysPace` retains completed-day spend, then applies the average of the latest seven completed UTC days to the current and remaining days. It is `null` until seven days have completed.
 
-Both projections exclude the partial day's actual cost, replace every not-yet-
-completed day with their stated daily pace, and compare their projected total
-with the previous closed month. They are run-rate scenarios, not forecasts
-from a billing provider. All ledger values are pricing-based estimates rather
-than invoices and can change if canonical usage attribution or pricing is
-corrected.
+Both exclude the partial day's actual cost, replace every not-yet-completed day with their stated daily pace, and compare their projected total with the previous closed month. They are run-rate scenarios, not provider forecasts. All ledger values are pricing-based estimates rather than invoices and can change if canonical usage attribution or pricing is corrected.
 
-For an exact provider/model/operation breakdown after the run has already
-closed, use the run-independent closed-day drilldown:
+For an exact provider/model/operation breakdown after the run has closed, use the run-independent closed-day drilldown:
 
 ```bash
 lumine admin ai-costs day 2026-09-03 --json
 ```
 
-The date is a UTC `YYYY-MM-DD` key and must be earlier than the current UTC
-day. `data.dailyAiCosts` uses the same canonical deduplicated ledger as the
-monthly report and returns the exact closed-day summary plus `byDay`,
-`bySurface`, `byProviderModel`, `byBillingPolicy`, `byOperation`, and Lumine
-provider status/model telemetry. It never includes a still-filling day or
-reconstructs totals client-side.
+The date is a UTC `YYYY-MM-DD` key and must be earlier than the current UTC day. `data.dailyAiCosts` uses the same canonical deduplicated ledger as the monthly report and returns the exact closed-day summary plus `byDay`, `bySurface`, `byProviderModel`, `byBillingPolicy`, `byOperation`, and Lumine provider status/model telemetry. It never includes a still-filling day or reconstructs totals client-side.
 
 The stable JSON payload is `data.monthlyAiCosts`:
 
@@ -4312,46 +3945,19 @@ type MonthlyAiCostProjection = {
 };
 ```
 
-Release boundary: `/cli/admin/ai-costs/monthly`, `/cli/admin/ai-costs/day/:day`,
-`/cli/admin/energy-budget/report`, the historical daily-run report, exact
-notable-user status, Subject-window resolution, and the runtime-log
-lease/snapshot workflow are API-owned. Apply the runtime-log review and energy
-telemetry migrations, then deploy and verify the compatible `twinkle-api`
-routes before publishing or installing the Lumine CLI release that invokes
-them. An older API will reject the new commands instead of synthesizing
-figures locally.
+Release boundary: `/cli/admin/ai-costs/monthly`, `/cli/admin/ai-costs/day/:day`, `/cli/admin/energy-budget/report`, the historical daily-run report, exact notable-user status, Subject-window resolution, and the runtime-log lease/snapshot workflow are API-owned. Apply the runtime-log review and energy telemetry migrations, then deploy and verify the compatible `twinkle-api` routes before publishing or installing the Lumine CLI release that invokes them. An older API rejects the new commands instead of synthesizing figures locally.
 
 ### AI Energy budget health (standing duty, every full daily review)
 
-Read the report at run start, before any other duty, so the day confirms the
-AI Energy budget system (one live Lumine run per user, per-run energy ceiling
-with an exact round cap, settled stops) is still behaving:
+Read the report at run start, before any other duty, so the day confirms the AI Energy budget system (one live Lumine run per user, per-run energy ceiling with an exact round cap, settled stops) is still behaving:
 
 ```bash
 lumine admin energy-budget --json            # last 7 UTC days (max --days 31)
 ```
 
-It is owner-only and run-independent. Every UTC day carries the canonical
-energy ledger (`chargedUsd`, `overflowUsd`, `users`, `recharges`; 1,000,000
-units = $1), every telemetry counter (`busy_refusal`, `autofix_yielded`,
-`autofix_superseded`, `reservation_admitted` with `avgRunBudgetUsd`,
-`budget_stop_changed` / `budget_stop_unchanged` / `run_completed` with a
-per-model breakdown, `stop_settled`, `tool_limit_settled`, and since
-2026-09-15 the queued-request counters `queued_restored` (a workspace reload
-restored its owner's still-queued request, shown with Stop), `queued_stopped`
-(Stop cancelled a request while it was still queued) and
-`busy_resume_requested` (after a busy refusal the website resumed the
-existing request)) and per-model per-run usage stats (`runs`, `callsPerRun`,
-`usdPerRun`, each avg and nearest-rank p90). `busy_refusal` with no
-`busy_resume_requested` on a day with website traffic means clients are not
-resuming the refused request; `queued_restored` shows how often creators
-reload while waiting in the queue. The current UTC day is returned with `inProgress: true`.
-**Headline `lastCompletedDay` (its exact `dayKey`) — never the in-progress
-day**, exactly as the closed-day AI-cost duty does.
+It is owner-only and run-independent. Every UTC day carries the canonical energy ledger (`chargedUsd`, `overflowUsd`, `users`, `recharges`; 1,000,000 units = $1), every telemetry counter (`busy_refusal`, `autofix_yielded`, `autofix_superseded`, `reservation_admitted` with `avgRunBudgetUsd`, `budget_stop_changed` / `budget_stop_unchanged` / `run_completed` with a per-model breakdown, `stop_settled`, `tool_limit_settled`, and since 2026-09-15 the queued-request counters `queued_restored` (a workspace reload restored its owner's still-queued request, shown with Stop), `queued_stopped` (Stop cancelled a request while it was still queued) and `busy_resume_requested` (after a busy refusal the website resumed the existing request)) and per-model per-run usage stats (`runs`, `callsPerRun`, `usdPerRun`, each avg and nearest-rank p90). `busy_refusal` with no `busy_resume_requested` on a day with website traffic means clients are not resuming the refused request; `queued_restored` shows how often creators reload while waiting in the queue. The current UTC day is returned with `inProgress: true`. **Headline `lastCompletedDay` (its exact `dayKey`), never the in-progress day**, as the closed-day AI-cost duty does.
 
-Since Mikey's 2026-09-20 decision, keep current Energy policy and worker
-capacity while observing. During every full run, supplement these counters
-with the read-only per-request diagnostic report (from the local API checkout):
+Since Mikey's 2026-09-20 decision, keep current Energy policy and worker capacity while observing. During every full run, supplement these counters with the read-only per-request diagnostic report (from the local API checkout):
 
 ```bash
 ssh api-primary.twinkle.network \
@@ -4359,192 +3965,67 @@ ssh api-primary.twinkle.network \
   < scripts/build-energy-daily.cjs
 ```
 
-This uses telemetry already recorded in queue jobs, canonical run sessions,
-provider-turn budget metadata and reservation usage; no new collection or API
-restart is needed. Save its JSON privately. Headline its last completed UTC
-day and compare the complete days in its seven-day window: queue wait p50/p90/
-maximum, starts waiting over 60 seconds, cancellations before start, unchanged
-budget stops, and the separate `handoff_only`, work-without-save and unknown
-patterns. Keep the two explicit denominators separate: unchanged stops / all
-budget stops, and unchanged stops / completed manual runs in the same cohort.
-Do not divide by usage reservations or assume busy-refusal counts measure waits.
+This uses telemetry already recorded in queue jobs, canonical run sessions, provider-turn budget metadata and reservation usage; no new collection or API restart is needed. Save its JSON privately. Headline its last completed UTC day and compare the complete days in its seven-day window: queue wait p50/p90/maximum, starts waiting over 60 seconds, cancellations before start, unchanged budget stops, and the separate `handoff_only`, work-without-save and unknown patterns. Keep two denominators separate: unchanged stops / all budget stops, and unchanged stops / completed manual runs in the same cohort. Do not divide by usage reservations or treat busy-refusal counts as wait measures.
 
-Each day also carries `nothingSaved`: the Energy stops that saved nothing,
-split by cause (`byCause`): `not_started` (no paid work round ran: too big
-for the model, or one round did not fit), `read_only`, `edit_failed`,
-`cut_off`, `after_landing` (the apply-only landing round ran and still saved
-nothing), `early_hand_off`, `other`, and `unattributed` (days before the split
-shipped). `paidUnchangedRatio` is the nothing-saved rate among stops that paid
-for a work round; it is meaningful only from the release day of the cause
-split (before it `not_started` is 0, so it just repeats `unchangedRatio`).
-`landingRounds` (granted/saved) counts the last-round landings that may use
-the hand-off reserve, and `resumes` (started /
-fellBackToFresh) counts Continues that resumed the stopped run's provider
-thread. Headline the paid rate and the largest cause beside the 30% flag.
+Each day also carries `nothingSaved`: the Energy stops that saved nothing, split by cause (`byCause`): `not_started` (no paid work round ran: too big for the model, or one round did not fit), `read_only`, `edit_failed`, `cut_off`, `after_landing` (the apply-only landing round ran and still saved nothing), `early_hand_off`, `other`, and `unattributed` (days before the split shipped). `paidUnchangedRatio` is the nothing-saved rate among stops that paid for a work round; it is meaningful only from the release day of the cause split (before it `not_started` is 0, so it just repeats `unchangedRatio`). `landingRounds` (granted/saved) counts the last-round landings that may use the hand-off reserve, and `resumes` (started / fellBackToFresh) counts Continues that resumed the stopped run's provider thread. Headline the paid rate and the largest cause beside the 30% flag.
 
-Inspect the stop cases' observed starting budget, recorded work/handoff turns,
-remaining Energy and final-reservation spend. Missing lineage is unknown, not
-zero work or zero cost; final-reservation cost can exclude earlier planning
-reservations. The oldest day may be partial under rolling seven-day retention.
-These observations do not by themselves establish a bug or authorize an
-admission floor, extra worker capacity, budget cuts or model changes. Update
-todo 52 with the latest completed-day observations and any concrete regression.
+Inspect the stop cases' observed starting budget, recorded work/handoff turns, remaining Energy and final-reservation spend. Missing lineage is unknown, not zero work or zero cost; final-reservation cost can exclude earlier planning reservations. The oldest day may be partial under rolling seven-day retention. These observations do not by themselves establish a bug or authorize an admission floor, extra worker capacity, budget cuts or model changes. Update todo 52 with the latest completed-day observations and any concrete regression.
 
-`flags` lists every tripped check with its exact numbers: `overflow_usd`
-(overflow above $1 on a completed day), `budget_stop_unchanged_ratio` (more
-than 30% of at least 5 budget stops ended with nothing saved),
-`busy_refusals` (more than 20 in a day), and `telemetry_missing` (runs
-recorded usage while the telemetry table has no rows for that day — the
-writer is broken). Record every tripped flag, and any anomaly you judge from
-the numbers (a per-run p90 far above the average run budget, a sudden drop in
-`run_completed` while runs still record usage, recharges climbing), as a
-carry-over todo with the exact figures and day. **Never auto-enforce** —
-escalate to Mikey; this duty observes, it does not change budgets, caps, or
-user state.
+`flags` lists every tripped check with its exact numbers: `overflow_usd` (overflow above $1 on a completed day), `budget_stop_unchanged_ratio` (more than 30% of at least 5 budget stops ended with nothing saved), `busy_refusals` (more than 20 in a day), and `telemetry_missing` (runs recorded usage while the telemetry table has no rows for that day: the writer is broken). Record every tripped flag, and any anomaly you judge from the numbers (a per-run p90 far above the average run budget, a sudden drop in `run_completed` while runs still record usage, recharges climbing), as a carry-over todo with the exact figures and day. **Never auto-enforce**: escalate to Mikey; this duty observes, it does not change budgets, caps, or user state.
 
 #### Energy pacing calibration (JEV; since 2026-09-21)
 
-Lumine asks JEV two questions inside every budgeted run, and acts on confident
-answers (`JEV_LUMINE_PACING_MODE`: `serve` by default, `shadow` records without
-acting, `off` disables):
+Lumine asks JEV two questions inside every budgeted run, and acts on confident answers (`JEV_LUMINE_PACING_MODE`: `serve` by default, `shadow` records without acting, `off` disables):
 
-- **fit**, once before a fresh request's first paid round: `fits` / `too_big`.
-  `too_big` at or above `pacingThresholds.tooBigConfidence`, with a lighter
-  model that fits, keeps the run from starting and shows the switch-model card.
-- **pace**, before each tool round: `continue` / `apply_next` / `hand_off`.
-  `apply_next` at or above `applyNextConfidence` asks the agent to edit in its
-  next round; `hand_off` at or above `handOffConfidence` ends the run before
-  its pending reads, keeping the unspent Energy.
+- **fit**, once before a fresh request's first paid round: `fits` / `too_big`. `too_big` at or above `pacingThresholds.tooBigConfidence`, with a lighter model that fits, keeps the run from starting and shows the switch-model card.
+- **pace**, before each tool round: `continue` / `apply_next` / `hand_off`. `apply_next` at or above `applyNextConfidence` asks the agent to edit in its next round; `hand_off` at or above `handOffConfidence` ends the run before its pending reads, keeping the unspent Energy.
 
-Separately from JEV, a run that reaches its round cap with nothing saved while
-Energy remains gets one extra apply-only round (`applyOnlyRound`).
+Separately from JEV, a run that reaches its round cap with nothing saved while Energy remains gets one extra apply-only round (`applyOnlyRound`).
 
-Before any JEV question (since 2026-09-26, API ea257c0a): when the remaining
-Energy, after the model's hand-off reserve, cannot cover two typical rounds
-(one read and one edit, `LUMINE_MIN_ROUNDS_FOR_PROJECT_EDIT`) on the chosen
-model but can on a lighter one, the run does not start and shows the
-switch-model card; nothing is spent. Lineage metadata records
-`tooTightForAnEdit`, `roundsOnThisModel` and `lighterModelRounds`. The
-composer checks the same arithmetic up front (model options carry
-`handoffReserveEnergyUnits`): it offers a one-tap switch, and it disables
-sending with an explanation when no model can afford even one step.
+Before any JEV question (since 2026-09-26, API ea257c0a): when the remaining Energy, after the model's hand-off reserve, cannot cover two typical rounds (one read and one edit, `LUMINE_MIN_ROUNDS_FOR_PROJECT_EDIT`) on the chosen model but can on a lighter one, the run does not start and shows the switch-model card; nothing is spent. Lineage metadata records `tooTightForAnEdit`, `roundsOnThisModel` and `lighterModelRounds`. The composer checks the same arithmetic up front (model options carry `handoffReserveEnergyUnits`): it offers a one-tap switch, and disables sending with an explanation when no model can afford even one step.
 
-Every UTC day in `lumine admin energy-budget --json` now carries `pacing`.
-Report in **"Insights for Mikey"** in every full run, for the last completed
-day and the in-progress day while the feature is new:
+Every UTC day in `lumine admin energy-budget --json` carries `pacing`. Report in **"Insights for Mikey"** in every full run, for the last completed day and the in-progress day while the feature is new:
 
-- `paceCalibration` and `fitCalibration`: verdict → confidence bucket (`low`
-  below the apply-next bar, `mid` up to the hand-off bar, `high` above it) →
-  passes that ended `saved` / `unsaved`. The verdict is the most severe one of
-  the pass. Counts are agent passes, not requests (a repair pass is judged
-  again). Served stops are excluded because nothing shows what would have
-  happened.
-- `served`: early hand-offs with the Energy they kept (`energyKeptUsd`),
-  apply-next nudges with how those passes ended, and `tooBigNotStarted`.
+- `paceCalibration` and `fitCalibration`: verdict → confidence bucket (`low` below the apply-next bar, `mid` up to the hand-off bar, `high` above it) → passes that ended `saved` / `unsaved`. The verdict is the most severe one of the pass. Counts are agent passes, not requests (a repair pass is judged again). Served stops are excluded because nothing shows what would have happened.
+- `served`: early hand-offs with the Energy they kept (`energyKeptUsd`), apply-next nudges with how those passes ended, and `tooBigNotStarted`.
 - `applyOnlyRound`: extra rounds granted and whether they saved anything.
-- `passesWithUnavailableRounds`: passes where JEV gave no verdict for at least
-  one round (timeout, outage); those rounds ran on the arithmetic alone.
+- `passesWithUnavailableRounds`: passes where JEV gave no verdict for at least one round (timeout, outage); those rounds ran on the arithmetic alone.
 
-How to read it, with the exact counts: `hand_off` in `low`/`mid` that mostly
-ended `unsaved` means the hand-off bar is too high (runs JEV doubted went on to
-waste Energy); `hand_off` that mostly ended `saved` means JEV is too
-pessimistic and the bar must not drop. `continue` in `high` ending `unsaved`
-are misses: inspect those requests. `fits` ending `unsaved` on heavy models
-are fit-check misses; `too_big` below the bar ending `saved` means the bar is
-right to be high. `applyOnlyRound.saved` shows the extra round rescuing runs.
-Compare `budget_stop_unchanged` and its ratio with the days before 2026-09-21.
-The host script's stop cases add per-request `fitVerdict`, `pacingVerdicts` and
-`stopReason` (`pacing_hand_off`, `pacing_too_big`, `tool_round_limit`,
-`unaffordable_work_turn`). JEV spend for these calls appears under surface
-`jev_routing`, operations `jev_lumine_pacing_*` and `jev_lumine_fit_*`.
-Recommend threshold changes to Mikey with the figures; **never change them or
-the mode yourself**. Fewer than about 20 judged passes is too little to
-calibrate on: report the counts and say so.
+How to read it, with the exact counts: `hand_off` in `low`/`mid` that mostly ended `unsaved` means the hand-off bar is too high (runs JEV doubted went on to waste Energy); `hand_off` that mostly ended `saved` means JEV is too pessimistic and the bar must not drop. `continue` in `high` ending `unsaved` are misses: inspect those requests. `fits` ending `unsaved` on heavy models are fit-check misses; `too_big` below the bar ending `saved` means the bar is right to be high. `applyOnlyRound.saved` shows the extra round rescuing runs. Compare `budget_stop_unchanged` and its ratio with the days before 2026-09-21. The host script's stop cases add per-request `fitVerdict`, `pacingVerdicts` and `stopReason` (`pacing_hand_off`, `pacing_too_big`, `tool_round_limit`, `unaffordable_work_turn`). JEV spend for these calls appears under surface `jev_routing`, operations `jev_lumine_pacing_*` and `jev_lumine_fit_*`. Recommend threshold changes to Mikey with the figures; **never change them or the mode yourself**. Fewer than about 20 judged passes is too little to calibrate on: report the counts and say so.
 
 ### Lumine media feature cost and cleanup watch (standing duty, every full daily review)
 
-Run `lumine admin media-costs monthly --json` during every full daily management
-review. This read-only, delegated-run-gated command reports the canonical Media
-Energy ledger for short clips, livestream input/viewer usage, and replay
-storage/viewing. Include in
-**"Insights for Mikey"** in every full-run report:
+Run `lumine admin media-costs monthly --json` during every full daily management review. This read-only, delegated-run-gated command reports the canonical Media Energy ledger for short clips, livestream input/viewer usage, and replay storage/viewing. Include in **"Insights for Mikey"** in every full-run report:
 
-- current-month settled estimated cost, active reservations, cross-month
-  carryover, guarded total, global limit, remaining headroom, and percent used;
-- the current UTC day's reservations, settlements, cancellations, and settled
-  estimated cost;
-- the current UTC day's privacy-safe stream-attempt cohort: attempted,
-  reached-live, ended-after-live, failed, cancelled-before-live, still in
-  progress, and grouped server failure-code counts;
+- current-month settled estimated cost, active reservations, cross-month carryover, guarded total, global limit, remaining headroom, and percent used;
+- the current UTC day's reservations, settlements, cancellations, and settled estimated cost;
+- the current UTC day's privacy-safe stream-attempt cohort: attempted, reached-live, ended-after-live, failed, cancelled-before-live, still in progress, and grouped server failure-code counts;
 - clip, live-input, live-viewer, and replay-viewer action/cost breakdowns;
 - whether the global usage row reconciles exactly with reservation rows;
-- every returned alert, plus incomplete clip jobs, cost-bearing IVS channels,
-  active-or-cleanup-pending sessions, possible orphaned sessions, overdue
-  cleanup, replay finalization/deletion state, retained replay bytes/objects,
-  and expired-active live or replay viewer grants;
+- every returned alert, plus incomplete clip jobs, cost-bearing IVS channels, active-or-cleanup-pending sessions, possible orphaned sessions, overdue cleanup, replay finalization/deletion state, retained replay bytes/objects, and expired-active live or replay viewer grants;
 - ready image/clip storage counts and bytes as scale context.
 
-Treat `status: "critical"`, any reconciliation mismatch, overdue IVS cleanup,
-or overdue replay finalization/deletion as an operational incident to
-investigate in the same run. Treat
-`status: "attention"` as a required finding, not a decorative warning. The
-server's request-time global Media Energy guardrail defaults to **$40/month**;
-the separate AWS Budget is **$50/month**, leaving provider-billing and shared-
-infrastructure headroom. Never infer or locally decrement either value.
+Treat `status: "critical"`, any reconciliation mismatch, overdue IVS cleanup, or overdue replay finalization/deletion as an operational incident to investigate in the same run. Treat `status: "attention"` as a required finding, not a decorative warning. The server's request-time global Media Energy guardrail defaults to **$40/month**; the separate AWS Budget is **$50/month**, leaving provider-billing and shared-infrastructure headroom. Never infer or locally decrement either value.
 
-The ledger is the immediate application source of truth and deliberately uses
-conservative provider-cost estimates. It is not an AWS invoice. Photo capture
-uses existing Build runtime file storage rather than the paid Media Energy
-ledger; `operations.runtimeStorage.readyImages` therefore reports all ready
-Build runtime images, not camera captures alone. Reconcile delayed AWS
-MediaConvert and IVS service charges every full review as described below. S3 is shared
-with other Twinkle uploads, so report its service-level cost as shared context,
-not as photo-only spend.
+The ledger is the immediate application source of truth and uses conservative provider-cost estimates. It is not an AWS invoice. Photo capture uses existing Build runtime file storage rather than the paid Media Energy ledger; `operations.runtimeStorage.readyImages` therefore reports all ready Build runtime images, not camera captures alone. Reconcile delayed AWS MediaConvert and IVS service charges every full review as described below. S3 is shared with other Twinkle uploads, so report its service-level cost as shared context, not as photo-only spend.
 
-Release boundary: `/cli/admin/media-costs/monthly` owns the canonical ledger,
-reconciliation, resource-state checks, and alerts. Deploy and verify that API
-route before publishing or installing the Lumine CLI release that invokes it.
+Release boundary: `/cli/admin/media-costs/monthly` owns the canonical ledger, reconciliation, resource-state checks, and alerts. Deploy and verify that API route before publishing or installing the Lumine CLI release that invokes it.
 
-`currentUtcDay.streamAttempts` is a `createdAt` cohort for that UTC day. Its
-outcomes partition every attempt into `endedCount` (reached live, then ended),
-`failedCount` (failed or cleanup-failed), `cancelledCount` (ended before ever
-reaching live), or `inProgressCount`; `reachedLiveCount` is the overlapping
-milestone count. `failureCodeCounts` contains only server-defined codes and
-counts—never usernames, Build ids, titles, viewer identities, or report
-identities. `operations.live.stillActiveOrCleanupPendingCount` and
-`possibleOrphanedCount` are current global counts, not members of the daily
-cohort.
+`currentUtcDay.streamAttempts` is a `createdAt` cohort for that UTC day. Its outcomes partition every attempt into `endedCount` (reached live, then ended), `failedCount` (failed or cleanup-failed), `cancelledCount` (ended before ever reaching live), or `inProgressCount`; `reachedLiveCount` is the overlapping milestone count. `failureCodeCounts` contains only server-defined codes and counts, never usernames, Build ids, titles, viewer identities, or report identities. `operations.live.stillActiveOrCleanupPendingCount` and `possibleOrphanedCount` are current global counts, not members of the daily cohort.
 
-Replay storage and write cost is conservatively embedded in an opted-in
-`live-input` reservation; `replay-viewer` is a separate kind. Report
-`operations.replays` (pending, processing, ready, failed, deleting,
-delete-failed, overdue finalization/deletion, expired-ready, bytes, and object
-count) and `operations.replayViewers` on every full review. A replay finalization or
-deletion alert is an operational incident because private recording cleanup is
-part of the feature contract.
+Replay storage and write cost is conservatively embedded in an opted-in `live-input` reservation; `replay-viewer` is a separate kind. Report `operations.replays` (pending, processing, ready, failed, deleting, delete-failed, overdue finalization/deletion, expired-ready, bytes, and object count) and `operations.replayViewers` on every full review. A replay finalization or deletion alert is an operational incident because private recording cleanup is part of the feature contract.
 
 ### AWS monthly bill expectation (standing duty, every full daily review)
 
-Starting 2026-08-27, every full daily website-management review must also check AWS Cost
-Explorer and include the current calendar month's expected AWS bill in
-**"Insights for Mikey"**. This is an account-level infrastructure cost check,
-not the `aiSpending` application-cost section above. Never substitute one for
-the other. Report each independently, then combine them only under the aligned-
-total rules below.
+Starting 2026-08-27, every full daily website-management review must also check AWS Cost Explorer and include the current calendar month's expected AWS bill in **"Insights for Mikey"**. This is an account-level infrastructure cost check, not the `aiSpending` application-cost section above. Never substitute one for the other. Report each independently, then combine them only under the aligned-total rules below.
 
-First verify the Twinkle AWS principal exactly as required by the repository
-agent guide. Use profile `mikey-iam`, pass an explicit region on every command,
-and stop rather than reading another account if the ARN is not
-`arn:aws:iam::019490893667:user/twinkle-admin`:
+First verify the Twinkle AWS principal exactly as required by the repository agent guide. Use profile `mikey-iam`, pass an explicit region on every command, and stop rather than reading another account if the ARN is not `arn:aws:iam::019490893667:user/twinkle-admin`:
 
 ```bash
 aws sts get-caller-identity --profile mikey-iam --region us-east-1
 ```
 
-Then use UTC calendar boundaries and Cost Explorer's unblended-cost metric.
-`End` is exclusive: the month-to-date query below covers completed dates before
-`<today-UTC>`. On the first UTC day of a month, report that no completed-day MTD
-period exists instead of sending an empty interval.
+Then use UTC calendar boundaries and Cost Explorer's unblended-cost metric. `End` is exclusive: the month-to-date query below covers completed dates before `<today-UTC>`. On the first UTC day of a month, report that no completed-day MTD period exists instead of sending an empty interval.
 
 ```bash
 aws ce get-cost-and-usage --profile mikey-iam --region us-east-1 \
@@ -4566,253 +4047,39 @@ aws ce get-cost-forecast --profile mikey-iam --region us-east-1 \
   --prediction-interval-level 80
 ```
 
-Report the Cost Explorer snapshot date, currency, estimated MTD amount and its
-through-date, plus the returned **remaining-period** forecast mean and 80%
-lower/upper bounds. Verify that the first and last returned daily periods cover
-exactly the requested `Start`-inclusive, `End`-exclusive interval before doing
-any arithmetic; reject or separately explain a response with expanded or
-missing dates. Calculate the expected full-calendar-month mean and bounds by
-adding completed-day MTD to the sums of the returned daily mean, lower, and
-upper values. Do not use monthly granularity for this mid-month remainder:
-Cost Explorer can return the whole calendar month even when the requested
-start is mid-month, and adding MTD to that result would double-count. This
-split deliberately forecasts the current UTC day instead of mixing its
-incomplete actual into MTD. Label current-month actuals
-when `Estimated` is true, and describe the result as a Cost Explorer expectation
-rather than a final invoice because reporting lags and later credits, refunds,
-taxes, or adjustments can change the bill. If either the forecast or MTD query
-is unavailable, report the available component and say why a complete
-full-month expectation is unavailable instead of extrapolating it locally. A
-previous closed calendar-month query is mandatory: report its exact total and
-`Estimated` state, then compare the expected current full-calendar-month mean
-against it with both the dollar delta and percentage change. Never compare an
-incomplete current-month MTD total directly with a closed full month; if either
-the current full-month expectation or previous closed-month total is
-unavailable, say that the month-over-month comparison is unavailable rather
-than manufacturing one. A zero previous-month total has no meaningful
-percentage change. The previous month is context, not a replacement for the
-current-month expectation.
+Report the Cost Explorer snapshot date, currency, estimated MTD amount and its through-date, plus the returned **remaining-period** forecast mean and 80% lower/upper bounds. Before any arithmetic, verify that the first and last returned daily periods cover exactly the requested `Start`-inclusive, `End`-exclusive interval; reject or separately explain a response with expanded or missing dates. Expected full-calendar-month mean and bounds = completed-day MTD plus the sums of the returned daily mean, lower, and upper values. Do not use monthly granularity for the mid-month remainder: Cost Explorer can return the whole calendar month even when the requested start is mid-month, and adding MTD would double-count. This split deliberately forecasts the current UTC day instead of mixing its incomplete actual into MTD. Label current-month actuals when `Estimated` is true, and describe the result as a Cost Explorer expectation, not a final invoice (reporting lags and later credits, refunds, taxes, or adjustments can change the bill). If the forecast or MTD query is unavailable, report the available component and say why a complete full-month expectation is unavailable; never extrapolate locally. A previous closed calendar-month query is mandatory: report its exact total and `Estimated` state, then compare the expected current full-month mean against it with both dollar delta and percentage change. Never compare an incomplete current-month MTD total with a closed full month; if either side is unavailable, say the month-over-month comparison is unavailable rather than manufacturing one. A zero previous-month total has no meaningful percentage change. The previous month is context, not a replacement for the current-month expectation.
 
-For the media watch, separately identify AWS Elemental MediaConvert and Amazon
-Interactive Video Service rows when present. Also report Amazon S3 as shared
-storage context, without attributing the whole S3 row to Lumine media.
+For the media watch, separately identify AWS Elemental MediaConvert and Amazon Interactive Video Service rows when present. Also report Amazon S3 as shared storage context, without attributing the whole S3 row to Lumine media.
 
 ### Combined application AI and AWS cost (standing duty, every full daily review)
 
-Every full daily website-management report must also give Mikey one **Combined AI + AWS
-tracked operating cost** view. This is a mixed-source estimate, not an invoice
-or a claim to cover every company expense. Keep the independent AI and AWS
-figures visible so the total remains auditable.
+Every full daily website-management report must also give Mikey one **Combined AI + AWS tracked operating cost** view: a mixed-source estimate, not an invoice or a claim to cover every company expense. Keep the independent AI and AWS figures visible so the total stays auditable.
 
-- Add application-AI completed-day MTD to AWS completed-day MTD only when their
-  currency and inclusive UTC through-date match. Report the aligned boundary.
-  Never include `inProgressDay` or compare this incomplete MTD sum directly
-  with a closed full month.
-- Add the previous closed AI-month estimate to the previous closed AWS
-  unblended-cost total and report the resulting previous closed-month combined
-  total.
-- For the expected current full month, add the AWS full-month expectation to
-  `allCompletedDaysPace` as the headline combined scenario. When
-  `recentSevenCompletedDaysPace` exists, add it as a clearly labeled run-rate
-  sensitivity, not a provider confidence interval. Compare each reported
-  combined scenario with the previous closed-month combined total using both
-  dollar and percentage change.
-- Carry the AWS 80% lower and upper bounds through a combined scenario by
-  adding the same AI projection to both bounds. Do not describe the difference
-  between the two AI run-rate scenarios as a confidence interval.
-- Do not add Media Energy or AWS service rows again: MediaConvert, IVS, S3, and
-  other AWS costs are already inside Cost Explorer's account total. If the
-  application AI ledger ever includes a provider billed inside the AWS total,
-  identify and remove the overlap before combining; otherwise report the
-  combined figure as unavailable rather than double-counting.
-- If currency, calendar boundary, a required component, or overlap attribution
-  cannot be reconciled, report the available components and explicitly mark the
-  affected combined total or comparison unavailable. Never manufacture one.
+- Add application-AI completed-day MTD to AWS completed-day MTD only when their currency and inclusive UTC through-date match. Report the aligned boundary. Never include `inProgressDay` or compare this incomplete MTD sum directly with a closed full month.
+- Add the previous closed AI-month estimate to the previous closed AWS unblended-cost total and report the resulting previous closed-month combined total.
+- For the expected current full month, add the AWS full-month expectation to `allCompletedDaysPace` as the headline combined scenario. When `recentSevenCompletedDaysPace` exists, add it as a clearly labeled run-rate sensitivity, not a provider confidence interval. Compare each reported combined scenario with the previous closed-month combined total using both dollar and percentage change.
+- Carry the AWS 80% lower and upper bounds through a combined scenario by adding the same AI projection to both bounds. Do not describe the difference between the two AI run-rate scenarios as a confidence interval.
+- Do not add Media Energy or AWS service rows again: MediaConvert, IVS, S3, and other AWS costs are already inside Cost Explorer's account total. If the application AI ledger ever includes a provider billed inside the AWS total, identify and remove the overlap before combining; otherwise report the combined figure as unavailable rather than double-counting.
+- If currency, calendar boundary, a required component, or overlap attribution cannot be reconciled, report the available components and explicitly mark the affected combined total or comparison unavailable. Never manufacture one.
 
-Ten sections (Mikey's chosen cut 2026-08-10; behavioral-insight and
-farm-signal sections added that day; AI Card summon watch added 2026-08-24):
+Ten sections (Mikey's chosen cut 2026-08-10; behavioral-insight and farm-signal sections added that day; AI Card summon watch added 2026-08-24):
 
-- `economy` — `topGainers` (coin-ledger aggregation over the window: gained,
-  spent, net, current balance per user, Zero/Ciel excluded) and `topBalances`
-  (current top-ten holders, also excluding Zero/Ciel). This is where
-  alt-account farming, sudden windfalls, and "someone got a million coins in a
-  week" surface with real numbers instead of secondhand kid gossip;
-  cross-check outliers against the
-  economy-manipulation escalation category.
-- `aiSpending` — a compact projection of the management AI-cost report:
-  `summary`, top spending accounts, top risk groups. Unlike the other sections'
-  exact `window.sinceTs`, this existing report is bucketed into whole UTC days;
-  `aiSpending.startDayIndex` and `endDayIndex` are its canonical bounds. The
-  report period can begin up to one day before or after the exact brief window,
-  so use those bounds when describing it. `generatedAt` is the report
-  snapshot time. **`endDayInProgress: true` means the trailing bucket was the
-  current UTC day at that snapshot and was still filling** — a full daily review reads
-  it mid-day, before the after-school peak, so never report that bucket as a full day's
-  spend. `aiSpending.byDay` contains the canonical daily rows. For a truthful
-  daily figure, widen the window (`--days 2..7`), exclude the row whose
-  `dayIndex` equals the in-progress `endDayIndex`, and quote complete days
-  ("$X so far today; complete days run ~$Y/day"). Real
-  incident: a run report quoted a ~15%-complete day bucket ($5) as the site's
-  daily AI spend (complete days were running ~$40-50). Flag accounts that jumped tiers or
-  dominate that report period. Routine `topAccounts` rows identify the account
-  by user ID/username and expose only an `identitySummary` count/manual-bucket
-  flag; raw identity strings and verified email addresses are deliberately
-  omitted. Use reason-required `identity inspect`, with
-  `--include-private-evidence` only when Mikey's concrete decision needs the
-  addresses or DOB values. May be `{ unavailable: true }` if the cost
-  report fails; say so rather than guessing. This section is also the run's
-  AI-cost exploit watch: while reading it, actively look for the signatures the
-  brief actually exposes — one risk group spanning several user IDs, repeated
-  account groups in `farmSignals.inboxFamilies`, or heavy spend by
-  accounts that `economy.topGainers` or `notableCandidates` independently marks
-  as recent signups. Cross-check those signals against the escalation
-  categories. Missing join-date or community data is unknown, not evidence that
-  an account is young or empty. A run that reads the spending report without
-  asking "could any of this be one person with many accounts?" has skipped a
-  duty.
-- `aiCardSummoning` — the standing multi-alt Summoner watch for every website-
-  management run. It counts the authoritative `ai_card_summons` daily quota counters
-  over the whole-day `dayWindow`, so Mystery Cards and successful fallback
-  cards are included, then lists the most active summoning accounts. It groups
-  summons when the same exact-device hash was observed for more than one
-  summoning user within the bounded `deviceEvidenceLookbackDays`; that evidence
-  is correlated with the account/window, not asserted to be the device used for
-  every individual summon. Each group reports its maximum same-day account and
-  charged-summon totals, the multi-account days, and days above the shared
-  three-card limit. Review every `requiresIdentityInspection` group,
-  prioritizing `daysAboveSharedLimit > 0`, with reason-required
-  `identity inspect`. If
-  `riskGroupsTruncated` is true, report that the bounded watch has more groups
-  than it returned rather than calling the review exhaustive. Add only
-  operator-confirmed exact accounts to an unbanned quota bucket with
-  `ai-bucket accounts add`; never infer or auto-bucket a family from a device,
-  IP prefix, user agent, shared inbox, or anomaly alone. After a bucket update,
-  re-read its canonical members. This duty applies even when no group crossed
-  three cards, because the new enforcement prevents already-bucketed siblings
-  from producing an over-limit row.
-- `notableCandidates` — kids (never bots, staff `userType`s, approved teachers
-  — anyone holding the mentor or sage achievement — or users already on the
-  Notable Users list) ranked by authored activity in the window, with
-  `isNewUser` marking window-new signups. Use it to find the overlooked and
-  rising users the editorial priorities exist for, and propose additions to
-  Mikey's Notable Users list in the report. When Mikey approves additions,
-  execute them with
-  `lumine admin notable add <userId|username> --note "<specific rationale>"`
-  (idempotent —
-  an existing member returns `already_done`; run-independent, privately audited
-  as `notable.add`, and writes through the management page's own canonical
-  service). It can therefore record Mikey's approval after the daily run has
-  closed without opening another delegated run. Without his approval the run
-  only proposes.
-  Check an exact current username or user ID without opening a run using
-  `lumine admin notable status <userId|username> --json`. This reads the
-  canonical writer and returns only the resolved public account identity,
-  current membership, and the roster rationale/timestamps when present; it
-  does not expose the private roster fields.
-  Before proposing a candidate, read their profile with
-  `lumine admin profile show <userId|username> [--json]` (a daily-run read,
-  like `brief`): username, real name as the public profile shows it, join and
-  last-active dates, rank/XP/title/achievements, status and bio lines, counts
-  (subjects, comments, AI stories, public builds, shared reflections) and
-  their latest ten of each with dates, excerpts and links. It serves the
-  profile as a signed-out visitor sees it: no emails, no secret answers, no
-  unshared reflections, and only comments on public surfaces.
+- `economy`: `topGainers` (coin-ledger aggregation over the window: gained, spent, net, current balance per user, Zero/Ciel excluded) and `topBalances` (current top-ten holders, also excluding Zero/Ciel). Alt-account farming and sudden windfalls ("someone got a million coins in a week") surface here with real numbers; cross-check outliers against the economy-manipulation escalation category.
+- `aiSpending`: a compact projection of the management AI-cost report: `summary`, top spending accounts, top risk groups. Unlike the other sections' exact `window.sinceTs`, this report is bucketed into whole UTC days; `aiSpending.startDayIndex` and `endDayIndex` are its canonical bounds. The report period can begin up to one day before or after the exact brief window, so use those bounds when describing it. `generatedAt` is the report snapshot time. **`endDayInProgress: true` means the trailing bucket was the current UTC day at that snapshot and was still filling.** A full daily review reads it mid-day, before the after-school peak, so never report that bucket as a full day's spend. `aiSpending.byDay` contains the canonical daily rows. For a truthful daily figure, widen the window (`--days 2..7`), exclude the row whose `dayIndex` equals the in-progress `endDayIndex`, and quote complete days ("$X so far today; complete days run ~$Y/day"). (A past run quoted a ~15%-complete bucket, $5, as daily spend when complete days ran ~$40-50.) Flag accounts that jumped tiers or dominate that report period. Routine `topAccounts` rows identify the account by user ID/username and expose only an `identitySummary` count/manual-bucket flag; raw identity strings and verified email addresses are deliberately omitted. Use reason-required `identity inspect`, with `--include-private-evidence` only when Mikey's concrete decision needs the addresses or DOB values. May be `{ unavailable: true }` if the cost report fails; say so rather than guessing. This section is also the run's AI-cost exploit watch: look for the signatures the brief exposes: one risk group spanning several user IDs, repeated account groups in `farmSignals.inboxFamilies`, or heavy spend by accounts that `economy.topGainers` or `notableCandidates` independently marks as recent signups. Cross-check those signals against the escalation categories. Missing join-date or community data is unknown, not evidence that an account is young or empty. A run that reads the spending report without asking "could any of this be one person with many accounts?" has skipped a duty.
+- `aiCardSummoning`: the standing multi-alt Summoner watch for every website-management run. It counts the authoritative `ai_card_summons` daily quota counters over the whole-day `dayWindow`, so Mystery Cards and successful fallback cards are included, then lists the most active summoning accounts. It groups summons when the same exact-device hash was observed for more than one summoning user within the bounded `deviceEvidenceLookbackDays`; that evidence is correlated with the account/window, not asserted to be the device used for every individual summon. Each group reports its maximum same-day account and charged-summon totals, the multi-account days, and days above the shared three-card limit. Review every `requiresIdentityInspection` group, prioritizing `daysAboveSharedLimit > 0`, with reason-required `identity inspect`. If `riskGroupsTruncated` is true, report that the bounded watch has more groups than it returned rather than calling the review exhaustive. Add only operator-confirmed exact accounts to an unbanned quota bucket with `ai-bucket accounts add`; never infer or auto-bucket a family from a device, IP prefix, user agent, shared inbox, or anomaly alone. After a bucket update, re-read its canonical members. This duty applies even when no group crossed three cards, because the enforcement prevents already-bucketed siblings from producing an over-limit row.
+- `notableCandidates`: kids (never bots, staff `userType`s, approved teachers (anyone holding the mentor or sage achievement), or users already on the Notable Users list) ranked by authored activity in the window, with `isNewUser` marking window-new signups. Use it to find the overlooked and rising users the editorial priorities exist for, and propose additions to Mikey's Notable Users list in the report. When Mikey approves additions, execute them with `lumine admin notable add <userId|username> --note "<specific rationale>"` (idempotent: an existing member returns `already_done`; run-independent, privately audited as `notable.add`, and writes through the management page's own canonical service). It can therefore record Mikey's approval after the daily run has closed without opening another delegated run. Without his approval the run only proposes.
+  Check an exact current username or user ID without opening a run using `lumine admin notable status <userId|username> --json`. This reads the canonical writer and returns only the resolved public account identity, current membership, and the roster rationale/timestamps when present; it does not expose the private roster fields.
+  Before proposing a candidate, read their profile with `lumine admin profile show <userId|username> [--json]` (a daily-run read, like `brief`): username, real name as the public profile shows it, join and last-active dates, rank/XP/title/achievements, status and bio lines, counts (subjects, comments, AI stories, public builds, shared reflections) and their latest ten of each with dates, excerpts and links. It serves the profile as a signed-out visitor sees it: no emails, no secret answers, no unshared reflections, and only comments on public surfaces.
   When Mikey authorizes removal, use `lumine admin notable remove <userId|username> --note "<why removed>" --json`. It is run-independent, transactionally audited as `notable.remove`, verifies canonical absence, and is idempotent. Never use SQL to work around a missing CLI verb. Mikey is the administrator, not a Notable candidate; do not include him in blanket roster additions.
-  **Always pass `--note`** with a concrete one-or-two-sentence record of what
-  made them notable — real numbers and specifics from the brief window, not
-  "active user". It lands in the management page's reason column, which is
-  where Mikey later reads why a name is on his list. On an already-listed
-  user, `--note` updates the stored reason (status `success` with
-  `data.reasonUpdated: true`; an identical note stays `already_done` without
-  rewriting its timestamp).
-- `teachers` — the mentor/sage achievement holders (the accounts the website
-  titles teacher/headteacher): real classroom teachers, NOT the
-  `userType='supermod'` Korean operations staff, whose work-only usage is
-  expected and deliberately excluded. Mikey's standing question here: which
-  teachers genuinely use the website for themselves and which only work
-  through it. Recommendations and rewards are classroom "work" verbs and
-  count for nothing toward interest; genuine personal interest is measured by
-  what a teacher does for themselves — authored subjects/comments,
-  `reflections` (Daily Reflections answered), `dailyTasksCompleted`,
-  `wordlePlays`, `buildsTouched` (Lumine builds they own that changed in the
-  window), `aiStories`, and bounded `xpEvents` (XP-ledger activity). Shape:
-  `genuinelyInterested` (interestScore > 0, ordered by it, each row carrying
-  all the per-window counters plus `rank: mentor|sage` and `workScore`),
-  `workOnly` (classroom verbs only, zero personal signals), `activeButSilent`
-  (window-active log-ins with nothing at all, capped at 40), and `totals`.
-  Daily-task counts use canonical whole-day indices and can begin up to one
-  calendar day before the exact `window.sinceTs`.
-  Report the contrast between the buckets, and treat `genuinelyInterested` as
-  notable-users-but-for-teachers.
-- `engagementPulse` — distinct users per surface (activeUsers, subjects,
-  comments, recommendations, wordle, reflections, dailyTasks, aiChat,
-  lumineBuildChat, buildsEdited, buildsPlayed) for the current window vs the
-  equal-length previous window, each as `{ current, previous, delta }`.
-  `activeUsers` is the union of every timestamp-windowed surface: a member who
-  logged an action (search, logout, entering Chat), wrote or recommended a
-  Subject or comment, sent a chat message, shared a reflection, talked to
-  Lumine, or saved a Build in the window, counted once however many surfaces
-  they touched. It is therefore never smaller than subjects, comments,
-  recommendations, reflections, lumineBuildChat or buildsEdited, and a member
-  active in both windows counts in both. The calendar-bucket surfaces (wordle,
-  dailyTasks, aiChat) and buildsPlayed are NOT part of that union, so
-  `activeUsers` can be smaller than those. Presence, build edits, and build
-  plays come from durable action/version/view events, not mutable
-  `lastActive`/`updatedAt` snapshots. Zero/Ciel are excluded
-  from authored surfaces. Wordle, daily tasks, and AI chat use the equal
-  calendar-bucket ranges in `dayWindow`; those can begin before the exact
-  timestamp window but always compare the same number of days. This is the
-  "where do users actually live, and is it shifting?" section: report only the
-  deltas that mean something, and read a surface's absolute size before
-  dramatizing a small delta.
-- `launchMetrics` — readouts for recently shipped features so nothing ships
-  unmeasured. v1 carries `firstBuildRescue` (offers recorded and redemptions
-  in the window, each `{ total, byEventType }`, plus first-Lumine-exchange
-  claims) and `wordleSkipShield` (`startDayIndex`, `active`, judged dodges,
-  and skip covers split `earned` vs `fromRescue`). Wordle metrics cover only
-  completed, actually judged days in `judgedWindow`; today's in-progress game
-  is never called a dodge. Offers without redemptions are a reason to inspect
-  sample size, event type, and offer age — not proof of a broken funnel by
-  themselves.
-- `goneQuiet` — the inverse of `notableCandidates`, and window-relative: a
-  user "went quiet" the moment 7 days of silence passed since their
-  `lastActive`, and the section lists only the users whose quiet moment fell
-  inside the brief's window (`lastActive` between `sinceTs - 7d` and
-  `now - 7d`). A one-day brief therefore reports one day of crossings and
-  contiguous daily runs list each user once; it never re-lists everyone seen
-  in the past fortnight. `totals.wentQuiet` is that cohort; `previouslyRegular`
-  is the subset with at least 7 distinct active days (completed daily tasks or
-  Wordle plays) in the 30 days ending on their own last active day, and
-  `users` is that subset ranked by `regularityScore` (`dailyTasks * 2 +
-  wordlePlays`, both measured over the same per-user span), capped at 15 with
-  `daysQuiet`. Use it for product signal (what did they stop doing?) and
-  gentle outreach candidates; never guilt a child in public about absence.
-- `newUserFunnel` — signups in the window with `activeOnDayOne` (any
-  XP-ledger event within 24h of joining) and `returnedAfterDayOne`
-  (`lastActive` beyond their first day), plus the newest few accounts.
-  Deliberately coarse: it is an onboarding health check, not per-child
-  session tracking.
-- `farmSignals` — AI-cost farm signatures derivable with ZERO new data
-  collection: `inboxFamilies` (account groups formed from verified emails of
-  accounts active in the last `inboxFamilyActivityDays`, with only
-  Gmail/googlemail's documented
-  plus-tag and dot aliases collapsed, flagging inboxes behind 3+ accounts) and
-  `youngAccountAiUsage` (accounts under 30 days old drawing battery in the
-  whole-day `aiUsageDayWindow`). The raw canonical inbox is never returned in
-  the routine brief. SIGNAL ONLY: siblings legitimately share a parent inbox,
-  so an inbox family is a reason to look, never proof or grounds
-  for action. Feed real suspicions to the AI-cost escalation category. Shared
-  AI device/IP risk evidence is already in `aiSpending.topRiskGroups`; do not
-  guess it from inbox similarity.
+  **Always pass `--note`** with a concrete one-or-two-sentence record of what made them notable: real numbers and specifics from the brief window, not "active user". It lands in the management page's reason column, where Mikey later reads why a name is on his list. On an already-listed user, `--note` updates the stored reason (status `success` with `data.reasonUpdated: true`; an identical note stays `already_done` without rewriting its timestamp).
+- `teachers`: the mentor/sage achievement holders (the accounts the website titles teacher/headteacher): real classroom teachers, NOT the `userType='supermod'` Korean operations staff, whose work-only usage is expected and deliberately excluded. Mikey's standing question: which teachers genuinely use the website for themselves and which only work through it. Recommendations and rewards are classroom "work" verbs and count for nothing toward interest; genuine personal interest is what a teacher does for themselves: authored subjects/comments, `reflections` (Daily Reflections answered), `dailyTasksCompleted`, `wordlePlays`, `buildsTouched` (Lumine builds they own that changed in the window), `aiStories`, and bounded `xpEvents` (XP-ledger activity). Shape: `genuinelyInterested` (interestScore > 0, ordered by it, each row carrying all the per-window counters plus `rank: mentor|sage` and `workScore`), `workOnly` (classroom verbs only, zero personal signals), `activeButSilent` (window-active log-ins with nothing at all, capped at 40), and `totals`. Daily-task counts use canonical whole-day indices and can begin up to one calendar day before the exact `window.sinceTs`. Report the contrast between the buckets, and treat `genuinelyInterested` as notable-users-but-for-teachers.
+- `engagementPulse`: distinct users per surface (activeUsers, subjects, comments, recommendations, wordle, reflections, dailyTasks, aiChat, lumineBuildChat, buildsEdited, buildsPlayed) for the current window vs the equal-length previous window, each as `{ current, previous, delta }`. `activeUsers` is the union of every timestamp-windowed surface: a member who logged an action (search, logout, entering Chat), wrote or recommended a Subject or comment, sent a chat message, shared a reflection, talked to Lumine, or saved a Build in the window, counted once however many surfaces they touched. It is therefore never smaller than subjects, comments, recommendations, reflections, lumineBuildChat or buildsEdited, and a member active in both windows counts in both. The calendar-bucket surfaces (wordle, dailyTasks, aiChat) and buildsPlayed are NOT part of that union, so `activeUsers` can be smaller than those. Presence, build edits, and build plays come from durable action/version/view events, not mutable `lastActive`/`updatedAt` snapshots. Zero/Ciel are excluded from authored surfaces. Wordle, daily tasks, and AI chat use the equal calendar-bucket ranges in `dayWindow`; those can begin before the exact timestamp window but always compare the same number of days. This is the "where do users actually live, and is it shifting?" section: report only the deltas that mean something, and read a surface's absolute size before dramatizing a small delta.
+- `launchMetrics`: readouts for recently shipped features. v1 carries `firstBuildRescue` (offers recorded and redemptions in the window, each `{ total, byEventType }`, plus first-Lumine-exchange claims) and `wordleSkipShield` (`startDayIndex`, `active`, judged dodges, and skip covers split `earned` vs `fromRescue`). Wordle metrics cover only completed, actually judged days in `judgedWindow`; today's in-progress game is never called a dodge. Offers without redemptions are a reason to inspect sample size, event type, and offer age, not proof of a broken funnel by themselves.
+- `goneQuiet`: the inverse of `notableCandidates`, window-relative: a user "went quiet" when 7 days of silence passed since their `lastActive`, and the section lists only users whose quiet moment fell inside the brief's window (`lastActive` between `sinceTs - 7d` and `now - 7d`). A one-day brief reports one day of crossings; contiguous daily runs list each user once. `totals.wentQuiet` is that cohort; `previouslyRegular` is the subset with at least 7 distinct active days (completed daily tasks or Wordle plays) in the 30 days ending on their own last active day, and `users` is that subset ranked by `regularityScore` (`dailyTasks * 2 + wordlePlays`, both measured over the same per-user span), capped at 15 with `daysQuiet`. Use it for product signal (what did they stop doing?) and gentle outreach candidates; never guilt a child in public about absence.
+- `newUserFunnel`: signups in the window with `activeOnDayOne` (any XP-ledger event within 24h of joining) and `returnedAfterDayOne` (`lastActive` beyond their first day), plus the newest few accounts. Deliberately coarse: an onboarding health check, not per-child session tracking.
+- `farmSignals`: AI-cost farm signatures derivable with zero new data collection: `inboxFamilies` (account groups formed from verified emails of accounts active in the last `inboxFamilyActivityDays`, with only Gmail/googlemail's documented plus-tag and dot aliases collapsed, flagging inboxes behind 3+ accounts) and `youngAccountAiUsage` (accounts under 30 days old drawing battery in the whole-day `aiUsageDayWindow`). The raw canonical inbox is never returned in the routine brief. SIGNAL ONLY: siblings legitimately share a parent inbox, so an inbox family is a reason to look, never proof or grounds for action. Feed real suspicions to the AI-cost escalation category. Shared AI device/IP risk evidence is already in `aiSpending.topRiskGroups`; do not guess it from inbox similarity.
 
-The command needs only an active run's `content:read` scope and mutates
-nothing; reading the brief is not audited content action. Window boundaries
-on the big append-only ledgers are found by binary-searching the PRIMARY key
-(several tables have no timeStamp index), avoiding lifetime scans; aggregation
-is still bounded to the selected 1–30 day window. The optional sections run
-serially around the existing core report so this low-frequency command cannot
-occupy the production reader pool; one unavailable section does not suppress
-the others.
+The command needs only an active run's `content:read` scope and mutates nothing; reading the brief is not audited content action. Window boundaries on the big append-only ledgers are found by binary-searching the PRIMARY key (several tables have no timeStamp index), avoiding lifetime scans; aggregation is bounded to the selected 1-30 day window. The optional sections run serially around the core report so this low-frequency command cannot occupy the production reader pool; one unavailable section does not suppress the others.
 
 ```ts
 type InsightUnavailable = { unavailable: true; error: string };
@@ -5085,19 +4352,9 @@ lumine admin comment edit <commentId> --file corrected.md --json
 lumine admin correction complete <sessionId> --json
 ```
 
-The server derives Zero or Ciel from the comment's actual author; the caller
-cannot choose or override that identity. The authorization lasts ten minutes,
-is bound to that exact comment, permits only reading that target and editing
-it, and never runs daily duties, changes the Bangkok calendar assignment, or
-contributes to a daily-run mutation count. A correction cannot target a human
-comment, notification record, or deleted comment. A Build comment must belong
-to a public, published canonical owner Build; editing it requires a fresh review
-of the exact published version and private review context. Starting a newer
-correction supersedes an older active one.
-Finish it explicitly after the canonical edit is confirmed.
+The server derives Zero or Ciel from the comment's actual author; the caller cannot choose or override that identity. The authorization lasts ten minutes, is bound to that exact comment, permits only reading that target and editing it, and never runs daily duties, changes the Bangkok calendar assignment, or contributes to a daily-run mutation count. A correction cannot target a human comment, notification record, or deleted comment. A Build comment must belong to a public, published canonical owner Build; editing it requires a fresh review of the exact published version and private review context. Starting a newer correction supersedes an older active one. Finish it explicitly after the canonical edit is confirmed.
 
-For a Build, inspect the current app and its full discussion first. Managed
-runtime review does not require a daily run and does not start one:
+For a Build, inspect the current app and its full discussion first. Managed runtime review does not require or start a daily run:
 
 ```bash
 lumine admin builds review build:884 --output-dir ./build-review --json
@@ -5108,24 +4365,11 @@ lumine admin comment edit 456 --file corrected.md \
 lumine admin correction complete <sessionId> --json
 ```
 
-Use the exact receipt path returned by `builds review`, or pass manual
-`--reviewed-version <artifactId> --reviewed-via runtime|code` evidence instead.
-The private context file contains only `{"understanding":"What you actually reviewed"}`.
-The API locks the Build and comment, verifies the current version and ownership,
-and commits the text, mention updates, and a new immutable review record together.
-Only the edited comment's context link moves; older bot replies retain their
-historical review context. Changed/deleted comments, changed versions, and
-private/noncanonical Builds fail without a partial edit. A fresh review can be
-stored even if the public text is unchanged. The CLI requires the exact edited
-text plus `edit.buildReviewContextStored: true`, the reviewed version, and a
-canonical review record ID before claiming success. Older APIs that still block
-Build edits must be deployed first; do not silently substitute a duplicate reply
-when Mikey requested an edit.
+Use the exact receipt path returned by `builds review`, or pass manual `--reviewed-version <artifactId> --reviewed-via runtime|code` evidence instead. The private context file contains only `{"understanding":"What you actually reviewed"}`. The API locks the Build and comment, verifies the current version and ownership, and commits the text, mention updates, and a new immutable review record together. Only the edited comment's context link moves; older bot replies retain their historical review context. Changed/deleted comments, changed versions, and private/noncanonical Builds fail without a partial edit. A fresh review can be stored even if the public text is unchanged. The CLI requires the exact edited text plus `edit.buildReviewContextStored: true`, the reviewed version, and a canonical review record ID before claiming success. Older APIs that still block Build edits must be deployed first; do not silently substitute a duplicate reply when Mikey requested an edit.
 
 ### Standalone comment sessions
 
-Posting a few new comments or replies as Zero or Ciel does not require a full
-daily run. An approved operator names the identity and the exact targets:
+Posting a few new comments or replies as Zero or Ciel does not require a full daily run. An approved operator names the identity and the exact targets:
 
 ```bash
 lumine admin comment session start --identity ciel \
@@ -5139,78 +4383,26 @@ lumine admin comment session status --json
 lumine admin comment session close --json
 ```
 
-`--target` takes a comma-separated list (extra space-separated targets after
-it also count); each is `subject:ID`, `comment:ID`, `build:ID`, `aiStory:ID` or
-`dailyReflection:ID`, at most ten. Pass them in one `--target`: a repeated
-`--target` flag keeps only its last value. The server checks every target when
-the session starts and refuses one the draft path would refuse later.
+`--target` takes a comma-separated list (extra space-separated targets after it also count); each is `subject:ID`, `comment:ID`, `build:ID`, `aiStory:ID` or `dailyReflection:ID`, at most ten. Pass them in one `--target`: a repeated `--target` flag keeps only its last value. The server checks every target when the session starts and refuses one the draft path would refuse later.
 
 What the session authorizes:
 
-- **Scopes:** only `content:read`, `comment:draft` and `comment:post`. No chat,
-  Featured, reward, recommendation, subject, newspaper or run-completion
-  command works through it; those still need a daily run.
-- **Target lock:** drafts, replies and the reads above work only on the named
-  targets. A reply target counts when it is a named `comment:ID`, or a comment
-  sitting directly in a named subject, Build, AI Story or Daily Reflection.
-  Anything else fails with `CLI_ADMIN_COMMENT_SESSION_TARGET_FORBIDDEN` and
-  the allowed list. `comment post` accepts only drafts created in the session.
-- **Edits:** `comment edit <commentId>` works under the session only for a
-  comment this session itself posted, as the same identity
-  (`CLI_ADMIN_COMMENT_SESSION_EDIT_FORBIDDEN` otherwise). The usual edit rules
-  apply unchanged, including fresh Build review evidence for a Build comment.
-  Edits do not count toward the post cap.
-- **Limits:** 30 minutes, at most five published comments
-  (`CLI_ADMIN_COMMENT_SESSION_POST_CAP`), one active session per operator.
-  `close` or the TTL ends it; start a new session for more.
-- **Same bar as a daily run:** drafting and publishing use the exact daily-run
-  draft/publish path. Build comments still require composed text, a review
-  receipt or `--reviewed-version/--reviewed-via` evidence of the current
-  published version, and `--review-context`; context and persona revisions
-  are checked at publish time as usual.
-- **Identity:** the operator must be an approved delegated administrator, and
-  the session posts only as the identity named at start (`--identity auto` is
-  not accepted). It does not change the Bangkok calendar assignment or the
-  identity preference.
+- **Scopes:** only `content:read`, `comment:draft` and `comment:post`. No chat, Featured, reward, recommendation, subject, newspaper or run-completion command works through it; those still need a daily run.
+- **Target lock:** drafts, replies and the reads above work only on the named targets. A reply target counts when it is a named `comment:ID`, or a comment sitting directly in a named subject, Build, AI Story or Daily Reflection. Anything else fails with `CLI_ADMIN_COMMENT_SESSION_TARGET_FORBIDDEN` and the allowed list. `comment post` accepts only drafts created in the session.
+- **Edits:** `comment edit <commentId>` works under the session only for a comment this session itself posted, as the same identity (`CLI_ADMIN_COMMENT_SESSION_EDIT_FORBIDDEN` otherwise). The usual edit rules apply unchanged, including fresh Build review evidence for a Build comment. Edits do not count toward the post cap.
+- **Limits:** 30 minutes, at most five published comments (`CLI_ADMIN_COMMENT_SESSION_POST_CAP`), one active session per operator. `close` or the TTL ends it; start a new session for more.
+- **Same bar as a daily run:** drafting and publishing use the exact daily-run draft/publish path. Build comments still require composed text, a review receipt or `--reviewed-version/--reviewed-via` evidence of the current published version, and `--review-context`; context and persona revisions are checked at publish time as usual.
+- **Identity:** the operator must be an approved delegated administrator, and the session posts only as the identity named at start (`--identity auto` is not accepted). It does not change the Bangkok calendar assignment or the identity preference.
 
-A comment session and a daily run can be active together, but every request
-carries exactly one authority. The session never claims the daily-run slot.
+A comment session and a daily run can be active together, but every request carries exactly one authority. The session never claims the daily-run slot.
 
 - When only one of them is active, the CLI uses it.
-- When both are active, `comment draft`, `comment reply`, `comment post` and
-  `comment edit` refuse to run until you choose with `--via session` or
-  `--via run`. Target reads (`subject get`, `post get`, `comments get`, their
-  comment lists) default to the daily run and take `--via session` to read
-  through the session instead.
-- The API refuses a request that names a comment session together with a
-  daily run or correction session (`CLI_ADMIN_AMBIGUOUS_AUTHORITY`); a session
-  request outside the session is refused, never handed to the run.
-- A draft records the authority that created it, and only that authority can
-  publish it (`CLI_ADMIN_DRAFT_AUTHORITY_MISMATCH`).
-- A correction session still takes precedence for its one comment; `--via` is
-  refused while it is active for that comment.
+- When both are active, `comment draft`, `comment reply`, `comment post` and `comment edit` refuse to run until you choose with `--via session` or `--via run`. Target reads (`subject get`, `post get`, `comments get`, their comment lists) default to the daily run and take `--via session` to read through the session instead.
+- The API refuses a request that names a comment session together with a daily run or correction session (`CLI_ADMIN_AMBIGUOUS_AUTHORITY`); a session request outside the session is refused, never handed to the run.
+- A draft records the authority that created it, and only that authority can publish it (`CLI_ADMIN_DRAFT_AUTHORITY_MISMATCH`).
+- A correction session still takes precedence for its one comment; `--via` is refused while it is active for that comment.
 
-**Editing the bot's own comments.** `comment edit <commentId> --file
-<comment.md>` replaces the text of a comment the acting bot itself authored —
-for correcting a factual error, an unfulfillable claim, or outdated guidance
-in Zero/Ciel's own words. It is deliberately not a moderation verb: comments
-by the other bot, by any human, and hidden notification records are all
-rejected (`CLI_ADMIN_EDIT_NOT_OWN_COMMENT`,
-`CLI_ADMIN_EDIT_NOTIFICATION_COMMENT`). The replacement text follows the
-composed-comment rules (plain UTF-8, 10,000-character limit, truth about what
-the session actually did) and publishes through the website's canonical
-comment-edit pipeline — mentions are reprocessed (a newly added `@mikey`
-notifies him), and Earn-candidate projections resync. Submitting identical
-text returns `already_done` for non-Build comments; a Build edit can still save
-a fresh review without changing its text. It requires either the exact active correction
-session above or the `comment:post` scope of a comment-mode `post` run, and is
-audited as `comment.edit` with the previous content in `beforeState` and
-`data.edit.previousContent`. Edit sparingly:
-kids may have already read the original, so a comment that changed meaning
-(not just wording) usually deserves a follow-up reply instead of a silent
-rewrite. Inside a full comment-enabled daily run it still requires that run's `comment:post`
-scope; for a one-comment repair, use the narrower correction session above.
-
+**Editing the bot's own comments.** `comment edit <commentId> --file <comment.md>` replaces the text of a comment the acting bot itself authored, for correcting a factual error, an unfulfillable claim, or outdated guidance in Zero/Ciel's own words. It is not a moderation verb: comments by the other bot, by any human, and hidden notification records are rejected (`CLI_ADMIN_EDIT_NOT_OWN_COMMENT`, `CLI_ADMIN_EDIT_NOTIFICATION_COMMENT`). The replacement text follows the composed-comment rules (plain UTF-8, 10,000-character limit, truth about what the session actually did) and publishes through the website's canonical comment-edit pipeline: mentions are reprocessed (a newly added `@mikey` notifies him), and Earn-candidate projections resync. Submitting identical text returns `already_done` for non-Build comments; a Build edit can still save a fresh review without changing its text. It requires either the exact active correction session above or the `comment:post` scope of a comment-mode `post` run, and is audited as `comment.edit` with the previous content in `beforeState` and `data.edit.previousContent`. Edit sparingly: kids may have already read the original, so a comment that changed meaning (not just wording) usually deserves a follow-up reply instead of a silent rewrite. Inside a full comment-enabled daily run it still requires that run's `comment:post` scope; for a one-comment repair, use the narrower correction session above.
 ## Direct bot chat messages
 
 ```bash
@@ -5218,17 +4410,16 @@ lumine admin chat send <userId|username> --file message.md --json
 ```
 
 The run's selected bot sends one composed direct chat message into an
-**existing** two-person channel between that bot and the target member. Built
-for private repair: when a bot said something harmful in chat, a public
-comment cannot fix it — the apology (or follow-up care) belongs in the same
-channel where the harm happened, and the sent message becomes part of the
-channel history that future AI responses condition on, repairing the context
-itself. Mechanics:
+**existing** two-person channel between that bot and the target member. It is
+for private repair: when a bot said something harmful in chat, a public comment
+cannot fix it. The apology (or follow-up care) belongs in the same channel, and
+the sent message becomes channel history that future AI responses condition on.
+Mechanics:
 
 - requires the `chat:post` scope, granted only to comment-mode `post` runs;
 - composed-only (`--file`, plain UTF-8, 10,000-character limit): the agent
   writes the message in the bot's persona; no model runs, no AI Energy;
-- existing DM channels only — the pipeline never opens a new chat with a
+- existing DM channels only; the pipeline never opens a new chat with a
   member who never talked to the bot (`CLI_ADMIN_NO_DM_CHANNEL`);
 - delivery is canonical: the ordinary message insert (channel lock,
   visibility restore) plus the normal `new_chat_message` relay, so the
@@ -5238,12 +4429,11 @@ itself. Mechanics:
   request key like every mutation.
 
 Restraint rules: a bot-initiated DM is the platform speaking privately to a
-child — use it for repair and care, never for promotion, nudges, or
-engagement. Incident remedies (an apology for a harmful bot message) are
-sent on Mikey's direction with text he has seen, and must be exactly
-specific about what the bot got wrong — a real apology names the failure
-(the invented premise, the order it had no right to give, the guilt it
-shifted onto the child), not a vague "sorry if that came out wrong."
+child. Use it for repair and care, never for promotion, nudges, or
+engagement. Incident remedies (an apology for a harmful bot message) are sent
+on Mikey's direction with text he has seen, and must name exactly what the bot
+got wrong (the invented premise, the order it had no right to give, the guilt
+it shifted onto the child), not a vague "sorry if that came out wrong."
 Ordinary warm follow-ups (checking on a member the bots already know after
 something the run surfaced) are within a run's judgment, sparingly, and are
 always reported in the run report.
@@ -5260,8 +4450,8 @@ board, not a DM and not a Home comment. Mechanics:
 
 - requires the `chat:post` scope of a comment-mode `post` run;
 - composed-only (`--file`, same 10,000-character limit as `chat send`);
-- authors as Zero or Ciel only — the ordinary chat post route and the
-  announcement socket relay now treat those two IDs as allowed announcement
+- authors as Zero or Ciel only; the ordinary chat post route and the
+  announcement socket relay treat those two IDs as allowed announcement
   authors, same as management-level 3 humans;
 - persists through the ordinary `msg_chats` insert (channel lock +
   visibility restore), writes the Twinkle Newspaper `announcement:<messageId>`
@@ -5269,8 +4459,8 @@ board, not a DM and not a Home comment. Mechanics:
   presence;
 - audited as `announcement.post` and idempotent per request key.
 
-Use this only when Mikey asks for an official announcement. Do not treat a
-management run as a standing license to post there.
+Use this only when Mikey asks for an official announcement. A management run
+is not a standing license to post there.
 
 ## Audit history
 
@@ -5285,14 +4475,14 @@ lumine admin audit list --cursor '<cursor>' --limit 50 --json
 Lists the operator's own private audit events, newest first, so an agent can
 see what earlier runs did. `--run` accepts `current`, `last`, or a run ID;
 `--target` accepts `<targetType>:<id>`; `--actions` is a comma-separated
-action list. Filters are bound into the cursor exactly like the other list
-cursors. The walk is a bounded descending primary-key traversal over the
-existing operator/run/target audit indexes.
+action list. Filters are bound into the cursor like the other list cursors.
+The walk is a bounded descending primary-key traversal over the existing
+operator/run/target audit indexes.
 
 Rows are compact by default (identifiers, action, target, result, response
 `status`/`changed`, timestamps, and the request's idempotency key). `--full`
 adds the stored `beforeState`, `afterState`, `responseJson`, and `metadata`
-payloads — the same data the mutation already returned to this operator. The
+payloads, the same data the mutation already returned to this operator. The
 private per-attempt fencing token is never returned. Reading audit history
 requires only the `content:read` scope of an active run.
 
@@ -5348,19 +4538,18 @@ lumine admin comment edit 342752 --file corrected.md --json
 ```
 
 **Compose in persona by default (Mikey's standing direction, 2026-08-10).**
-A delegated agent writing Zero/Ciel comments should assume the bot's persona
-and write the comment text itself, submitting it with `--file` — exactly like
-the newspaper's claim/submit path, this spends no provider credits and no AI
-Energy (server-generated drafts bill the **operator's own** AI Energy
-battery). Use the no-`--file` server-generated path only when Mikey
-explicitly asks for it. Before composing, read the canonical persona sources
-so the voice and judgment match the real bots — do not improvise the persona
-from memory:
+A delegated agent writing Zero/Ciel comments assumes the bot's persona and
+writes the comment text itself, submitting it with `--file`. Like the
+newspaper's claim/submit path, this spends no provider credits and no AI Energy
+(server-generated drafts bill the **operator's own** AI Energy battery). Use
+the no-`--file` server-generated path only when Mikey explicitly asks for it.
+Before composing, read the canonical persona sources; do not improvise the
+persona from memory:
 
-- `twinkle-api/constants/index.ts` — `SYS_PROMPT_FOR_CIEL` /
+- `twinkle-api/constants/index.ts`: `SYS_PROMPT_FOR_CIEL` /
   `SYS_PROMPT_FOR_ZERO` (the exact persona system prompts) and
   `TWINKLE_FEATURES_EXPLANATION` (what the bots know about the site);
-- `twinkle-api/helpers/ai/comment-assistant/index.ts` —
+- `twinkle-api/helpers/ai/comment-assistant/index.ts`:
   `ADMIN_COMMENT_DECISION_POLICY` / `ADMIN_REPLY_DECISION_POLICY` (the
   draft-vs-skip judgment rules, which still govern composed comments: skip
   decisions are yours to make and record with `post skip` or in the run
@@ -5371,50 +4560,47 @@ including acknowledgements, corrections, bug reports, `@mikey` notifications,
 and other reporting duties. The acting bot must remember what it already said:
 do not reintroduce a conclusion, apology, explanation, question, or offer as if
 the earlier bot comment did not exist. A follow-up should advance the existing
-conversation and make its relationship to the prior reply natural and clear.
-Accuracy and escalation requirements never authorize a sudden formal admin
-voice. Before posting, read the full thread, identify the acting bot's existing
-claims and commitments, and preserve the canonical character plus the
-established conversational register where they agree: phrasing,
-capitalization, warmth, humor, and emoji restraint should feel like the same
-Zero or Ciel continuing the conversation. Do not mechanically copy typos,
-mistakes, unsafe behavior, or a voice that conflicts with the canonical
-persona. Keep the two surfaces distinct: the public comment is an in-character
-continuation for the member, while `daily-run escalation add` and the final
-management report carry the concise operator-facing diagnosis and evidence. A
-comment that is factually correct but ignores the bot's earlier reply, repeats
-it as new, or reads like a support ticket or management audit fails this
-requirement.
+conversation and make its relationship to the prior reply clear. Accuracy and
+escalation requirements never authorize a sudden formal admin voice. Before
+posting, read the full thread, identify the acting bot's existing claims and
+commitments, and keep the canonical character plus the established
+conversational register where they agree (phrasing, capitalization, warmth,
+humor, emoji restraint). Do not copy typos, mistakes, unsafe behavior, or a
+voice that conflicts with the canonical persona. Keep the two surfaces
+distinct: the public comment is an in-character continuation for the member,
+while `daily-run escalation add` and the final management report carry the
+concise operator-facing diagnosis and evidence. A comment that is factually
+correct but ignores the bot's earlier reply, repeats it as new, or reads like a
+support ticket or management audit fails this requirement.
 
-Keep participant ownership exact while continuing that thread. The
-`subject.author` (or root post's `author`) owns the topic, subject, post, or
-project. A selected comment's `author` owns only that comment. Addressing a
-commenter does not make the root content theirs: never call the root topic,
-subject, post, or project “yours” unless that participant is also its canonical
-author. Read both author fields before composing a reply.
+Keep participant ownership exact. The `subject.author` (or root post's
+`author`) owns the topic, subject, post, or project. A selected comment's
+`author` owns only that comment. Addressing a commenter does not make the root
+content theirs: never call the root topic, subject, post, or project “yours”
+unless that participant is also its canonical author. Read both author fields
+before composing a reply.
 
 **Lumine Build apps and app posts are composed-only, and only after actually looking
-(Mikey's direction, 2026-08-10).** When a post is about a Build app — the
-author shares their app, announces an update, or asks for feedback on their
-build — never use the server-generated draft path: the API persona cannot
-open an app, so its drafts either stay generic or fabricate first-hand
-experience (a real Ciel draft claimed "I clicked over to check it out" on an
-app nobody had opened). The day's management agent comments instead, and
-looks first: pull the project with lumine-cli when it is open source (or
-yours to pull) and read the code, or open the app and actually try it; then
-compose a comment whose specifics come from what you genuinely saw — a
-mechanic you liked, a nice touch in their code, a concrete suggestion. Be
-truthful about what you did: "I read through your code" and "I played a few
-rounds" are different claims, and a comment must only make the one that
-happened. If you could not access the app at all, say nothing about having
-tried it — ask the author about it instead. This is the standing rule for
-every composed comment, applied to apps: never claim an experience the
-session did not actually have.
+(Mikey's direction, 2026-08-10).** When a post is about a Build app (the
+author shares their app, announces an update, or asks for feedback), never use
+the server-generated draft path: the API persona cannot open an app, so its
+drafts stay generic or fabricate first-hand experience (a real Ciel draft
+claimed "I clicked over to check it out" on an app nobody had opened). The
+day's management agent comments instead, and looks first: pull the project with
+lumine-cli when it is open source (or yours to pull) and read the code, or open
+the app and actually try it. Then compose a comment whose specifics come from
+what you genuinely saw (a mechanic you liked, a nice touch in their code, a
+concrete suggestion). Be truthful about what you did: "I read through your
+code" and "I played a few rounds" are different claims, and a comment may make
+only the one that happened. If you could not access the app at all, say nothing
+about having tried it; ask the author about it instead. This is the standing
+rule for every composed comment: never claim an experience the session did not
+actually have.
 
 The same rule covers comments placed **directly on a Build app**. This is
-deliberately management-agent-only: no server-generated draft and no pure API
-persona may author one. After reviewing the project, bind the composed comment
-to the exact published artifact you saw:
+management-agent-only: no server-generated draft and no pure API persona may
+author one. After reviewing the project, bind the composed comment to the exact
+published artifact you saw:
 
 ```bash
 lumine admin comment draft build:884 --file comment.md \
@@ -5457,68 +4643,66 @@ calls for an additional reply instead of an edit.
 
 **Offer a Lumine prompt when the moment invites it (Mikey's direction,
 2026-08-10).** Zero and Ciel may include one concrete, copy-pasteable Lumine
-prompt in a comment or reply — a genuinely powerful one, tailored to what the
-kid is already doing — when the occasion naturally calls for it. Appropriate
+prompt in a comment or reply (a genuinely powerful one, tailored to what the
+kid is already doing) when the occasion naturally calls for it. Appropriate
 occasions: a kid describes an idea they wish existed, asks how something on
 the site was made, hits the edge of what a post/drawing/story can do, shares
 a Build app that could grow a specific feature, or shows an interest (space,
 cats, chess, comics) that maps cleanly onto something Lumine could build with
-them. On those occasions, the prompt IS the helpful answer: quote it so it
-can be copied as-is, keep it specific to their interest, and mention it works
-in the Build workspace chat. Restraint rules: never more than one prompt per
-comment; never in condolence, conflict, wellbeing, or moderation-adjacent
-threads; never as a reflex closing line on ordinary comments — if the comment
-is complete without the prompt, post it without the prompt. A run where only
-a few comments carry a prompt is healthy; a run where most do is shameless
-plugging, which is exactly what Mikey asked to avoid. SDK-aware prompt ideas
-are especially good ("ask Lumine to make a magazine that pulls real Twinkle
-posts with Twinkle.subjects.search") because kids do not know the content
-APIs exist — but only suggest SDK capabilities that actually exist; check
-TWINKLE_BUILD_SDK.md if unsure.
+them. Then the prompt IS the helpful answer: quote it so it can be copied
+as-is, keep it specific to their interest, and mention it works in the Build
+workspace chat. Restraint rules: never more than one prompt per comment; never
+in condolence, conflict, wellbeing, or moderation-adjacent threads; never as a
+reflex closing line on ordinary comments (if the comment is complete without
+the prompt, post it without). A run where only a few comments carry a prompt is
+healthy; a run where most do is shameless plugging, which is exactly what
+Mikey asked to avoid. SDK-aware prompt ideas are especially good ("ask Lumine
+to make a magazine that pulls real Twinkle posts with
+Twinkle.subjects.search") because kids do not know the content APIs exist, but
+only suggest SDK capabilities that actually exist; check TWINKLE_BUILD_SDK.md
+if unsure.
 
 A composed draft (`--file`, plain UTF-8 text, at most the website's 10,000
-character comment limit) flows through the identical draft lifecycle —
+character comment limit) flows through the identical draft lifecycle:
 reservation, idempotency, context-revision CAS, publish fencing, audit
-(`metadata.composed: true`) — and is published with the same
-`comment post --draft-id`. It never invokes the server's model and records
-no AI Energy usage. Deployment guard: an API deployed before this capability
+(`metadata.composed: true`). It is published with the same
+`comment post --draft-id`. It never invokes the server's model and records no
+AI Energy usage. Deployment guard: an API deployed before this capability
 silently ignores `content` and generates with the server's model instead. The
 CLI therefore requires the ready draft response to echo the exact submitted
 text with `reason: "operator-composed"`; otherwise it stops with
 `LUMINE_ADMIN_COMPOSED_COMMENT_UNSUPPORTED`. Never publish that rejected draft.
-For Build drafts it additionally requires
-`buildReviewContextStored: true`; an older API that ignores the private context
-fails closed with `LUMINE_ADMIN_BUILD_REVIEW_CONTEXT_UNSUPPORTED`. Deploy the
-context-aware API, then retry with a new idempotency key rather than publishing
-the unconfirmed draft.
-Placement stays on the requested target: compose replies via `comment:<id>`
-targets (the generated path's model-chosen
+For Build drafts it additionally requires `buildReviewContextStored: true`; an
+older API that ignores the private context fails closed with
+`LUMINE_ADMIN_BUILD_REVIEW_CONTEXT_UNSUPPORTED`. Deploy the context-aware API,
+then retry with a new idempotency key rather than publishing the unconfirmed
+draft. Placement stays on the requested target: compose replies via
+`comment:<id>` targets (the generated path's model-chosen
 `replyTargetCommentId` does not apply). Everything below about targets,
 containers, and publication applies to both kinds of draft.
 
 A draft targets one of:
 
-- `subject:<id>` (or a bare numeric ID) — a top-level comment on the subject;
-- `build:<id>` — a top-level comment on a public canonical Build, composed
+- `subject:<id>` (or a bare numeric ID): a top-level comment on the subject;
+- `build:<id>`: a top-level comment on a public canonical Build, composed
   after reviewing its exact published version;
-- `aiStory:<id>` / `dailyReflection:<id>` — a top-level comment on the
+- `aiStory:<id>` / `dailyReflection:<id>`: a top-level comment on the
   standalone post;
-- `comment:<id>` — a public reply to that specific comment. `comment reply`
+- `comment:<id>`: a public reply to that specific comment. `comment reply`
   is the same operation and requires a comment target.
 
 A reply's container resolves canonically from the target comment: its subject,
 Build, or AI Story / Daily Reflection root. Comments under any other root are
 rejected with `CLI_ADMIN_UNSUPPORTED_REPLY_ROOT`. Build replies authored by the
 management agent require the same exact-version review evidence and private
-review context as top-level Build comments. Replies to
-Zero/Ciel comments and to notification comments are rejected with
-`CLI_ADMIN_INVALID_REPLY_TARGET` — the bots never thread with themselves or
-each other through the delegated CLI. A human's later direct reply to a
-context-backed Build management comment may enter the energy-gated autonomous
-pipeline described above; ordinary human replies elsewhere follow the existing
-comment-assistant rules. Published replies carry the ordinary thread linkage
-(thread root and reply-to), and notification fan-out uses the normal canonical
-path.
+review context as top-level Build comments. Replies to Zero/Ciel comments and
+to notification comments are rejected with `CLI_ADMIN_INVALID_REPLY_TARGET`;
+the bots never thread with themselves or each other through the delegated CLI.
+A human's later direct reply to a context-backed Build management comment may
+enter the energy-gated autonomous pipeline described above; ordinary human
+replies elsewhere follow the existing comment-assistant rules. Published
+replies carry the ordinary thread linkage (thread root and reply-to), and
+notification fan-out uses the normal canonical path.
 
 ```ts
 type CommentDraft = Success<{
@@ -5573,7 +4757,7 @@ For Subjects and standalone posts, the server loads the canonical container
 and its complete visible comment context, then invokes the existing exact
 Zero/Ciel system prompt through the shared response assembler with a
 mode-specific decision policy (comment vs reply). The raw prompt is never
-returned or audited. The model—not regexes or keyword rules—chooses `draft`
+returned or audited. The model, not regexes or keyword rules, chooses `draft`
 or `skip` under the run policy. Build comments never enter that generated
 path; they require management-agent-composed content and review evidence.
 
@@ -5589,14 +4773,14 @@ subject, including replies inside it.
 
 Draft idempotency keys are permanent per operator: supplying a key that an
 earlier run (or another target) already used fails rather than resolving to
-the old reservation — normally as the audit layer's
+the old reservation. It normally fails as the audit layer's
 `CLI_ADMIN_AUDIT_IDENTITY_MISMATCH` (different run) or
 `CLI_ADMIN_IDEMPOTENCY_KEY_MISMATCH` (different target), with
 `CLI_ADMIN_DRAFT_KEY_REUSED` as the draft-table backstop. All three mean the
 same thing: embed the run or date in any caller-supplied draft key and retry
-with a fresh one. Note that the agent's
-own `subject effort set` or `creator set-made-by-poster` between draft and
-post changes the context revision — order those mutations before drafting.
+with a fresh one. The agent's own `subject effort set` or
+`creator set-made-by-poster` between draft and post changes the context
+revision, so order those mutations before drafting.
 
 ## Audit, sockets, and deployment
 
@@ -5624,15 +4808,14 @@ Public content actions use ordinary Twinkle fan-out:
 Apply `twinkle-api/scripts/migrations/add-lumine-admin-delegation.sql`, then
 `add-lumine-admin-comment-targets.sql`, and apply
 `add-lumine-admin-todos.sql` before deploying an API that exposes carry-over
-todos. They add
-only focused daily-run, rotation, draft, audit, and private-todo tables/columns
-and indexes;
-there are no runtime schema checks. The comment-targets migration backfills
-existing subject drafts into the generalized target columns. The local CLI changes
-are not available to users until a separately authorized npm publication.
-Deploy and verify the API's `/cli/admin/subjects/featured/rotation` route before
-publishing a CLI release that exposes `featured rotate`; an older API rejects
-the command without changing Featured state.
+todos. They add only focused daily-run, rotation, draft, audit, and
+private-todo tables/columns and indexes; there are no runtime schema checks.
+The comment-targets migration backfills existing subject drafts into the
+generalized target columns. The local CLI changes are not available to users
+until a separately authorized npm publication. Deploy and verify the API's
+`/cli/admin/subjects/featured/rotation` route before publishing a CLI release
+that exposes `featured rotate`; an older API rejects the command without
+changing Featured state.
 
 The approved-plan and Featured-comment workflows require the new
 `/subjects/featured/plan`, `/plan/apply` (under that same Featured base), and
@@ -5659,39 +4842,41 @@ contracts.
 
 Legacy aliases such as `subjects list`, `subjects get`, `subjects featured`,
 `comments get`, and `recommend` remain accepted, but the singular command forms
-shown above are the canonical interface.
+shown above are canonical.
 
 For bounded case evidence, use `lumine admin jev-routing review --since <UTC-day> --until <next-UTC-day> --json` and follow every cursor, or `--all --checkpoint <persistent-file>`. Daily gather retains every20-event source page for the preceding complete UTC day. The reader covers paired disagreements, Auto fallbacks and `candidate_inconsistent` events (JEV answered with fields that contradict each other, such as `lumine_turn` edit without `mutate_project`; `inconsistentFields` names them) once per event; synthetic traffic is excluded unless `--include-synthetic` is explicit. It returns only currently unexpired frozen input and labels absent/expired input. A missing endpoint is unavailable coverage, not an empty healthy day. Collection never acknowledges reading or proves classification accuracy. This October28 reader and independent Auto-input capture are local until the matching release is verified.
 
-Before calling a reply unrelated, check its original generation trigger and the bounded `askedAbout` descriptor. A member may have edited the visible turn or asked about linked content. The descriptor explicitly represents current stored metadata, not a separately frozen generation snapshot; never bypass deleted context.
+Before calling a reply unrelated, check its original generation trigger and the bounded `askedAbout` descriptor. A member may have edited the visible turn or asked about linked content. The descriptor represents current stored metadata, not a separately frozen generation snapshot; never bypass deleted context.
 
 Read `jevRoutingShadow` alongside `jevPilot` in both the admin brief and full
-daily report. The September 21 primary-chat experiment is historical: chat
-routing is off by default and served-route audits were retired September 23.
-Review actual selection latency and fallback reasons on enabled routes. New routing
-families remain comparison-only until Mikey reviews each one and explicitly
-promotes it. Report every registered family, including zero-sample and skipped
-families; no traffic is not a pass. Show paired counts, exact differing fields,
-both values, private input snapshots when available, baseline-controlled outcome,
-provider/LLM timing, failure/skip reasons, stale comparisons, and USD spend from
-canonical `jev_<family>_shadow` cost operations. Context snapshots are bounded,
-private and expire after eight days; do not copy unrelated private content into
-public output. Raw model choices precede existing application guards and are not
-proof an action was performed. Do not call agreement accuracy or infer speedups
-from shadow timings. Full daily costs must include these operations once only.
+daily report. Chat routing is off by default and served-route audits were
+retired September 23 (the September 21 primary-chat experiment is historical).
+Review actual selection latency and fallback reasons on enabled routes. New
+routing families remain comparison-only until Mikey reviews each one and
+explicitly promotes it. Report every registered family, including zero-sample
+and skipped families; no traffic is not a pass. Show paired counts, exact
+differing fields, both values, private input snapshots when available,
+baseline-controlled outcome, provider/LLM timing, failure/skip reasons, stale
+comparisons, and USD spend from canonical `jev_<family>_shadow` cost
+operations. Context snapshots are bounded, private and expire after eight days;
+do not copy unrelated private content into public output. Raw model choices
+precede existing application guards and are not proof an action was performed.
+Do not call agreement accuracy or infer speedups from shadow timings. Full
+daily costs must include these operations once only.
 
 September 21 Auto exception: Mikey approved JEV as Lumine Auto's primary model
 selector immediately. Its per-choice LLM comparison was retired September 23;
-the LLM runs only as the fallback when JEV cannot decide.
-Auto is the new default; stored manual preferences remain manual. Review
-`jevRoutingShadow` / `byRoute.lumine_model` separately from the eight
-comparison-only families: selected model/effort, available decisions, exact selection
-context, confidence, fallback, actual selection latency, missing evidence and
-observed task outcome. A served Auto row with `baselineStatus: not_run` is expected
-after the audit retirement, not an incomplete comparison. Report `jev_lumine_model_serve` and the fallback
-`lumine_model_fallback` spend separately, using canonical AI-cost totals without
-double-counting. JEV choice confidence is not a correctness score. The other
-eight families still require review before promotion.
+the LLM runs only as the fallback when JEV cannot decide. Auto is the new
+default; stored manual preferences remain manual. Review `jevRoutingShadow` /
+`byRoute.lumine_model` separately from the eight comparison-only families:
+selected model/effort, available decisions, exact selection context,
+confidence, fallback, actual selection latency, missing evidence and observed
+task outcome. A served Auto row with `baselineStatus: not_run` is expected
+after the audit retirement, not an incomplete comparison. Report
+`jev_lumine_model_serve` and the fallback `lumine_model_fallback` spend
+separately, using canonical AI-cost totals without double-counting. JEV choice
+confidence is not a correctness score. The other eight families still require
+review before promotion.
 
 
 <a id="september-21-verified-reward-follow-up"></a>
@@ -5859,12 +5044,12 @@ Asset keys use the existing Arena media store. Absolute URLs, traversal, query
 strings, traversal encodings and executable image formats are refused. Existing
 reviewed Arena `img/<path>` and `audio/<path>` keys can be reused after verifying
 content suitability and source provenance; a namespace alone does not prove
-reuse eligibility. Retain media under unique,
-immutable names; never overwrite an asset after publication. Verify each uploaded
-asset's exact bytes, accessibility and audio/picture fidelity before import. A key
-passing schema validation is not evidence that the asset exists or was reviewed.
-Existing upload and spending authorization still applies; these fields authorize
-no generation, upload or billing. New personal media must be independent of live
+reuse eligibility. Retain media under unique, immutable names; never overwrite
+an asset after publication. Verify each uploaded asset's exact bytes,
+accessibility and audio/picture fidelity before import. A key passing schema
+validation is not evidence that the asset exists or was reviewed. Existing
+upload and spending authorization still applies; these fields authorize no
+generation, upload or billing. New personal media must be independent of live
 timed-bank questions. Review the complete exam-type mix, including listening and
 pictures, and the main question, interactive lesson and fresh transfer check.
 
