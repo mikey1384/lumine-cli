@@ -25,6 +25,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Print the newspaper | `news edition`, `news claim`, `news submit --claim claim.json --file editorial.json`, `news print` | [Twinkle Newspaper](#twinkle-newspaper) |
 | Recommend / reward / skip a post | `post recommend <id>`, `post reward <ref> --twinkles <n>`, `post skip <ref>`, `post skip-batch` | [Recommendation, Karma approval, and Twinkle rewards](#recommendation-karma-approval-and-twinkle-rewards), [Skip decisions](#skip-decisions) |
 | Comment / reply as Zero or Ciel | `comment draft <ref> --file …` then `comment post --draft-id <id>`; `comment reply comment:<id> --file …` | [Standalone comment sessions](#standalone-comment-sessions), [Persona-backed comments and replies](#persona-backed-comments-and-replies) |
+| Check what Zero/Ciel know about a Twinkle feature before writing as them | `feature-guide --query <words>` / `--key <key>` / `--new` (no flags: every entry); drafts already carry the thread's entries and the bot's voice in `writeAs` | [Persona-backed comments and replies](#persona-backed-comments-and-replies) |
 | Fix a published bot comment | `correction start` … `comment edit <commentId> --file …` … `correction complete` | [Narrow comment-correction sessions](#narrow-comment-correction-sessions) |
 | Message a member directly / post an announcement | `chat send <userId\|username> --file message.md` / `announcement post --file announcement.md` | [Direct bot chat messages](#direct-bot-chat-messages), [Official announcements](#official-announcements) |
 | Refill a member's Arena Today's Challenge | `arena today-member --user <id>`, `arena today-import --file <reviewed-questions.json> [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
@@ -1313,6 +1314,34 @@ lumine admin teachers branches list [--branch <name>|none] [--json]
 - `teachers audit` shows each teacher's confirmed branch on its line. The branch is not part of the review fingerprint, so a branch change never marks a reviewed teacher changed.
 - Writes are audited server-side. The local receipts hold the network id, masked address and branches; an `apply` receipt keeps only the counts and the changes.
 - After it goes live: `suggest`, Mikey confirms the networks, then `apply`, then settle the ambiguous teachers with `set`.
+
+### Classroom sign-up: class codes (any time; also a full-daily-review duty; added 2026-11-15)
+
+Approved teachers make classes on the website (My classes). Each class has one join code shown as a QR code, a short board code and a link; students join with a username, a password and a first name, no sign-up question and no email, and the class teacher can hand a no-email student a one-time password reset code. The sign-up question with an email is unchanged. Mikey asked for telemetry on "who is using it and how its going": it is for agents, counts and ids only.
+
+```bash
+lumine admin classes report [--days 1..90] [--json]
+lumine admin classes list [--user <teacherId>] [--json]
+lumine admin classes flagged [--json]
+lumine admin classes show <classId> [--json]
+lumine admin classes revoke <classId>
+lumine admin classes separate-mailboxes [--dry-run | --confirm]
+```
+
+- `report` (read-only, default 14 days; the daily collection saves `classes.json` for 7): **who is using it** (teachers with a class, by branch, by class) and **how it's going**:
+  - `discovery`: the one-time offer card (teachers shown, used, dismissed, how many now have a class), the two moment-of-need hints (shown, clicked), Zero/Ciel guide hits and help-page views;
+  - `funnel`: join-page visits by method (`qr`, `code` = typed board code, `link`), sign-ups started, how far they got, joined, and where they stopped; wrong or ended codes; refusals (`full`, `closed`, `username`, `banned`);
+  - `resets`: codes issued, used, run out unused; `roster.notMyStudent`;
+  - `asks`: "Ask my teacher" at sign-up (someone without an account finds a teacher and asks): searches, requests, repeats not re-sent, requests turned away by a limit, how teachers answered (sent a one-account pass, put aside, ran out unanswered), and how many joined from a pass; `progressRow`: clicks on the teachers' My classes row in Today's Progress;
+  - `retention`: class joiners against every other sign-up of the same weeks. Day 1 = active the day after joining; day 7 = active on day 6, 7 or 8. A member counts once those days have passed;
+  - `attention`: what to look into. `live: false` means the tables are missing (apply `scripts/migrations/add-classrooms.sql`), not a quiet day.
+  Teachers are named; students are counted, never named.
+- `flagged` lists classes where a teacher marked a joiner "Not my student" (a leaked code, or a mistake). The account is untouched; only its class link is gone.
+- `show` is the owner's review of one class: the roster (ids, usernames, how each joined, removals) and the reset-code log (teacher, student, used or run out, wrong tries, and whether the code was made and used on the same network; addresses are masked).
+- `revoke` turns a class's code off at once (owner only, audited). The teacher can make a new one.
+- `separate-mailboxes` (owner only): approved teachers' verified mailboxes that carry 3 or more accounts and still pool their AI Energy get the `separate_accounts` policy, so each student account has its own battery (Mikey 11-15). With no flag or `--dry-run` it only counts and lists (masked mailbox, teacher, accounts). `--confirm` changes up to 10 mailboxes a call through the same path as `ai-email-policy set`; run it again until none are left. It never touches a mailbox that is already separate.
+- Every teacher-assisted reset also appears in the daily teacher watch (`class_password_reset`, students named).
+- Never email or message teachers about class codes without Mikey's separate yes.
 
 ### Build XP/Coin reward approvals (any time; also a full-daily-review duty)
 
@@ -4562,17 +4591,64 @@ writes the comment text itself, submitting it with `--file`. Like the
 newspaper's claim/submit path, this spends no provider credits and no AI Energy
 (server-generated drafts bill the **operator's own** AI Energy battery). Use
 the no-`--file` server-generated path only when Mikey explicitly asks for it.
-Before composing, read the canonical persona sources; do not improvise the
-persona from memory:
 
-- `twinkle-api/constants/index.ts`: `SYS_PROMPT_FOR_CIEL` /
-  `SYS_PROMPT_FOR_ZERO` (the exact persona system prompts) and
-  `TWINKLE_FEATURES_EXPLANATION` (what the bots know about the site);
-- `twinkle-api/helpers/ai/comment-assistant/index.ts`:
-  `ADMIN_COMMENT_DECISION_POLICY` / `ADMIN_REPLY_DECISION_POLICY` (the
-  draft-vs-skip judgment rules, which still govern composed comments: skip
-  decisions are yours to make and record with `post skip` or in the run
-  report).
+**Write as the bot, with what the bot knows (Mikey, 11-15).** Every
+`comment draft` / `comment reply` response (run or comment session) carries
+`data.writeAs`, built from the same sources the API's own Zero and Ciel use,
+never a copy:
+
+- `rule`: write in that bot's voice, never your own agent voice (no
+  assistant-speak, hedging, summaries or report-style wording), and never ask
+  a member to explain a Twinkle feature the bot already knows;
+- `persona`: the bot's exact system prompt (`SYS_PROMPT_FOR_ZERO` /
+  `SYS_PROMPT_FOR_CIEL`, the text behind `personaRevision`);
+- `recentPublicReplies`: up to 5 short public replies the API's bot wrote
+  itself in the last 60 days (comments published from duty-run drafts are left
+  out; no chat text);
+- `featureKnowledge`: `matched` + `details` (the feature guide entries this
+  thread is about, picked from the reply target or post, the parent comment
+  and your draft by the same word matching the bots' comment replies use; no
+  model call), `rules` (the general website rules) and `featureList` (one line
+  per feature);
+- `policies`: the public-comment policies the API's own delegated drafts
+  follow, from `twinkle-api/helpers/ai/comment-assistant/index.ts`: keep
+  thread roles exact, and (Ciel) write in English even when the post is not.
+
+Read it before `comment post`; if the draft is off-voice or asks about a
+feature the guide covers, draft again with corrected text. Look up anything
+else with `lumine admin feature-guide [--query <words>] [--key <key>] [--new]
+--json` (read_twinkle_guide's own lookup; every entry in full with no flags;
+no daily run needed). If `writeAs.unavailable` is true, run the lookup
+yourself before posting. The draft-vs-skip judgment rules
+(`ADMIN_COMMENT_DECISION_POLICY` / `ADMIN_REPLY_DECISION_POLICY` in
+`twinkle-api/helpers/ai/comment-assistant/index.ts`) still govern composed
+comments: skip decisions are yours to make and record with `post skip` or in
+the run report.
+
+**Replies under AI Prompt posts (Mikey, 11-15).** A member's comment on an AI
+Prompt post (`sharedTopic`) is answered by their own Zero or Ciel in the
+character that post's prompt sets. For comments that never got that reply, an
+agent writes it by hand; there is no paid model call:
+
+```bash
+lumine admin post comments sharedTopic:812 --json    # or /shared-prompts/812; needs a read run
+lumine admin comments get 351900 --json              # the prompt and the thread around the comment
+lumine admin comment session start --identity ciel --target comment:351900
+lumine admin comment reply comment:351900 --file reply.md --json
+lumine admin comment post --draft-id <id> --json
+```
+
+`comments get` on such a comment adds `sharedPrompt` (title, author, link,
+the prompt text and the thread so far). Drafts there are composed-only
+(`CLI_ADMIN_SHARED_PROMPT_COMMENT_COMPOSED_ONLY` without `--file`), and their
+`writeAs.persona` is the post's prompt exactly as the API's in-character
+replies build it (Twinkle's rules, the prompt, where the reply is, Twinkle's
+rules again); `writeAs.sharedPrompt` repeats the prompt. Reply as the next
+turn of a chat with that prompt. A prompt edited after the draft makes the
+draft stale. `sharedPrompt.replyAs` names who answers, as the API would
+choose: the Zero or Ciel the member is replying to in that thread, else the
+member's Home pick (saved on their account), else Zero. Start the session as
+that identity.
 
 Persona and conversational state are continuous across the whole thread,
 including acknowledgements, corrections, bug reports, `@mikey` notifications,

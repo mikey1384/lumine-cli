@@ -4038,11 +4038,11 @@ test("management reply guidance keeps root and comment authors distinct", () => 
   );
   assert.match(
     guide,
-    /`subject\.author`[\s\S]*?selected comment's `author` owns only that comment/,
+    /`subject\.author`[\s\S]*?selected comment's\s+`author`\s+owns\s+only\s+that\s+comment/,
   );
   assert.match(
     guide,
-    /never call the root topic,[\s\S]*?project “yours” unless that participant is also its canonical\s+author/,
+    /never call the root topic,[\s\S]*?project “yours”\s+unless\s+that\s+participant\s+is\s+also\s+its\s+canonical\s+author/,
   );
 });
 
