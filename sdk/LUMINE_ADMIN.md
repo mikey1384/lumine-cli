@@ -28,6 +28,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Check what Zero/Ciel know about a Twinkle feature before writing as them | `feature-guide --query <words>` / `--key <key>` / `--new` (no flags: every entry); drafts already carry the thread's entries and the bot's voice in `writeAs` | [Persona-backed comments and replies](#persona-backed-comments-and-replies) |
 | Fix a published bot comment | `correction start` … `comment edit <commentId> --file …` … `correction complete` | [Narrow comment-correction sessions](#narrow-comment-correction-sessions) |
 | Message a member directly / post an announcement | `chat send <userId\|username> --file message.md` / `announcement post --file announcement.md` | [Direct bot chat messages](#direct-bot-chat-messages), [Official announcements](#official-announcements) |
+| Post a message from Lumine into a project's Lumine chat (e.g. "that bug is fixed") | `build-message send --manifest messages.json` (dry run), then `--confirm`; `build-message list --campaign <key>` | [Lumine messages in a build's chat](#lumine-messages-in-a-builds-chat-mikey-approves-the-text-added-2026-11-16) |
 | Refill a member's Arena Today's Challenge | `arena today-member --user <id>`, `arena today-import --file <reviewed-questions.json> [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
 | Withdraw Today's Challenge questions | `arena today-withdraw --user <id> (--keys … \| --file …) --reason "…" [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
 | Correct a live Arena timed paper | `arena revise --file <revisions.json>` | [Arena timed-bank item revisions](#arena-timed-bank-item-revisions) |
@@ -4487,6 +4488,69 @@ it shifted onto the child), not a vague "sorry if that came out wrong."
 Ordinary warm follow-ups (checking on a member the bots already know after
 something the run surfaced) are within a run's judgment, sparingly, and are
 always reported in the run report.
+
+## Lumine messages in a build's chat (Mikey approves the text; added 2026-11-16)
+
+```bash
+lumine admin build-message send --build <id> --campaign <key> --file message.md [--owner <userId>] [--confirm | --dry-run] [--json]
+lumine admin build-message send --manifest messages.json [--confirm | --dry-run] [--json]
+lumine admin build-message list --campaign <key> [--json]
+```
+
+Posts one message **from Lumine** into one build's Lumine chat, outside any
+run: for example, telling the members a Lumine bug hit that it is fixed, in
+the project where it happened. Only the configured administrator's CLI login
+may use it (writer-checked like every admin route); no daily run is needed.
+
+- **Composed and approved, never generated.** No model runs, no Lumine run
+  starts, and the member's Energy is untouched. Mikey approves the exact
+  recipients and text before any `--confirm` (a member message on his
+  instruction is still outbound communication; see AGENTS.md). Write it in
+  Lumine's voice: short, warm, plain English for 10–15-year-olds, specific to
+  that project, no internal words, no blame, nothing promised that the
+  product does not do. Korean only when that project's chat is Korean.
+- **Once per build and campaign.** The campaign key (3–40 lowercase letters,
+  digits, dashes, e.g. `upload-loop-fix-20261116`) is the idempotency rule: a
+  retry, a re-run batch or another operator never posts twice. Sending the
+  same campaign again with different text is refused
+  (`CLI_ADMIN_BUILD_MESSAGE_CAMPAIGN_USED`), not edited.
+- **Dry run by default.** Without `--confirm` (or with `--dry-run`) every
+  message is checked and previewed with its build, owner and exact text;
+  nothing is written. `--confirm` with `--dry-run` is refused.
+- **Refusals** (the batch continues and reports them; re-run the same
+  command later to send only what is missing): the build no longer exists;
+  `--owner`/`ownerUserId` no longer matches the build's owner
+  (`…_OWNER_CHANGED`); the owner deleted their account; a Lumine run is in
+  progress (`…_RUN_ACTIVE`); the latest Lumine reply still carries an
+  unexpired image/thumbnail approval card, an unfinished run's notes, or a
+  planned step waiting for Continue (Energy ran out after planning), which a
+  new Lumine message would hide (`…_WOULD_HIDE`). A plain follow-up
+  suggestion or thumbnail nudge under the latest reply is replaced, and the
+  dry run says so.
+- **What lands.** One ordinary Lumine chat row (1,000-character limit; text
+  starting with `[[[` or the forum notice's opening is refused), one receipt
+  in `build_lumine_admin_messages`, and one audit record
+  (`build.lumine_message`, with the campaign), all in one transaction. Lumine
+  messages have no unread badge or notification today, so the member sees it
+  the next time they open that project (an open workspace after a reload).
+  Lumine's later runs see it as something Lumine said.
+- **Manifest** (`messages.json`, 1–200 messages, one per build):
+
+  ```json
+  {
+    "campaign": "upload-loop-fix-20261116",
+    "messages": [
+      { "buildId": 3011, "ownerUserId": 7977, "ownerUsername": "dew",
+        "title": "44class-survival", "text": "…" },
+      { "buildId": 2885, "ownerUserId": 10513, "file": "2885.md" }
+    ]
+  }
+  ```
+
+  Each message has `text` or `file` (relative to the manifest). Always give
+  `ownerUserId`, so a project that changed hands is refused, not messaged.
+- **Receipts.** `list --campaign <key>` shows every message sent, whether it
+  is still in the chat, and when the owner next wrote in that project.
 
 ## Official announcements
 
