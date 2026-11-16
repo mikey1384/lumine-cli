@@ -625,7 +625,8 @@ it never authorizes unrelated daily work or generic recommendation commands.
    are context to read, not user participation to boost or count toward this
    duty. Leave narrow concrete-safety cases for Mikey under the existing rules.
 3. **Separate encouragement from reward eligibility.** The ordinary action is
-   a selected item in `featured comments recommend --file <decisions.json>`,
+   a selected item in `featured comments recommend --file <decisions.json>
+   --checkpoint <recommend-checkpoint.json>`,
    omitting `anyoneCanReward` and `rewardTwinkles` (defaults: `false` and `0`).
    Turn on the UI's "everyone can reward" option (`anyoneCanReward: true`) only
    when the comment independently deserves that stronger endorsement; direct
@@ -3240,6 +3241,22 @@ authored material; only a `section: "front"` event may be the lead. Preserve
 substance, names, and numbers. Do not mention official announcements (the
 server adds them), and give non-front events an empty `sourceQuote`.
 
+**`sourceQuote` rules** (checked by `news validate`, and again by `news submit`
+before the request when it is given `--claim`; lumine-cli/lib/admin-news.js):
+
+- A `section: "front"` event: `sourceQuote` must be one exact, contiguous
+  passage of that event's `summary` in the claim file (no quotation marks,
+  ellipses, corrections or paraphrase), at most the claim's
+  `maxSourceQuoteLength` characters (360 by default). If that summary is empty,
+  `sourceQuote` must be empty.
+- Any other section: `sourceQuote` must be the empty string `""`.
+
+Validation fails with `...sourceQuote must be an exact contiguous
+claim-summary passage...` or `...sourceQuote must be empty outside the front
+section.` The server doesn't reject a bad quote: it replaces an inexact quote
+with the start of the event's summary and drops quotes on non-front events, so a passed local
+validation is the only way to keep the quote you chose.
+
 **Editorial craft.** The rules above make an edition valid, not good. The
 server already used the digest's `priority` numbers to select the bounded set
 of eligible events; they do not do the editor's job within the returned digest.
@@ -3847,7 +3864,7 @@ Read-only management insights, windowed since the operator's last completed full
 
 Read `data.jevPilot` from `lumine admin brief --json` and carry it into the full report for Mikey (the active `daily-run report --json` also has `data.report.brief.jevPilot`). This duty does not authorize a separate full run. If the deployed API lacks the field, say the telemetry is not deployed; a missing section is not zero traffic or a healthy pilot.
 
-State the configuration and operating status even when off/blocked/awaiting samples. Headline the named last completed UTC day, compare with the trailing seven completed days, and keep the in-progress day separate. Separate `bySurface.comment` from `bySurface.chat`. Report real selections, fallback rates and reasons, `serving.decisionLatencyMs` p50/p95, provider failures, pending observations, unknown usage and ledger gaps. Calls avoided are a count, not measured dollar savings. While routing is off, no chat selections or served-route audit comparisons are expected; do not manufacture missing-data findings from them. Identify synthetic deployment probes separately.
+State the configuration and operating status even when off/blocked/awaiting samples. Headline the named last completed UTC day, compare with the trailing seven completed days, and keep the in-progress day separate. Separate `bySurface.comment` from `bySurface.chat`. State comment volume as handled of eligible from each period's `commentEligibility`: `reachedPilot` of `eligibleEvents` (for example "0 of 0 eligible" or "3 of 4 eligible"). Eligible events are member replies to a Zero/Ciel comment that don't @mention that bot and carry no file, counted from comments independently of the pilot's telemetry (an upper bound: replies without AI Energy, coalesced into a mention burst, or under a build-page bot comment that isn't a published management comment never reach the gate). Zero requests with zero eligible events is a quiet window, not a broken path; while the pilot is enabled, eligible events with none reaching the pilot raise `eligible_comments_not_reaching_pilot` (below `sampleRate` 1, only once at least five would have been sampled), which is the finding to report. When `commentEligibility` is null or absent (attention `comment_eligibility_unavailable`, or an older API), say eligibility wasn't measured instead of interpreting zero requests. Report real selections, fallback rates and reasons, `serving.decisionLatencyMs` p50/p95, provider failures, pending observations, unknown usage and ledger gaps. Calls avoided are a count, not measured dollar savings. While routing is off, no chat selections or served-route audit comparisons are expected; do not manufacture missing-data findings from them. Identify synthetic deployment probes separately.
 Mikey requested all eligible requests with no daily request cap (`dailyLimit: 0`) and a cost report during every full website-management run. Run `lumine admin ai-costs day YYYY-MM-DD --json` for the last completed UTC day and report the canonical `data.dailyAiCosts.byOperation` USD totals for enabled serve and shadow operations, including Auto and its fallback. Keep historical baseline-audit costs separate; new served-route audit calls are not expected. Report unfinished selection telemetry; synthetic probes are excluded from performance metrics but included in daily request and cost counts. If `telemetryStatus: partial` or `telemetryComplete: false`, detail metrics are a bounded recent sample, not full-day performance or cost: use the canonical daily AI-cost report for complete totals and record the coverage gap. Known Jev spend and `jev_reply_gate_audit` calls are already in application AI costs: never add them again or infer net savings from Jev cost alone. Agreement is not accuracy; confidence is not a measured success rate.
 
 Privately inspect the bounded `reviewCandidates` when needed, name what was actually reviewed, and account for edited comments or chat messages. Use the candidate's surface and target ID to find the correct canonical record. Ordinary model disagreements are evaluation findings; outages, stuck telemetry or missing ledger entries are operational findings. Report a recommendation to continue, adjust or stop, without automatically changing mode, scope or caps.
