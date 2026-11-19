@@ -31,6 +31,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Post a message from Lumine into a project's Lumine chat (e.g. "that bug is fixed") | `build-message send --manifest messages.json` (dry run), then `--confirm`; `build-message list --campaign <key>` | [Lumine messages in a build's chat](#lumine-messages-in-a-builds-chat-mikey-approves-the-text-added-2026-11-16) |
 | Refill a member's Arena Today's Challenge | `arena today-member --user <id>`, `arena today-import --file <reviewed-questions.json> [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
 | Withdraw Today's Challenge questions | `arena today-withdraw --user <id> (--keys … \| --file …) --reason "…" [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
+| Allocate new questions for a reviewed Arena paper | `arena allocate-items --file <batch.json> [--confirm]` | [Arena item allocation](#arena-item-allocation) |
 | Correct a live Arena timed paper | `arena revise --file <revisions.json>` | [Arena timed-bank item revisions](#arena-timed-bank-item-revisions) |
 | Approve / reject a Build reward | `reward-review list\|show\|approve\|propose\|reject\|revoke` | [Build XP/Coin reward approvals](#build-xpcoin-reward-approvals-any-time-also-a-full-daily-review-duty) |
 | Approve a Build unlock (storage, files, …) | `review list\|show\|approve\|reject\|revoke`, e.g. `review approve storage:12 --size 1GB` | [Build review requests](#build-review-requests-one-queue-for-every-unlock-any-time-added-2026-09-28) |
@@ -5109,6 +5110,14 @@ scheduled Ghost reviews, other due-date differences, incomplete history and
 unrecognized evidence remain held for individual review. The source command is
 available in this checkout; check the release receipt before assuming a
 published npm version contains it.
+
+## Arena item allocation
+
+`lumine admin arena allocate-items --file batch.json --json` previews a reviewed batch. Add `--confirm` to insert the new live bank items and save the receipt. Each batch covers one exam and difficulty. Use the same `allocationKey` when retrying a batch, including after a lost response. A changed payload under that key is rejected.
+
+The JSON has an `allocationKey` and an `entries` array. Each entry contains the numbered authored `item`, the canonical stored item's `contentHash`, and a required `passage` field. For an existing passage, supply `{passageId, expectedVersion, contentHash}`. Its hash covers the exam, kind, body, metadata and recording path. The item's passage text must match. For a new text passage or a standalone question, use `null`. Include every slot in a new passage set.
+
+Confirmed `data.ids[]` entries give the number, item ID, version, content hash and passage ID. Use those IDs with the reviewed passage proofs in `arena paper-assemble --file manifest.json`. Preview assembly, then confirm publication. The allocator leaves the existing passages, source editions and member histories intact.
 
 ## Arena timed-bank item revisions
 

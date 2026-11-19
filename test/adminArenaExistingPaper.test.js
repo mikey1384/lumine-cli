@@ -73,3 +73,23 @@ test('assembly output distinguishes preview, publication and unchanged retry', (
   assert.match(formatArenaResult({ operation, data: { paper: 'paper', dryRun: false, assembled: 20 } }).join('\n'), /Assembled 20[\s\S]*preserved/);
   assert.match(formatArenaResult({ operation, data: { paper: 'paper', alreadyAssembled: true } }).join('\n'), /nothing changed/);
 });
+
+test('allocate-items sends only the reviewed batch and takes confirmation from the command', () => {
+  const file = path.join(testWorkRoot(), `arena-allocate-${process.pid}.json`);
+  const batch = { allocationKey: 'edition-1', entries: [{ item: { number: 1 }, contentHash: 'a'.repeat(64),
+    passage: { passageId: 2, expectedVersion: 1, contentHash: 'b'.repeat(64) } }] };
+  const args = ['admin', 'arena', 'allocate-items', '--file', file];
+  try {
+    fs.writeFileSync(file, JSON.stringify({ ...batch, dryRun: false, paper: 'ignore' }));
+    const preview = parseAdminOperation(parseArgs(args));
+    assert.equal(preview.path, '/cli/admin/arena/items/allocate');
+    assert.deepEqual(preview.body, { ...batch, dryRun: true });
+    assert.equal(preview.mutates, false);
+    const confirm = parseAdminOperation(parseArgs([...args, '--confirm']));
+    assert.deepEqual(confirm.body, { ...batch, dryRun: false });
+    assert.equal(confirm.mutates, true);
+    for (const extra of [['--confirm=false'], ['--confirm', '--dry-run'], ['--live'], ['--additive'], ['--dir', 'paper']]) {
+      assert.throws(() => parseAdminOperation(parseArgs([...args, ...extra])));
+    }
+  } finally { fs.unlinkSync(file); }
+});
