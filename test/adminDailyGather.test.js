@@ -53,6 +53,7 @@ test("gather exhausts one unified pending queue for all Build types without a re
     ["review", "list", "--status", "pending"],
     ["review", "list", "--status", "pending", "--cursor", "1700000000.2.3"],
   ]);
+  assert.deepEqual(stub.calls.filter(args => args[0] === "website-agent"), [["website-agent", "abilities", "--days", "1"]]);
   assert.ok(!stub.calls.some(args => args[0] === "reward-review"));
   assert.ok(stub.calls.some(args => args[0] === "approvals")); // Different management queue stays.
   const sources = read(dir, "review-state.json").sources.filter(source => source.file.startsWith("build-reviews-"));
