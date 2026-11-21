@@ -2,7 +2,7 @@
 
 Version: 1.94.0
 Updated: 2026-11-21
-Generated: 2026-11-21T13:44:03.766Z
+Generated: 2026-11-21T15:50:05.949Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -90,11 +90,11 @@ Features every app needs whenever they apply. When you build a new app or make a
 - Call at meaningful user actions or discrete app decision points, not every render, animation frame, keystroke, or background poll. Batch work, debounce changing input, keep one request active per decision flow, and discard results whose app state changed while waiting. Keep rendering, movement, and controls local and responsive. JEV decisions are covered by Twinkle and never use the viewer's AI Energy; the runtime AI rate limits still apply. Handle unavailable, timeout, and rate-limit errors with a clear retry or an explicitly local fallback; never fabricate an AI answer or run an automatic retry loop. Consider the guest and offline experience before making AI essential.
 
 ## Meeting other members (Twinkle.social)
-- Twinkle.social lets members meet inside an app: the app says what its viewer is doing and whether others can join (setJoinable), Twinkle shows that on their face in Home's Live now and offers Play, Join or Watch, brings the visitor into the app, keeps the waiting line and its manners, and afterwards can post a friendly card in the pair's chat (reportTogether). Offer it whenever the creator is making or changing something people do together: a multiplayer or co-op game, a room or lobby, a shared canvas, a study or quiz-me app, any app with a social side. One line is enough (for example: "Want people to be able to walk up and join whoever is playing?"); build it when they say yes or when they already asked for multiplayer, joining friends, watching or playing together. Never add it to a single-player app that has nothing to join, and never present it as required.
+- Twinkle.social lets members meet inside an app: the app says what its viewer is doing and whether others can join (setJoinable), Twinkle shows that on their face in Home's Live now and offers Play, Join or Watch, brings the visitor into the app, keeps the waiting line and its manners, and afterwards can post a neutral notice in the pair's chat (reportTogether). Offer it whenever the creator is making or changing something people do together: a multiplayer or co-op game, a room or lobby, a shared canvas, a study or quiz-me app, any app with a social side. One line is enough (for example: "Want people to be able to walk up and join whoever is playing?"); build it when they say yes or when they already asked for multiplayer, joining friends, watching or playing together. Never add it to a single-player app that has nothing to join, and never present it as required.
 - The states are generic: 'open' (on a menu or idle, a visitor can start now), 'busy-watchable' (in something others can watch), 'busy' (in something private) and 'closed' (nothing to join, the default). Call setJoinable whenever that changes (menu, round start, round end, spectating), with a short label in the creator's words ("Looking for a game", "Drawing, come watch", "Building a town, join me", "Studying vocab, quiz me") and a mode that says what joining means ('1v1' for a head-to-head game, 'coop', 'room', 'watch').
 - Twinkle, not the app, owns the manners, so never rebuild them: no request, accept or decline screens, no "declined" message, no invite spam, no blocking popup. Twinkle draws the small "walked up" banner and the waiting chip over the app, enforces one walk-up at a time, the cooldown after an ignored one, the queue limit, blocks and the viewer's "don't let people walk up" setting. The app only decides when it can start: on onVisitor it either accepts at once (state 'open') or keeps playing and accepts when the current round ends or when the visitor arrives again with wantsNow: true (the viewer tapped Play now).
 - accept(visitor.id) gives the host { matchKey, visitor, mode }, and the visitor's app gets the same matchKey through onMatchReady: both then use it as the room, for example Twinkle.world.join({ roomKey: matchKey }). The visitor's app also reads Twinkle.notifications.getLaunchTarget(): target.kind === 'social' carries hostUserId and status ('waiting', 'later', 'watch' or 'unavailable'), so it can show the host's game to watch, or simply let the visitor play alone meanwhile. A visitor must never be stuck on a waiting screen.
-- When the two really did something together, call reportTogether({ matchKey, text }) once it is done, with one short plain line both would recognise ("KenGo won by resignation", "You built the bridge together", "You drew Rainy Seoul"). Twinkle decides whether a card appears and never tells the app, writes the names and the app title itself, and adds one-tap replies; the app may add up to two of its own (chips) and a thumbnail it uploaded. Report only real shared activity, never a walk-up that was only watched or ignored, and never put names, links or anything private in the text.
+- When the two really did something together, call reportTogether({ matchKey, activity, result }) once it is finished. activity is one of 'played', 'built', 'drew', 'made', 'studied', 'explored' (the closest to what they did); result is only for 'played', from the calling member's side: 'won', 'lost', 'draw' or 'none'. Twinkle writes every word of the notice itself from fixed templates ("You and KenGo played Baduk together · KenGo won"), resolves the winner's name, and adds Play again (or Join again) and Report. There is no text and there are no reply chips: never try to put app words into it. A thumbnail the app uploaded and a path inside the app are allowed. Twinkle posts it only if both joined the match, they spent at least two minutes together, the report arrives within six hours of the accept, and the two may message each other; it never tells the app whether it did. Report only real shared activity, never a walk-up that was only watched or ignored.
 - Everything must still work alone: on a page where social is off (an older tab, the Build editor's preview, a signed-out visitor) setJoinable resolves { supported: false } and the listeners never fire. Do not show an error for that; keep the solo or existing multiplayer flow. Apps that do not adopt Twinkle.social keep today's Join, which just opens the app.
 
 ## Token Scopes
@@ -1776,17 +1776,18 @@ if (launch?.target?.kind === 'social') {
   // target: { hostUserId, hostUsername, status: 'waiting' | 'later' | 'watch' | 'unavailable', hostJoinable }
   watchOrPlayAlone(launch.target);
 }
-- async reportTogether({ matchKey, text, thumbnail?, link?, chips? }) | scopes: social:write
+- async reportTogether({ matchKey, activity, result?, thumbnail?, link? }) | scopes: social:write
   - Returns: { success: true }
-  - Tell Twinkle what the two did together, in one short line. Twinkle may post it as a card in their chat so they can keep talking.
-  - Either member's app may call it after the host accepted and the visitor received the match, when their shared activity is finished. A match is reportable for six hours. One card per pair per app per day; each different match can update it once.
-  - text: up to 120 characters of plain words. No links, mentions or markup (refused with error.code === 'social_report_invalid'). Twinkle adds the names, the app's title and art, and one-tap replies.
-  - thumbnail: an image this app uploaded with Twinkle.files. link: a path inside this app, as Twinkle.app.getShareUrl takes it. chips: up to 2 extra one-tap replies, 32 characters each.
-  - The answer never says whether a card was posted. Twinkle skips it for members who cannot message each other, and the app must not try to find out.
+  - Tell Twinkle what the two did together, from fixed lists. Twinkle may post a neutral notice in their chat, in its own words, so they can play again.
+  - activity: 'played', 'built', 'drew', 'made', 'studied' or 'explored'. result (only with 'played'), from the calling member's side: 'won', 'lost', 'draw' or 'none' (the default). Anything else, and any text or chips, is refused with error.code === 'social_report_invalid'.
+  - Twinkle writes the notice from templates, e.g. "You and KenGo played Baduk together · KenGo won", and names the winner itself. If the two members' apps report different results for one match, the notice shows no result.
+  - Either member's app may call it once the shared activity is finished. Twinkle posts only for a match the host accepted and the visitor received (onMatchReady), after at least two minutes together, within six hours of the accept. One notice per pair per app per day; each different match updates it.
+  - thumbnail: an image this app uploaded with Twinkle.files. link: a path inside this app, as Twinkle.app.getShareUrl takes it.
+  - The answer never says whether a notice was posted. Twinkle skips it for members who cannot message each other or met too briefly, and the app must not try to find out.
   - Example: await Twinkle.social.reportTogether({
   matchKey,
-  text: winnerName + ' won by resignation',
-  chips: ['How did you learn Go?']
+  activity: 'played',
+  result: iWon ? 'won' : 'lost'
 });
 - async isAvailable() | scopes: none
   - Returns: boolean
@@ -2750,12 +2751,12 @@ async function begin(matchKey, opponent) {
   social.setJoinable({ state: 'busy-watchable', label: 'In a match', mode: '1v1' });
 }
 
-// 4. When it is over: one short line, then be joinable again.
-async function finish(resultLine) {
+// 4. When it is over: what happened, from fixed lists, then be joinable again.
+async function finish(result) {
   const done = match;
   match = null;
   await done.room.leave();
-  await social.reportTogether({ matchKey: done.matchKey, text: resultLine });
+  await social.reportTogether({ matchKey: done.matchKey, activity: 'played', result });
   social.setJoinable({ state: 'open', label: 'Looking for a game', mode: '1v1' });
   const { waiting } = await social.queue();
   if (waiting[0]) startWith(waiting[0]);
