@@ -176,3 +176,16 @@ test("achievement meetup decisions carry the fingerprint supplied by the reviewe
   const operation = parseAdminOperation(parseArgs(["admin", "approvals", "approve", "12", "--fingerprint", "c".repeat(64)]));
   assert.equal(operation.body.fingerprint, "c".repeat(64));
 });
+
+test("meetup beta reads one member's Bridge Builder beta report (owner-only route, no daily run)", () => {
+  assert.deepEqual(op(["beta", "Relativity"]), {
+    name: "meetup.beta",
+    method: "GET",
+    path: "/cli/admin/meetup-quest/beta?user=Relativity",
+    body: undefined,
+    mutates: false,
+    requiresRun: false,
+  });
+  assert.equal(op(["beta", "@6620"]).path, "/cli/admin/meetup-quest/beta?user=6620");
+  assert.throws(() => op(["beta"]), /lumine admin meetup beta/);
+});
