@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.90.0
-Updated: 2026-11-14
-Generated: 2026-11-14T07:01:05.061Z
+Version: 1.93.0
+Updated: 2026-11-21
+Generated: 2026-11-21T12:37:07.009Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -23,6 +23,7 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 14. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
 15. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
 16. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
+17. Respect the viewer's host sound preference: Twinkle.audio.muted and Twinkle.audio.subscribe(listener) reflect it; keep your own music/effects switches independent, and never override host mute. Standard Web Audio and audio/video elements are silenced automatically.
 
 ## Essential SDK features
 Features every app needs whenever they apply. When you build a new app or make a substantial change, add every one that applies as part of that change, without being asked. On a small, targeted request, add a missing one only when the request touches what it covers (a change to levels, scoring or saving: keep-place; a new screen: back-button); otherwise name it in one line so the creator can ask. Say in one line what you added. Never add one that does not apply.
@@ -34,6 +35,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 5. When: A game, or an app whose taps, answers, wins or other moments would feel better with sound (a quiz's right and wrong answers, a button that does something, a level clear), and the app has no sound yet. Use: The Groove Lab player (import * as groove from '/build/vendor/groove-lab/1.0.0/player.js'): await groove.unlock() inside the first tap, then groove.sfx('click' | 'coin' | 'jump' | 'hit' | 'correct' | 'wrong' | 'win' | 'lose' | 'levelup' ...) at those moments, with a mute toggle kept in Twinkle.privateDb. Offer music too: compose a soundtrack as a Groove Lab song spec in a project module (soundtrack/<name>.js with export default { ...spec }, played with groove.createSoundtrack(spec).play({ fadeIn: 1 }) after unlock), or play the creator's published Groove Lab song with groove.loadPublishedSong(entryId) and show its credit.
 
 ## Notes
+- For substantial changes, such as a new feature or edits to rewards, save/load or multiplayer, get an independent code review after applying the edits. In Lumine, use request_review. Verify each finding, act on the real issues, and use a second review to confirm serious fixes. Skip review for small tweaks, and continue your own checks if it is unavailable.
 - Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
 - This SDK is injected into Build iframes via the Build preview/runtime.
 - Widgets call SDK methods; the parent proxies to the API.
@@ -87,8 +89,16 @@ Features every app needs whenever they apply. When you build a new app or make a
 - Keep code in control. Choice returns an option and its probability distribution; score returns a position on the declared levels; noul is the probability of yes, with 0.5 meaning uncertainty rather than medium strength. Confidence describes the distribution and is not proof of correctness. Test the app's criteria and thresholds on clear, ambiguous, and out-of-scope examples, and provide a suitable uncertain outcome. JEV decisions never authorize XP, Coins, purchases, access, or other server-owned state; use the appropriate existing SDK and server approval paths.
 - Call at meaningful user actions or discrete app decision points, not every render, animation frame, keystroke, or background poll. Batch work, debounce changing input, keep one request active per decision flow, and discard results whose app state changed while waiting. Keep rendering, movement, and controls local and responsive. JEV decisions are covered by Twinkle and never use the viewer's AI Energy; the runtime AI rate limits still apply. Handle unavailable, timeout, and rate-limit errors with a clear retry or an explicitly local fallback; never fabricate an AI answer or run an automatic retry loop. Consider the guest and offline experience before making AI essential.
 
+## Meeting other members (Twinkle.social)
+- Twinkle.social lets members meet inside an app: the app says what its viewer is doing and whether others can join (setJoinable), Twinkle shows that on their face in Home's Live now and offers Play, Join or Watch, brings the visitor into the app, keeps the waiting line and its manners, and afterwards can post a friendly card in the pair's chat (reportTogether). Offer it whenever the creator is making or changing something people do together: a multiplayer or co-op game, a room or lobby, a shared canvas, a study or quiz-me app, any app with a social side. One line is enough (for example: "Want people to be able to walk up and join whoever is playing?"); build it when they say yes or when they already asked for multiplayer, joining friends, watching or playing together. Never add it to a single-player app that has nothing to join, and never present it as required.
+- The states are generic: 'open' (on a menu or idle, a visitor can start now), 'busy-watchable' (in something others can watch), 'busy' (in something private) and 'closed' (nothing to join, the default). Call setJoinable whenever that changes (menu, round start, round end, spectating), with a short label in the creator's words ("Looking for a game", "Drawing, come watch", "Building a town, join me", "Studying vocab, quiz me") and a mode that says what joining means ('1v1' for a head-to-head game, 'coop', 'room', 'watch').
+- Twinkle, not the app, owns the manners, so never rebuild them: no request, accept or decline screens, no "declined" message, no invite spam, no blocking popup. Twinkle draws the small "walked up" banner and the waiting chip over the app, enforces one walk-up at a time, the cooldown after an ignored one, the queue limit, blocks and the viewer's "don't let people walk up" setting. The app only decides when it can start: on onVisitor it either accepts at once (state 'open') or keeps playing and accepts when the current round ends or when the visitor arrives again with wantsNow: true (the viewer tapped Play now).
+- accept(visitor.id) gives the host { matchKey, visitor, mode }, and the visitor's app gets the same matchKey through onMatchReady: both then use it as the room, for example Twinkle.world.join({ roomKey: matchKey }). The visitor's app also reads Twinkle.notifications.getLaunchTarget(): target.kind === 'social' carries hostUserId and status ('waiting', 'later', 'watch' or 'unavailable'), so it can show the host's game to watch, or simply let the visitor play alone meanwhile. A visitor must never be stuck on a waiting screen.
+- When the two really did something together, call reportTogether({ matchKey, text }) once it is done, with one short plain line both would recognise ("KenGo won by resignation", "You built the bridge together", "You drew Rainy Seoul"). Twinkle decides whether a card appears and never tells the app, writes the names and the app title itself, and adds one-tap replies; the app may add up to two of its own (chips) and a thumbnail it uploaded. Report only real shared activity, never a walk-up that was only watched or ignored, and never put names, links or anything private in the text.
+- Everything must still work alone: on a page where social is off (an older tab, the Build editor's preview, a signed-out visitor) setJoinable resolves { supported: false } and the listeners never fire. Do not show an error for that; keep the solo or existing multiplayer flow. Apps that do not adopt Twinkle.social keep today's Join, which just opens the app.
+
 ## Token Scopes
-files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, land:read, land:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write, rewards:claim, coins:charge
+files:read, media:read, media:write, live:read, live:write, user:read, users:read, dailyReflections:read, content:read, content:write, sharedDb:read, sharedDb:write, land:read, land:write, privateDb:read, privateDb:write, files:write, chat:read, chat:write, notifications:read, notifications:write, notifications:emit, reminders:read, reminders:write, social:read, social:write, rewards:claim, coins:charge
 
 ## Namespaces
 
@@ -105,6 +115,18 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - The listener receives the current muted boolean immediately by default.
   - Pass { immediate: false } to skip the initial callback.
   - Example: const unsubscribe = Twinkle.onAudioMuteChange((muted) => customMixer.setMuted(muted));
+
+### Twinkle.audio
+- muted | scopes: none
+  - Returns: boolean
+  - Current effective host mute state (read-only property).
+  - Example: if (Twinkle.audio.muted) showSoundOffIndicator();
+- subscribe(listener, options?) | scopes: none
+  - Returns: unsubscribe function
+  - Observe host mute changes; listener receives a boolean immediately unless options.immediate is false.
+  - Host mute changes output gain/muting without pausing or resuming playback. Preserve your own app sound settings; unmuting the host does not enable app-muted music.
+  - The older Twinkle.isAudioMuted() and Twinkle.onAudioMuteChange() aliases remain supported.
+  - Example: const unsubscribe = Twinkle.audio.subscribe((muted) => updateSoundIndicator(muted));
 
 ### Twinkle.capabilities
 - async get() | scopes: none
@@ -240,11 +262,15 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: { success, session } when opened by lumine app-mcp
   - Register the live iframe handlers for the published app's static MCP tool manifest.
   - Tool discovery comes only from /app-tools.json in the pinned published artifact; runtime code cannot add or rename tools.
-  - Every declared tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers, tells Twinkle the app offers tools (so the signed-in viewer can click Connect AI helper and pair this open tab with lumine app-mcp <buildId> --code <code>), and resolves with active:false.
+  - Every browser tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers, tells Twinkle the app offers tools (so the signed-in viewer can click Connect AI helper and pair this open tab with lumine app-mcp <buildId> --code <code>), and resolves with active:false.
   - Mark each tool that only reads with "readOnly": true in /app-tools.json; for a tool whose action argument decides, declare "readOnlyWhen": { "action": ["list", "export"] }. A helper paired through Connect AI helper can use only read-only calls until the viewer switches on Allow edits; undeclared tools count as edits.
   - Include what the viewer has selected or is looking at in the state-reading tool (for example the selected range and active item), so a paired helper can see what the viewer is pointing at.
   - Handlers run serially inside the visible app iframe and should return the confirmed post-action state.
   - Do not synthesize server-owned state; await Twinkle SDK mutations before returning.
+  - Declare effect as inspection, session, media_io, app_data or earned_gameplay. Effects are semantic contracts, never inferred from names. Legacy readOnly/readOnlyWhen tools remain supported; unspecified tools count as edits.
+  - For Zero/Ciel server actions, add server: { kind: "private_db", operation: "get" | "compare_and_set", key: "your.fixed.key" }. get requires effect inspection and empty arguments; compare_and_set requires effect app_data and arguments { expectedValue, value, operationId }. Both use the authenticated viewer’s existing Twinkle.privateDb data, never a supplied user or build id.
+  - Server actions need no iframe handler. They are currently executed by Zero/Ciel open_app_tools/use_app_tool, not the external CLI call queue. Browser tools still require same-named handlers; do not remove normal app controls. Declare a bounded inputSchema for the saved value.
+  - Zero/Ciel pin buildId and publishedArtifactVersionId, require their existing approval card before changes, reject stale published versions and all reward apps (including between approvals), and return canonical private-data save receipts. Reconnect by opening tools again; retry with identical operationId/arguments. Conflicts require a new read. Undo by compare-and-setting the current value back to receipt.previousValue after approval; saved=false on a duplicate means a later edit is now current.
   - Example: await Twinkle.appTools.register({ handlers: { get_state: () => ({ view, data }), open_view: ({ view }) => navigateTo(view) } });
 
 ### Twinkle.preview
@@ -1618,14 +1644,17 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Call the returned function to unsubscribe.
 
 ### Twinkle.world
-- async join({ worldKey = 'default', roomKey = 'main', instanceId = 'main', presence, player, land } = {}) | scopes: none
+- async join({ worldKey = 'default', roomKey = 'main', instanceId = 'main', presence, player, land, takeOver } = {}) | scopes: none
   - Returns: { sessionId, session, room, players, snapshot, subscribe(listener), updatePresence(patch), send(actionOrType, data), edit(cells, { cause }) (land worlds only), leave() }
   - Join a realtime Build world room and receive a snapshot plus a session handle for presence updates, actions, and room events.
   - Always available in the build iframe.
   - World state is ephemeral and heartbeat/TTL based. Use sharedDb/privateDb for durable inventory, XP, quests, ownership, and saved progress — but write those LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick); per-frame/live state stays in world presence or client memory. The server rate-limits sharedDb/privateDb writes and returns 429.
   - Events are room-scoped and include serverTime, seq, eventId, schemaVersion, sessionId, player, and room metadata.
+  - One player per account per room: a signed-in account holds one seat in a room (worldKey + roomKey + instanceId); its newest join wins and replaces the older session. players lists each account once (its highest player.generation), never this account's other sessions; guests are separate players per session. Build avatars, the online list and player counts from that one players list.
+  - Opened in another tab: when a newer join of the same account (another tab) takes the room, this tab's session gets session.ended with reason 'superseded' (requests fail with error.code === 'WORLD_SESSION_SUPERSEDED'; Twinkle.world.isSupersededError(error)). It is terminal: do not rejoin automatically (the two tabs would keep taking the room from each other), and join refuses that room with the same code. Keep the world on screen, say briefly that it was opened in another tab, and offer a button that calls join({ ..., takeOver: true }) when the person chooses to play here. A reload also joins again. Reason 'replaced' means this same tab joined that room again; drop the old handle.
+  - Roster self-healing: the SDK replaces each session's players from Twinkle's canonical roster on its heartbeat (about every 15 s) and emits { type: 'roster.synced', players } when membership changed, so players that left without a leave event (a crashed server, a lost message) disappear. Refresh avatars and lists from event.players on every event.
   - Signed-in player identity comes from the canonical Twinkle user record; player.profilePicUrl is only used for guests and is returned only when it is a valid absolute HTTPS URL.
-  - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles and reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
+  - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles; check Twinkle.world.isSupersededError(error) first and offer Play here without reconnecting. For other errors, reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
   - Use updatePresence for live avatar snapshots and send for lightweight actions such as emotes, interactions, and chat bubbles.
   - Treat the render/input loop as local-only. Queue presence only after relevant fields change, replace any queued snapshot with the newest one, and flush on a fixed 5-15 updates-per-second schedule with at most one updatePresence request in flight. Never call or await updatePresence every animation frame, resend unchanged snapshots, overlap requests, or build a backlog.
   - Send discrete actions only when they happen; do not poll or automatically retry them. The parent limits updatePresence and send together to protect the website connection. WORLD_EVENT_RATE_LIMITED is recoverable: drop that attempted update without an immediate retry and keep the current session.
@@ -1638,13 +1667,16 @@ world.updatePresence({ x, y, z, facing });
 - isRecoverableSessionError(error) | scopes: none
   - Returns: boolean
   - Return true when a world request error is expected to be handled by app code instead of crashing.
-  - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, rate-limited, preview-updating, and timed-out world session requests.
+  - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, rate-limited, preview-updating, service-restarting (WORLD_SERVICE_RETIRING) and timed-out world session requests. WORLD_SESSION_SUPERSEDED (opened in another tab) is not recoverable.
   - Only session-ended errors prove that the current handle should be discarded. WORLD_EVENT_RATE_LIMITED, timed-out, or preview-updating presence/action requests must be dropped without reconnecting and without an immediate retry.
   - For durable game state, write through sharedDb/privateDb instead of relying on world presence — but LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick).
   - Example: try {
   await world.updatePresence({ x, y, z, facing });
 } catch (error) {
-  if (Twinkle.world.isSessionEndedError(error)) {
+  if (Twinkle.world.isSupersededError(error)) {
+    world = null;
+    showPlayHereButton();
+  } else if (Twinkle.world.isSessionEndedError(error)) {
     world = null;
     scheduleReconnect();
   } else if (Twinkle.world.isRecoverableSessionError(error)) {
@@ -1656,17 +1688,111 @@ world.updatePresence({ x, y, z, facing });
 - isSessionEndedError(error) | scopes: none
   - Returns: boolean
   - Return true when a world request error means the current session handle is stale and app code should reconnect with a fresh Twinkle.world.join call.
-  - Session-ended errors include ended, missing, room-missing, and socket-disconnected world session failures.
+  - Session-ended errors include ended, missing, room-missing, socket-disconnected and superseded (WORLD_SESSION_SUPERSEDED) world session failures. For superseded, check Twinkle.world.isSupersededError(error) first and do not reconnect on your own.
   - Request timeouts and preview-updating skips are recoverable but not session-ended.
-  - Example: if (Twinkle.world.isSessionEndedError(error)) {
+  - Example: if (Twinkle.world.isSupersededError(error)) {
+  world = null;
+  showPlayHereButton();
+} else if (Twinkle.world.isSessionEndedError(error)) {
   world = null;
   scheduleReconnect();
 }
+- isSupersededError(error) | scopes: none
+  - Returns: boolean
+  - Return true when another tab of the same account took this world room (WORLD_SESSION_SUPERSEDED): stop multiplayer in this tab without reconnecting and offer join({ ..., takeOver: true }) on the person's request.
+  - Never call join with takeOver automatically or on a timer; only from the person's action.
+  - Example: world.subscribe((event) => {
+  if (event.type === 'session.ended' && event.reason === 'superseded') showPlayHereButton();
+});
+// on the button: world = await Twinkle.world.join({ roomKey, presence, takeOver: true });
 - leaveAll() | scopes: none
   - Returns: void
   - Leave every active world session in the current iframe.
   - The SDK also leaves active sessions on pagehide/beforeunload when possible.
   - Use this when switching maps or resetting a multiplayer game.
+
+### Twinkle.social
+- async setJoinable({ state, label?, mode? }) | scopes: none
+  - Returns: { supported, state }
+  - Say what the viewer is doing and whether others can join them. Shown on their face in Home's Live now with Play, Join or Watch.
+  - Always available; no scope.
+  - state is 'open' (a visitor can start now), 'busy-watchable' (others can watch and be next), 'busy' (others can be next but not watch) or 'closed' (the default).
+  - label: up to 32 characters of plain words in the app's own voice; it is shown next to the member's face. Links, mentions and markup are dropped. mode: a short lowercase word for what joining means ('1v1', 'coop', 'room', 'watch'); Twinkle words its buttons as a game for '1v1', 'versus', 'duel', 'match' and 'pvp'.
+  - It rides on the app's existing presence, so call it only when the state really changes (not every frame); Twinkle sends at most one change every 2 seconds and keeps the latest. It ends by itself when the viewer leaves the app.
+  - Resolves { supported: false, state: 'closed' } where social is off (an older tab, the Build editor's preview, a draft, a signed-out visitor), and state 'closed' when the viewer turned walk-ups off. Never treat either as an error.
+  - Example: // menu or lobby: a visitor can start right away
+await Twinkle.social.setJoinable({ state: 'open', label: 'Looking for a game', mode: '1v1' });
+// a round began
+await Twinkle.social.setJoinable({ state: 'busy-watchable', label: 'In a match', mode: '1v1' });
+// nothing to join (spectating, settings, a private screen)
+await Twinkle.social.setJoinable({ state: 'closed' });
+- onVisitor(listener) | scopes: none
+  - Returns: unsubscribe function
+  - Hear when someone walks up to the viewer. Twinkle already shows the banner; the app decides when it can start.
+  - Always available; no scope.
+  - Fires once when a visitor arrives, again with wantsNow: true if the viewer taps Play now on Twinkle's banner, and after a reload for everyone still waiting.
+  - Do not draw your own request, accept or decline UI and never tell a visitor they were declined: Twinkle shows the banner and the waiting chip and enforces every limit. Ignoring a visitor is fine; their walk-up simply expires.
+  - Example: Twinkle.social.onVisitor(async (visitor) => {
+  // visitor: { id, user: { id, username, profilePicUrl }, queuePosition, expiresAt, wantsNow }
+  if (onMenu() || visitor.wantsNow) await startWith(visitor);
+  else showNextUp(visitor.user.username); // start after this round
+});
+async function startWith(visitor) {
+  try {
+    const { matchKey, visitor: user } = await Twinkle.social.accept(visitor.id);
+    const room = await Twinkle.world.join({ roomKey: matchKey });
+    startMatch(room, user);
+  } catch (error) {
+    if (error.code !== 'social_visitor_gone') throw error; // they left: keep playing
+  }
+}
+- async queue() | scopes: social:read
+  - Returns: { waiting: [{ id, user: { id, username, profilePicUrl }, queuePosition, expiresAt }] }
+  - Who is waiting to join the viewer right now, in order. For a "2 waiting" or "Next: mikey" line, or to pick who plays when a round ends.
+  - At most 3 people wait at a time; a walk-up lasts up to 15 minutes.
+  - Example: // the round just ended: play whoever is next
+const { waiting } = await Twinkle.social.queue();
+if (waiting[0]) await startWith(waiting[0]);
+- async accept(visitorId) | scopes: social:write
+  - Returns: { matchKey, visitor: { id, username, profilePicUrl }, mode }
+  - Let a waiting visitor in. Both apps get the same matchKey to meet in one room.
+  - matchKey is valid as a Twinkle.world roomKey, a Twinkle.chat roomKey or a sharedDb key. Keep it: reportTogether needs it.
+  - Rejects with error.code === 'social_visitor_gone' when the visitor left or their walk-up expired; carry on as before. Safe to retry: the same visitor gives the same matchKey.
+  - Example: const { matchKey, visitor } = await Twinkle.social.accept(visitorId);
+const room = await Twinkle.world.join({ roomKey: matchKey });
+- onMatchReady(listener) | scopes: none
+  - Returns: unsubscribe function
+  - On the visitor's side: the member they walked up to let them in. Carries the same matchKey the host got.
+  - Always available; no scope.
+  - Register it at startup. A match that became ready while the app was still loading is delivered as soon as the listener exists.
+  - Until it fires, let the visitor watch or play on their own; Twinkle shows them where they stand ("You're next").
+  - Example: Twinkle.social.onMatchReady(async ({ matchKey, host, mode }) => {
+  const room = await Twinkle.world.join({ roomKey: matchKey });
+  startMatch(room, host);
+});
+// how this visit began
+const launch = Twinkle.notifications.getLaunchTarget();
+if (launch?.target?.kind === 'social') {
+  // target: { hostUserId, hostUsername, status: 'waiting' | 'later' | 'watch' | 'unavailable', hostJoinable }
+  watchOrPlayAlone(launch.target);
+}
+- async reportTogether({ matchKey, text, thumbnail?, link?, chips? }) | scopes: social:write
+  - Returns: { success: true }
+  - Tell Twinkle what the two did together, in one short line. Twinkle may post it as a card in their chat so they can keep talking.
+  - Either member's app may call it, after both took part (the host accepted and the visitor's onMatchReady ran). One card per pair per app per day; later reports that day update the same card, so report each finished game or shared result.
+  - text: up to 120 characters of plain words. No links, mentions or markup (refused with error.code === 'social_report_invalid'). Twinkle adds the names, the app's title and art, and one-tap replies.
+  - thumbnail: an image this app uploaded with Twinkle.files. link: a path inside this app, as Twinkle.app.getShareUrl takes it. chips: up to 2 extra one-tap replies, 32 characters each.
+  - The answer never says whether a card was posted. Twinkle skips it for members who cannot message each other, and the app must not try to find out.
+  - Example: await Twinkle.social.reportTogether({
+  matchKey,
+  text: winnerName + ' won by resignation',
+  chips: ['How did you learn Go?']
+});
+- async isAvailable() | scopes: none
+  - Returns: boolean
+  - Whether social works on this page. Use it only to hide social-only UI; the calls are already safe without it.
+  - Always available; no scope.
+  - Example: if (await Twinkle.social.isAvailable()) showPlayWithOthersHint();
 
 ### Twinkle.users
 - async getUser(userId) | scopes: user:read
@@ -2426,7 +2552,10 @@ async function connectWorld() {
     reconnectDelayMs = 1000;
     session.subscribe((event) => {
       renderPlayers(event.players);
-      if (event.type === 'session.ended') handleWorldDrop(session);
+      if (event.type === 'session.ended') {
+        if (event.reason === 'superseded') handleWorldSuperseded(session);
+        else handleWorldDrop(session);
+      }
       if (event.type === 'action.received' && event.action?.type === 'emote') {
         showEmote(event.sessionId, event.action.data.emote);
       }
@@ -2439,7 +2568,9 @@ async function connectWorld() {
 }
 
 function handleWorldConnectError(error) {
-  if (Twinkle.world.isRecoverableSessionError(error)) {
+  if (Twinkle.world.isSupersededError(error)) {
+    handleWorldSuperseded();
+  } else if (Twinkle.world.isRecoverableSessionError(error)) {
     scheduleReconnect();
   } else {
     console.error('World connection failed', error);
@@ -2463,6 +2594,15 @@ function handleWorldDrop(session = world) {
   scheduleReconnect();
 }
 
+function handleWorldSuperseded(session = world) {
+  if (session && world && world !== session) return;
+  world = null;
+  queuedPresence = null;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+  showPlayHereButton(); // Only its click should join with takeOver: true.
+}
+
 function queuePresence(next) {
   const key = JSON.stringify(next);
   if (key === latestPresenceKey) return;
@@ -2480,7 +2620,9 @@ async function flushPresence() {
   try {
     await session.updatePresence(next);
   } catch (error) {
-    if (Twinkle.world.isSessionEndedError(error)) {
+    if (Twinkle.world.isSupersededError(error)) {
+      handleWorldSuperseded(session);
+    } else if (Twinkle.world.isSessionEndedError(error)) {
       handleWorldDrop(session);
     } else if (!Twinkle.world.isRecoverableSessionError(error)) {
       console.error('World update failed', error);
@@ -2574,4 +2716,48 @@ startButton.addEventListener('click', async () => {
 });
 function onCoin() { groove.sfx('coin'); }
 function onGameOver() { music.stop({ fadeOut: 1.5 }); groove.sfx('lose'); }
+```
+
+### Let people walk up and play
+Use Twinkle.social so members can join whoever is in the app from Home's Live now: joinable presence, Twinkle's own walk-up queue and banner, one matchKey for both, and a shared card in their chat afterwards.
+Keywords: multiplayer, join, walk up, challenger, live now, lobby, co-op, friends, social, match
+
+```js
+const social = Twinkle.social;
+let match = null;
+
+// 1. Say what the viewer is doing (call again whenever it changes).
+social.setJoinable({ state: 'open', label: 'Looking for a game', mode: '1v1' });
+
+// 2. The member being joined: start now, or after the current round.
+social.onVisitor((visitor) => {
+  if (!match || visitor.wantsNow) startWith(visitor);
+});
+async function startWith(visitor) {
+  try {
+    const accepted = await social.accept(visitor.id);
+    await begin(accepted.matchKey, accepted.visitor);
+  } catch (error) {
+    if (error.code !== 'social_visitor_gone') throw error;
+  }
+}
+
+// 3. The member who walked up gets the same matchKey.
+social.onMatchReady(({ matchKey, host }) => begin(matchKey, host));
+
+async function begin(matchKey, opponent) {
+  match = { matchKey, opponent, room: await Twinkle.world.join({ roomKey: matchKey }) };
+  social.setJoinable({ state: 'busy-watchable', label: 'In a match', mode: '1v1' });
+}
+
+// 4. When it is over: one short line, then be joinable again.
+async function finish(resultLine) {
+  const done = match;
+  match = null;
+  await done.room.leave();
+  await social.reportTogether({ matchKey: done.matchKey, text: resultLine });
+  social.setJoinable({ state: 'open', label: 'Looking for a game', mode: '1v1' });
+  const { waiting } = await social.queue();
+  if (waiting[0]) startWith(waiting[0]);
+}
 ```
