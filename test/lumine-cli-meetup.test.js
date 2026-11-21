@@ -189,3 +189,23 @@ test("meetup beta reads one member's Bridge Builder beta report (owner-only rout
   assert.equal(op(["beta", "@6620"]).path, "/cli/admin/meetup-quest/beta?user=6620");
   assert.throws(() => op(["beta"]), /lumine admin meetup beta/);
 });
+
+test("meetup tour-grant and tour-revoke are owner writes without a daily run", () => {
+  assert.deepEqual(op(["tour-grant", "h20261120flori", "19100"]), {
+    name: "meetup.tour-grant",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/tour-history/h20261120flori/grant",
+    body: { partnerUserId: 19100 },
+    mutates: true,
+    requiresRun: false,
+  });
+  assert.throws(() => op(["tour-grant", "notahistory", "1"]), /tour-grant/);
+  assert.deepEqual(op(["tour-revoke", "6620"]), {
+    name: "meetup.tour-revoke",
+    method: "POST",
+    path: "/cli/admin/meetup-quest/tour/6620/revoke",
+    body: {},
+    mutates: true,
+    requiresRun: false,
+  });
+});
