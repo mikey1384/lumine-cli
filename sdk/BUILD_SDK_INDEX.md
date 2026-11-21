@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.93.0
+Version: 1.94.0
 Updated: 2026-11-21
-Generated: 2026-11-21T12:37:07.009Z
+Generated: 2026-11-21T13:44:03.766Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1779,7 +1779,7 @@ if (launch?.target?.kind === 'social') {
 - async reportTogether({ matchKey, text, thumbnail?, link?, chips? }) | scopes: social:write
   - Returns: { success: true }
   - Tell Twinkle what the two did together, in one short line. Twinkle may post it as a card in their chat so they can keep talking.
-  - Either member's app may call it, after both took part (the host accepted and the visitor's onMatchReady ran). One card per pair per app per day; later reports that day update the same card, so report each finished game or shared result.
+  - Either member's app may call it after the host accepted and the visitor received the match, when their shared activity is finished. A match is reportable for six hours. One card per pair per app per day; each different match can update it once.
   - text: up to 120 characters of plain words. No links, mentions or markup (refused with error.code === 'social_report_invalid'). Twinkle adds the names, the app's title and art, and one-tap replies.
   - thumbnail: an image this app uploaded with Twinkle.files. link: a path inside this app, as Twinkle.app.getShareUrl takes it. chips: up to 2 extra one-tap replies, 32 characters each.
   - The answer never says whether a card was posted. Twinkle skips it for members who cannot message each other, and the app must not try to find out.
