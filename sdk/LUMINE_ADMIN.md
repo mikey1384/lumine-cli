@@ -4014,6 +4014,15 @@ type MonthlyAiCostProjection = {
 
 Release boundary: `/cli/admin/ai-costs/monthly`, `/cli/admin/ai-costs/day/:day`, `/cli/admin/energy-budget/report`, the historical daily-run report, exact notable-user status, Subject-window resolution, and the runtime-log lease/snapshot workflow are API-owned. Apply the runtime-log review and energy telemetry migrations, then deploy and verify the compatible `twinkle-api` routes before publishing or installing the Lumine CLI release that invokes them. An older API rejects the new commands instead of synthesizing figures locally.
 
+### AI Energy reset (Mikey only, outside a run)
+
+```bash
+lumine admin energy reset --all --reason "<why>" [--confirm]
+lumine admin energy reset --user <id> --reason "<why>" [--confirm]
+```
+
+A fresh daily AI battery for everyone, or for one account's Energy pool (accounts that share a pool or bucket share the reset). Use it after an outage, as an event gift, or to undo a billing mistake. It refills the base battery only: paid, sponsored and rescue recharges are never touched, and a pool that used more than one battery keeps the part its recharge paid for. `--reason` is required and is stored in the audit log (`energy.reset`). Without `--confirm` it is a dry run that reports how many pools would be reset. Only the designated administrator can run it; do not run it without Mikey's instruction.
+
 ### AI Energy budget health (standing duty, every full daily review)
 
 Read the report at run start, before any other duty, so the day confirms the AI Energy budget system (one live Lumine run per user, per-run energy ceiling with an exact round cap, settled stops) is still behaving:
