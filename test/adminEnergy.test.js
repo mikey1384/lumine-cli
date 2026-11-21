@@ -24,9 +24,33 @@ test("energy reset is a dry run until --confirm and needs a scope and a reason",
 
 test("energy reset output says recharges are untouched", () => {
   const lines = formatEnergyResult({
+    operation: { name: "energy.reset.preview" },
     data: { dryRun: true, scope: "all", poolsReset: 3, refilledUnits: 1800000, fullBatteryUnits: 1200000 }
   });
   assert.match(lines[0], /Dry run: would reset today's AI battery for everyone: 3 pools/);
   assert.match(lines[0], /Recharges were not touched/);
   assert.match(lines[1], /--confirm/);
+});
+
+test("energy status and cutover", () => {
+  const status = op("energy", "status", "--days", "5");
+  assert.equal(status.path, "/cli/admin/energy/status?days=5");
+  assert.equal(status.mutates, false);
+  const preview = op("energy", "cutover", "--day", "1790", "--reason", "go live at the reset");
+  assert.equal(preview.name, "energy.cutover.preview");
+  assert.deepEqual(preview.body, { day: 1790, reason: "go live at the reset", dryRun: true });
+  const off = op("energy", "cutover", "--off", "--reason", "back out", "--confirm");
+  assert.deepEqual(off.body, { off: true, reason: "back out", dryRun: false });
+  assert.equal(off.mutates, true);
+  assert.throws(() => op("energy", "cutover", "--reason", "x"), /exactly one of --day/);
+  assert.throws(() => op("energy", "cutover", "--day", "1790"), /--reason is required/);
+});
+
+test("battery tools also answer under energy", () => {
+  const hold = op("energy", "hold", "42", "--reason", "feeder under review");
+  assert.equal(hold.name, "battery.hold.preview");
+  assert.equal(hold.path, "/cli/admin/battery/hold");
+  const reverse = op("energy", "reverse", "--transfer", "7,9", "--reason", "alts", "--confirm");
+  assert.equal(reverse.name, "battery.reverse");
+  assert.deepEqual(reverse.body.transferIds, [7, 9]);
 });
