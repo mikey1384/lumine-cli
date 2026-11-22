@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.97.0
+Version: 1.98.0
 Updated: 2026-11-22
-Generated: 2026-11-22T06:23:00.828Z
+Generated: 2026-11-22T23:22:39.766Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -93,7 +93,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 ## Meeting other members (Twinkle.social)
 - Twinkle.social lets members meet inside an app: the app says what its viewer is doing and whether others can join (setJoinable), Twinkle shows that on their face in Home's Live now and offers Play, Join or Watch, brings the visitor into the app, keeps the waiting line and its manners, and afterwards can post a neutral notice in the pair's chat (reportTogether). Offer it whenever the creator is making or changing something people do together: a multiplayer or co-op game, a room or lobby, a shared canvas, a study or quiz-me app, any app with a social side. One line is enough (for example: "Want people to be able to walk up and join whoever is playing?"); build it when they say yes or when they already asked for multiplayer, joining friends, watching or playing together. Never add it to a single-player app that has nothing to join, and never present it as required.
 - The states are generic: 'open' (on a menu or idle, a visitor can start now), 'busy-watchable' (in something others can watch), 'busy' (in something private) and 'closed' (nothing to join, the default). Call setJoinable whenever that changes (menu, round start, round end, spectating), with a short label in the creator's words ("Looking for a game", "Drawing, come watch", "Building a town, join me", "Studying vocab, quiz me") and a mode that says what joining means ('1v1' for a head-to-head game, 'coop', 'room', 'watch'). Choose the mode by what joining is. A queue mode ('1v1', 'coop', ...) is for apps where the member being joined decides when a visitor can start (a head-to-head match, a turn-based game). mode 'room' is a room people simply walk into, and it is never a queue in any state: with a roomKey it is a drop-in room (an open lobby or space where the visitor needs nobody's go); without one, Join just opens the app.
-- Twinkle, not the app, owns the manners, so never rebuild them: no request, accept or decline screens, no "declined" message, no invite spam, no blocking popup. Twinkle draws the small "walked up" banner and the waiting chip over the app, enforces one walk-up at a time, the cooldown after an ignored one, the queue limit, blocks and the viewer's "don't let people walk up" setting. The app only decides when it can start: on onVisitor it either accepts at once (state 'open') or keeps playing and accepts when the current round ends or when the visitor arrives again with wantsNow: true (the viewer tapped Play now).
+- Twinkle, not the app, owns the manners, so never rebuild them: no request, accept or decline screens, no "declined" message, no invite spam, no blocking popup. Twinkle draws the small "walked up" banner and the waiting chip over the app, enforces one walk-up at a time, the cooldown after an ignored one, the queue limit, blocks and the viewer's "don't let people walk up" setting. The app only decides when it can start: on onVisitor it either accepts at once (state 'open') or keeps playing and accepts when the current round ends or when the visitor comes again with wantsNow: true (the viewer tapped Play now). Accepting at once is safe even though the visitor's app is usually still opening: accept() waits for them to arrive. If no accept() is waiting for them, onVisitor fires again with arrived: true once they are in the app.
 - accept(visitor.id) gives the host { matchKey, visitor, mode }, and the visitor's app gets the same matchKey through onMatchReady: both then use it as the room, for example Twinkle.world.join({ roomKey: matchKey }). The visitor's app also reads Twinkle.notifications.getLaunchTarget(): target.kind === 'social' carries hostUserId and status ('waiting', 'later', 'watch' or 'unavailable'), so it can show the host's game to watch, or simply let the visitor play alone meanwhile. A visitor must never be stuck on a waiting screen.
 - Drop-in rooms (open lobbies, rooms with a code, shared spaces with free seats): while the viewer sits in an open room, call setJoinable({ state: 'open', mode: 'room', label, roomKey }) with the app's own room key (for example 'room-' + code); when the match starts or the room is full, switch to setJoinable({ state: 'busy', mode: 'room', label }) (keep mode 'room'; the roomKey may be left out, because Twinkle remembers it until the room closes, the key changes or the viewer leaves the app), and to 'closed' when they leave it. A room is never queued: while it is busy, Live now shows it busy with no Join and no "Join next". A solo or bots game that nobody can join is 'closed', not 'busy'. Then one tap on Join puts a visitor straight into that room: no code, no queue, no accept. The visitor's app gets onMatchReady({ status: 'drop-in', roomKey, matchKey, host }) (and the same fields on the launch target, target.status === 'drop-in') and joins roomKey exactly as its own "join with code" does, falling back to its normal start screen with a gentle note when the room is full or gone. The host's app gets onVisitor({ dropIn: true, matchKey, user }): they are already in, so it draws nothing and only keeps matchKey for reportTogether (the room's own "X joined" is enough). Twinkle never shows the roomKey to anyone else and still applies blocks, the opt-out and its limits. Use a queue mode instead when the host must choose when to start.
 - When the two really did something together, call reportTogether({ matchKey, activity, result }) from EACH member's app once it is finished (both apps run the same finish code). activity is one of 'played', 'built', 'drew', 'made', 'studied', 'explored' (the closest to what they did); result is only for 'played', from the calling member's side: 'won', 'lost', 'draw' or 'none'. Twinkle writes every word of the notice itself from fixed templates ("You and KenGo played Baduk together · KenGo won"), resolves the winner's name, and adds Play again (or Join again) and Report. There is no text, no picture, no link and there are no reply chips: the card shows the app's own published cover and title and opens the app. Twinkle posts it only when BOTH members' apps reported the end, at least two minutes passed from the match start to the earlier of the two reports, within six hours of the accept, and the two may message each other; it never tells the app whether it did. Each app's first report for a match is final, so report once, at the real end, never early. Report only real shared activity, never a walk-up that was only watched or ignored.
@@ -1733,21 +1733,31 @@ await Twinkle.social.setJoinable({ state: 'closed' });
   - Returns: unsubscribe function
   - Hear when someone walks up to the viewer (Twinkle already shows the banner; the app decides when it can start), or walked straight into their open room (dropIn: true; nothing to do).
   - Always available; no scope.
-  - Fires once when a visitor arrives, again with wantsNow: true if the viewer taps Play now on Twinkle's banner, and after a reload for everyone still waiting.
+  - Fires when someone walks up (arrived: false, because their app is usually still opening), again with arrived: true once they are in the app (not when an accept() for them is already waiting: that accept() simply resolves), again with wantsNow: true if the viewer taps Play now on Twinkle's banner, and after a reload for everyone still waiting. The same visitor can come more than once: do not start a second match for an id you are already letting in.
   - Drop-in rooms: when someone joins the viewer's open room from Live now, the listener gets { id, user, dropIn: true, matchKey, queuePosition: 0 }. They are already admitted: do not call accept and draw no accept UI; your room's own "X joined" is enough (Twinkle may show a tiny "X joined from Live now"). Keep matchKey for reportTogether with that member.
   - Do not draw your own request, accept or decline UI and never tell a visitor they were declined: Twinkle shows the banner and the waiting chip and enforces every limit. Ignoring a visitor is fine; their walk-up simply expires.
-  - Example: Twinkle.social.onVisitor(async (visitor) => {
-  // visitor: { id, user: { id, username, profilePicUrl }, queuePosition, expiresAt, wantsNow }
+  - Example: let starting = null;
+Twinkle.social.onVisitor(async (visitor) => {
+  // visitor: { id, user: { id, username, profilePicUrl }, queuePosition, expiresAt, wantsNow, arrived }
+  if (starting) return; // already letting someone in (wantsNow or a reload can repeat them)
   if (onMenu() || visitor.wantsNow) await startWith(visitor);
   else showNextUp(visitor.user.username); // start after this round
 });
 async function startWith(visitor) {
+  starting = visitor.id;
+  showNote(visitor.user.username + ' is on the way');
   try {
+    // waits while the visitor's app is still opening
     const { matchKey, visitor: user } = await Twinkle.social.accept(visitor.id);
     const room = await Twinkle.world.join({ roomKey: matchKey });
     startMatch(room, user);
   } catch (error) {
-    if (error.code !== 'social_visitor_gone') throw error; // they left: keep playing
+    // gone: they left (or never came). arriving: still not in after a minute,
+    // and onVisitor fires again (arrived: true) when they are. Keep playing.
+    if (error.code !== 'social_visitor_gone' && error.code !== 'social_visitor_arriving') throw error;
+  } finally {
+    starting = null;
+    hideNote();
   }
 }
 - async queue() | scopes: social:read
@@ -1761,7 +1771,8 @@ if (waiting[0]) await startWith(waiting[0]);
   - Returns: { matchKey, visitor: { id, username, profilePicUrl }, mode }
   - Let a waiting visitor in. Both apps get the same matchKey to meet in one room.
   - matchKey is valid as a Twinkle.world roomKey, a Twinkle.chat roomKey or a sharedDb key. Keep it: reportTogether needs it.
-  - Rejects with error.code === 'social_visitor_gone' when the visitor left or their walk-up expired; carry on as before. Safe to retry: the same visitor gives the same matchKey.
+  - Call it as soon as you want to start, even right after onVisitor: if the visitor's app is still opening, accept() waits for them (up to a minute, never past their walk-up) and resolves once they are in. Their walk-up is kept meanwhile. Their arrival then wakes this accept(), and onVisitor does not fire again for it.
+  - Rejects with error.code === 'social_visitor_gone' when the visitor left, their walk-up expired, they can no longer meet, or they still had not reached the app about 90 seconds after walking up (they backed out while it opened); carry on as before. Rejects with 'social_visitor_arriving' only if they still had not arrived after that wait: keep them as next, and onVisitor fires again with arrived: true when they come. Safe to retry: the same visitor gives the same matchKey.
   - Example: const { matchKey, visitor } = await Twinkle.social.accept(visitorId);
 const room = await Twinkle.world.join({ roomKey: matchKey });
 - onMatchReady(listener) | scopes: none
@@ -2747,15 +2758,23 @@ let match = null;
 social.setJoinable({ state: 'open', label: 'Looking for a game', mode: '1v1' });
 
 // 2. The member being joined: start now, or after the current round.
+// Accepting at once is fine: accept() waits while the visitor's app opens.
+let starting = false;
 social.onVisitor((visitor) => {
+  if (starting) return; // the same visitor can come again (wantsNow, a reload)
   if (!match || visitor.wantsNow) startWith(visitor);
 });
 async function startWith(visitor) {
+  starting = true;
   try {
     const accepted = await social.accept(visitor.id);
     await begin(accepted.matchKey, accepted.visitor);
   } catch (error) {
-    if (error.code !== 'social_visitor_gone') throw error;
+    // gone: they left (or never came). arriving: not in after a minute
+    // (onVisitor fires again with arrived: true when they are).
+    if (error.code !== 'social_visitor_gone' && error.code !== 'social_visitor_arriving') throw error;
+  } finally {
+    starting = false;
   }
 }
 
