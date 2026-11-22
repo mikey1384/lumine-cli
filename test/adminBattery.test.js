@@ -70,3 +70,49 @@ test("battery output names the pool, in-flight holds and reserved units", () => 
   }).join("\n");
   assert.match(reverse, /void 480000, spent 0, 120000 reserved by a running AI call/);
 });
+
+test("battery trading on|off is a dry run until --confirm, needs a reason, and warns about the ledger and floor", () => {
+  const preview = op("battery", "trading", "on", "--reason", "battery launch");
+  assert.equal(preview.name, "battery.trading.preview");
+  assert.equal(preview.path, "/cli/admin/battery/trading");
+  assert.deepEqual(preview.body, { mode: "on", reason: "battery launch", dryRun: true });
+  assert.equal(preview.mutates, false);
+  const confirmed = op("battery", "trading", "off", "--reason", "pause", "--confirm");
+  assert.equal(confirmed.name, "battery.trading");
+  assert.deepEqual(confirmed.body, { mode: "off", reason: "pause", dryRun: false });
+  assert.equal(confirmed.mutates, true);
+  assert.equal(op("energy", "trading", "on", "--reason", "x").name, "battery.trading.preview");
+  assert.throws(() => op("battery", "trading", "maybe", "--reason", "x"), /Pass on or off/);
+  assert.throws(() => op("battery", "trading", "on"), /--reason is required/);
+  const lines = formatBatteryResult({
+    operation: preview,
+    data: {
+      dryRun: true, changed: true, before: { mode: "off", source: "default" }, after: { mode: "on" },
+      ledgerAuthoritativeToday: false, websiteFloor: "2.3.151", batteryWebsiteVersion: "2.6.16",
+      websiteFloorCoversBattery: false, effectiveWithinSeconds: 30
+    }
+  });
+  assert.match(lines[0], /Dry run: would turn battery trading on \(was off, the default\)/);
+  assert.match(lines.join("\n"), /NOT authoritative today/);
+  assert.match(lines.join("\n"), /lumine admin website-floor set 2\.6\.16/);
+  assert.match(lines.at(-1), /Add --confirm/);
+});
+
+test("website-floor set and clear are audited dry runs until --confirm", async () => {
+  const { formatWebsiteFloorResult } = await import("../lib/admin-website-floor.js");
+  assert.equal(op("website-floor", "status").path, "/cli/admin/website-floor/status");
+  const set = op("website-floor", "set", "2.6.16", "--reason", "battery");
+  assert.equal(set.name, "website-floor.set.preview");
+  assert.deepEqual(set.body, { version: "2.6.16", reason: "battery", dryRun: true });
+  const clear = op("website-floor", "clear", "--reason", "rollback", "--confirm");
+  assert.deepEqual(clear.body, { clear: true, reason: "rollback", dryRun: false });
+  assert.equal(clear.mutates, true);
+  assert.throws(() => op("website-floor", "set", "2.6", "--reason", "x"), /like 2\.6\.16/);
+  assert.throws(() => op("website-floor", "set", "2.6.16"), /--reason is required/);
+  const lines = formatWebsiteFloorResult({
+    operation: set,
+    data: { dryRun: true, changed: true, before: { effectiveFloor: "2.3.151", codeFloor: "2.3.151", runtimeFloor: null, source: "default" }, after: { runtimeFloor: "2.6.16" } }
+  });
+  assert.match(lines[0], /Dry run: would set the runtime floor to 2\.6\.16/);
+  assert.match(lines.join("\n"), /already serves 2\.6\.16/);
+});
