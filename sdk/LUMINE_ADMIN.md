@@ -3979,10 +3979,11 @@ The counters are counts only, kept per UTC day in Valkey for 35 days, total and 
 - Valkey health: compare-and-set ok, conflict and exhausted; errors, timeouts, denied.
 
 Give the full report a **Drop-in rooms and walk-ups** item:
-- **Headline `data.lastCompletedDay`** (its `headline` and refusals by reason) against `data.trailing.dailyAverage` (measured trailing days only). Keep `data.inProgressDay` separate and never compare a partial day with a full one.
+- **Headline `data.lastCompletedDay`** (its `headline` and refusals by reason) against `data.trailing.dailyAverage` (fully measured trailing days only). Keep `data.inProgressDay` separate and never compare a partial day with a full one.
+- **A day with `partial: true` is measured but incomplete:** its first count came after 00:10 UTC (`firstCountAt`), which is the deploy day or a late start. Its early hours are missing, not zero, and it stays out of the trailing average (`data.trailing.partialDays`). When `lastCompletedDay` is partial, say so beside its numbers.
 - Name the top builds (`data.topBuilds`) by drop-ins and walk-ups.
 - **Report every `data.flags` entry** with its scope. These are problems:
-  - `dropins_without_match_ready` or `accepts_without_match_ready`: matches start, but the visitor's app never acknowledges them.
+  - `dropins_without_match_ready` or `accepts_without_match_ready`: 3 or more matches started, but the visitor's app never acknowledged one.
   - `room_host_queued` must be 0.
   - `reports_mostly_too_short` or `reports_mostly_not_found`.
   - `settled_without_notice` and `notice_errors`.
@@ -3990,10 +3991,11 @@ Give the full report a **Drop-in rooms and walk-ups** item:
   - `join_mostly_opens_app`.
   - `store_denied`, `store_errors`, `cas_exhausted` and `cas_conflicts_high`.
   - `telemetry_flush_failed` and `telemetry_trimmed`.
+  - `telemetry_writes_denied` (scope `inProgressDay`): Valkey reads work but this API process's counter writes are denied (`data.writer.state: denied`). Days without data are then denied, not undeployed. Report it as "not measured (writes denied)".
   - `notices_reported`: read those reports in `chat-reports`.
 - A busy room without a key (`dropin.refused.room_busy_no_key`) is expected while a room is in a round. It is a problem only if it dominates while the app shows the room as open.
 
-**Absent data is not zero traffic.** `status: unavailable` (no store, Valkey denied, timeout) means nothing was measured, so say "not measured" and give the reason. A day with `status: absent` had nothing written, not even the 10-minute heartbeat: the API was not deployed with this telemetry yet, or Valkey was down. Only a `measured` day with zero counts means nobody used it. A failed gather step is unavailable evidence too. A room-gone fallback inside the visitor's app is invisible to the server. A drop-in followed by a match-ready ack (and, later, a reportTogether ok) is the closest server-side sign that it worked. Remembered-key success is `split.dropin.ok.rememberedKey`, compared with `split.ack.dropIn.rememberedKey` and `split.together.ok.rememberedKey`.
+**Absent data is not zero traffic.** `status: unavailable` (no store, Valkey denied, timeout) means nothing was measured, so say "not measured" and give the reason. A day with `status: absent` had nothing written, not even the 10-minute heartbeat: the API was not deployed with this telemetry yet, Valkey was down, or (with `data.writer.state: denied`) the writes were denied. Only a `measured` day with zero counts means nobody used it. A failed gather step is unavailable evidence too. A room-gone fallback inside the visitor's app is invisible to the server. A drop-in followed by a match-ready ack (and, later, a reportTogether ok) is the closest server-side sign that it worked. Remembered-key success is `split.dropin.ok.rememberedKey`, compared with `split.ack.dropIn.rememberedKey` and `split.together.ok.rememberedKey`.
 
 ### Spending by calendar month
 
