@@ -37,6 +37,7 @@ test("battery reverse takes transfer ids and reports that the sender gets nothin
     operation: preview,
     data: {
       dryRun: true,
+      fullBatteryUnits: 1200000,
       voidedUnits: 300000,
       alreadySpentUnits: 300000,
       transfers: [{ transferId: 88, fromUserId: 1, toUserId: 2, units: 600000, status: "preview", voidedUnits: 300000, spentUnits: 300000 }]
@@ -52,6 +53,7 @@ test("battery output names the pool, in-flight holds and reserved units", () => 
   const lines = formatBatteryResult({
     operation: inspect,
     data: {
+      fullBatteryUnits: 1200000,
       user: { id: 42, username: "kim", verified: true },
       poolKey: "manual_bucket:9",
       pools: [
@@ -61,10 +63,10 @@ test("battery output names the pool, in-flight holds and reserved units", () => 
     }
   }).join("\n");
   assert.match(lines, /this account's pool/);
-  assert.match(lines, /held by running AI calls 120000 · giveable 480000/);
+  assert.match(lines, /battery 50% \(600000 units\) · held by running AI calls 120000 · giveable 480000/);
   const reverse = formatBatteryResult({
     operation: op("battery", "reverse", "--transfer", "88", "--reason", "x"),
-    data: { dryRun: true, voidedUnits: 480000, alreadySpentUnits: 0, transfers: [{ transferId: 88, fromUserId: 7, toUserId: 42, units: 600000, status: "preview", voidedUnits: 480000, heldUnits: 120000, spentUnits: 0, toQuotaKey: "manual_bucket:9" }] }
+    data: { dryRun: true, fullBatteryUnits: 1200000, voidedUnits: 480000, alreadySpentUnits: 0, transfers: [{ transferId: 88, fromUserId: 7, toUserId: 42, units: 600000, status: "preview", voidedUnits: 480000, heldUnits: 120000, spentUnits: 0, toQuotaKey: "manual_bucket:9" }] }
   }).join("\n");
   assert.match(reverse, /void 480000, spent 0, 120000 reserved by a running AI call/);
 });
