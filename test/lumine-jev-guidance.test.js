@@ -21,7 +21,7 @@ test("new and refreshed CLI workspaces teach agents to evaluate JEV adoption wit
       }
       const reference = await fs.readFile(path.join(dir, "TWINKLE_BUILD_SDK.md"), "utf8");
       assert.match(reference, /## AI decision design/);
-      assert.match(reference, /async decide\(\{ state, questions \}\)/);
+      assert.match(reference, /async decide\(\{ state, questions(, images)? \}\)/);
       assert.match(reference, /Choice:.*type: 'choice'/);
       assert.match(reference, /Score:.*type: 'score'/);
       assert.match(reference, /Yes\/no probability:.*type: 'noul'/);
