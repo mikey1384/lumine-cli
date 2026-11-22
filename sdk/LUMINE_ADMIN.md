@@ -43,6 +43,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Escalate to Mikey | `escalation list\|set` | [Escalation to Mikey](#escalation-to-mikey) |
 | Check a member's identity or alts (audited) | `identity inspect <user>`, `identity network`, `economy trace` | [Audited identity inspection](#audited-identity-inspection), [Audited private investigations](#audited-private-investigations) |
 | Restrict an AI bucket | `ai-bucket restrict --bucket-id <n> --mode … --dry-run` | [Restricted buckets](#restricted-buckets-inspect-rules-and-restrictions) |
+| Tradable AI battery: inspect, hold, reverse a transfer | `battery inspect --user <id>`, `battery hold\|unhold <userId> --reason "…" [--confirm]`, `battery reverse --transfer <id>[,…] --reason "…" [--confirm]` | [Tradable AI battery](#tradable-ai-battery-inspect-hold-reverse-mikey-only-added-2026-11-17) |
 | Review bot conduct / API runtime logs | `bot-output`, `runtime-logs start\|read\|finish\|resume\|abandon` | [Bot conduct review](#bot-conduct-review-standing-duty-every-full-daily-review), [API runtime-log review](#api-runtime-log-review-same-phase-every-full-daily-review) |
 | Costs: AI, Energy, AWS, spending | `ai-costs monthly\|day`, `energy-budget`, `media-costs monthly`, `spending --from … --to …` | [Application AI calendar-month cost](#application-ai-calendar-month-cost-standing-duty-every-full-daily-review), [AI Energy budget health](#ai-energy-budget-health-standing-duty-every-full-daily-review) |
 | Turn JEV images off (no deploy) | `jev-images switch --area all --mode off` | [JEV images](#jev-images-standing-duty-every-full-daily-review-added-2026-11-01) |
@@ -309,6 +310,55 @@ result instead of running again.
   9 accounts used is shared (counted, not listed, refused). Disabling an exact
   IP rule leaves its prefix rules active (the preview names them).
   `rule disable` keeps `--note` in the audit receipt only.
+
+### Tradable AI battery: inspect, hold, reverse (Mikey only; on the Energy ledger since 2026-11-22)
+
+Members can give part of today's AI Energy battery, offer it in a chat trade
+or ask for it (behind the API switch `BATTERY_TRADING_ENABLED`, default off).
+It works only from the Energy ledger's cutover day (`lumine admin energy
+status`). The pool owns the battery: one dated balance per Energy pool per
+site day on the ledger (`energy_pool_days`, journal `energy_entries`), with
+every move logged in `ai_battery_transfers`. Hard rules refuse a move inside one pool or manual
+bucket, between accounts that ever used the same device or are on the same
+IP at the moment of the action (the member only sees "Battery can't be sent
+between these accounts."), an account under 14 days old or without a
+verified email, a `users.banned.battery` hold, a chat/aiCards ban or banned
+bucket, and a receiving pool past one full battery that site day. Recharges
+are never giveable, and battery that an in-flight or not-yet-charged Lumine
+call has reserved is not giveable either. Everything else is a signal in the daily brief
+(`farmSignals.batteryFunnels`, `aiSpending.battery`), never an automatic
+action.
+
+```bash
+# One account's battery today and its recent movements (read-only).
+lumine admin battery inspect --user 1234 [--days 3] [--json]
+# Stop (or allow again) battery in or out of one account.
+lumine admin battery hold 1234 --reason "feeder pattern under review"
+lumine admin battery hold 1234 --reason "feeder pattern under review" --confirm
+lumine admin battery unhold 1234 --reason "reviewed: siblings" --confirm
+# Void what the recipient has not spent yet (same site day only).
+lumine admin battery reverse --transfer 88,89 --reason "alt funnel" [--confirm]
+# The same four commands also answer to `lumine admin energy ...`.
+```
+
+- Only the designated administrator (Mikey) may run these; every other
+  session is refused before any read. Writes are dry runs without
+  `--confirm`; confirmed writes are audited (`battery.hold`,
+  `battery.unhold`, `battery.reverse`).
+- `reverse` voids what is left of the battery that transfer delivered. The
+  ledger keeps each receipt as its own allocation, spent after the pool's own
+  battery, so the dry run shows exactly what `--confirm` does. Units a running
+  AI call has reserved are reported separately: what the call uses counts as
+  spent, the rest is voided when it ends. It never refunds the sender and
+  never gives the receive limit back. A transfer from an earlier site day
+  reports `day_ended`: that battery is already gone.
+- `inspect` shows the account's own battery pool (even if untouched today),
+  every pool that received battery from its transfers, and units reserved by
+  running AI calls. Its pool
+  keys are identity keys, so treat the output like identity evidence: keep it
+  private and out of member-facing text.
+- Follow a `batteryFunnels` lead with `identity inspect`; adding accounts to a
+  bucket stays Mikey's call.
 
 ### Shared verified-email policies
 
@@ -4013,6 +4063,22 @@ type MonthlyAiCostProjection = {
 ```
 
 Release boundary: `/cli/admin/ai-costs/monthly`, `/cli/admin/ai-costs/day/:day`, `/cli/admin/energy-budget/report`, the historical daily-run report, exact notable-user status, Subject-window resolution, and the runtime-log lease/snapshot workflow are API-owned. Apply the runtime-log review and energy telemetry migrations, then deploy and verify the compatible `twinkle-api` routes before publishing or installing the Lumine CLI release that invokes them. An older API rejects the new commands instead of synthesizing figures locally.
+
+### AI Energy owner tools: reset, status, cutover (Mikey only, outside a run)
+
+```bash
+lumine admin energy reset --all --reason "<why>" [--confirm]
+lumine admin energy reset --user <id> --reason "<why>" [--confirm]
+lumine admin energy status [--days 3] [--json]
+lumine admin energy cutover --day <dayIndex> --reason "<why>" [--confirm]
+lumine admin energy cutover --off --reason "<why>" [--confirm]
+```
+
+- **reset**: a fresh daily AI battery for everyone, or for one account's Energy pool (accounts that share a pool or bucket share the reset). Use it after an outage, as an event gift, or to undo a billing mistake. It refills the base battery only: paid, sponsored and rescue recharges are never touched, and a pool that used more than one battery keeps the part its recharge paid for. It works on whichever accounting is in effect: the daily counters before the cutover, the Energy ledger after it. `--reason` is required and stored in the audit log (`energy.reset`). Without `--confirm` it is a dry run that reports how many pools would be reset.
+- **status**: where the cutover stands, whether the battery trading switch is on, and the daily sanity report: the ledger's daily totals next to the old counters (charged units, pools, recharges), battery moved and voided, pools whose counters the ledger has not adopted yet, and how often the ledger fell back to the counters. Measurement only. During the first days after the cutover, read it in the daily review: charged units and recharges should match, `pools differing` should be 0 or settle on next use, and any `fallbacks` count is worth telling Mikey.
+- **cutover**: the Energy ledger becomes authoritative from that site day's reset (00:00 UTC). Pass a future day so every server switches at the same reset; `status` prints today's site day. `--off` returns to the daily counters, which the ledger keeps mirrored (battery that was traded is not reflected there). Audited as `energy.cutover`.
+
+Only the designated administrator can run these; do not run reset or cutover without Mikey's instruction.
 
 ### AI Energy budget health (standing duty, every full daily review)
 
