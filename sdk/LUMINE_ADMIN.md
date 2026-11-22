@@ -318,12 +318,17 @@ or ask for it (behind the owner runtime switch `lumine admin battery trading on|
 It works only from the Energy ledger's cutover day (`lumine admin energy
 status`). The pool owns the battery: one dated balance per Energy pool per
 site day on the ledger (`energy_pool_days`, journal `energy_entries`), with
-every move logged in `ai_battery_transfers`. Hard rules refuse a move inside one pool or manual
-bucket, between accounts that ever used the same device or are on the same
-IP at the moment of the action (the member only sees "Battery can't be sent
-between these accounts."), an account under 14 days old or without a
-verified email, a `users.banned.battery` hold, a chat/aiCards ban or banned
-bucket, and a receiving pool past one full battery that site day. Recharges
+every move logged in `ai_battery_transfers`. Hard rules (Mikey 2026-11-22)
+refuse a move inside one Energy pool or manual bucket (trading with
+yourself; the member only sees "Battery can't be sent between these
+accounts."), a `users.banned.battery` hold, a chat/aiCards ban or banned
+bucket, and a receiving pool past one full battery that site day. There is
+no account-age or verified-email requirement. A device both accounts ever
+used and the same IP at the moment of the action no longer refuse: each
+transfer records them in its `riskJson` (`sharedDevice`, `sharedNetwork`,
+with account ages and verified flags), and the daily brief lists them in
+`farmSignals.batteryFunnels.sharedAtAction` (count in
+`aiSpending.battery.sharedAtActionCount`). Recharges
 are never giveable, and battery that an in-flight or not-yet-charged Lumine
 call has reserved is not giveable either. Everything else is a signal in the daily brief
 (`farmSignals.batteryFunnels`, `aiSpending.battery`), never an automatic
