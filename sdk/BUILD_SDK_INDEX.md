@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.94.0
-Updated: 2026-11-21
-Generated: 2026-11-22T01:34:19.605Z
+Version: 1.95.0
+Updated: 2026-11-22
+Generated: 2026-11-22T04:25:02.376Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -79,6 +79,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 - word-game-puzzle-v2 is the same daily rule and also requires a server-verified finished solve of that difficulty today (Twinkle.wordMaster.startPuzzle and sendPuzzleEvents). word-search-champion-v1 pays only the rank-1 viewer of a completed UTC month on the server-written verified:month:YYYY-MM board (score, then earliest), once per month and only after the month is final (07:00 UTC on the 2nd, when its last boards can no longer take scores); once anyone collected a month, nobody else can; a removed or fully banned #1 passes the prize to the next eligible player; The daily Twinkle review confirms each month’s winner from the server’s record of their solves before the prize opens (a disqualified winner passes it to the next eligible player). rewards.getStatus returns wordSearchChampion: { month, months, claimable, checking } — months are ready to collect; checking lists wins still being confirmed (show a checking message, no collect button). Show the champion banner from that status, never from app storage.
 - Twinkle.coins prices are part of the app's rewards review (rewards.json prices + spendBudget). Using Twinkle.coins requires the same approval as Twinkle.rewards; the website, never the app, confirms every purchase. Use getReceipts as the only proof of who owns a bought item.
 - Groove Lab player (/build/vendor/groove-lab/1.0.0/player.js): sound effects and music for any app, built from Groove Lab's own instruments, so a song sounds the same as in Groove Lab. Browsers stay silent until a tap: await unlock() inside a tap or click handler before the first sound. Effects: sfx(name, { pitch, volume }) with name one of SFX (click, select, coin, jump, land, step, hit, hurt, explosion, laser, powerup, win, lose, correct, wrong, levelup, open, close, countdown, go) or your own steps [{ instrument, note, seconds, delay, velocity } | { drum, kit, delay, velocity }]; playNote({ instrument, note, seconds, velocity, delay }); playDrum({ kit, sound, velocity, delay }) with sound a DRUMS name (kick, snare, hat, openHat, crash, clap, rim, lowTom, ...) or GM key; setEffectsVolume(0..1). Music: loadSong(spec) checks a Groove Lab song spec and returns { song, warnings }; createSoundtrack(specOrSong, { loop = true, volume }) returns { play({ fadeIn, from }), stop({ fadeOut }), setVolume(v), preload(), playing, time, duration, onEnd, credit }; setMusicVolume(0..1, seconds) ducks music without touching effects; stopMusic({ fadeOut }); loadPublishedSong(entryId) returns { song, credit } via Twinkle.soundtracks.getSong. One soundtrack plays at a time. Song spec (the same format as Groove Lab's load_song): { title, bpm, bars, key: 'D', scale: 'minor', sound: 'studio' | 'retro', loop: { startBar, endBar }, tracks: [{ kind: 'synth' | 'drums', name, instrument, gain, notes: [[tick, midi, lengthTicks, velocity127]] | phrases: [{ bar, beat, text: 'D4:1 F4:.5 A4:.5 | C5:2' }] | grids: [{ bar, bars, pattern: { kick: 'x...x...x...x...', hat: '..x...x...x...x.' } }] }] }; ticks are 96 per quarter note; drum notes are [tick, gmKey, velocity127]. INSTRUMENTS and KITS list the instrument ids (piano, epiano, organ, strings, guitar, brass, flute, bass303, subbass, supersaw, squarelead, pluck, bell, the Command Nexus nx* and kh* voices; kits kit, kit808, gmkit, nexuskit). Write a real piece for the app's mood (melody, bass, drums, a loop section after any intro), not a two-note loop; keep game music loopable and leave room for effects.
+- KaTeX math typesetting (/build/vendor/katex/0.18.9/): Twinkle serves KaTeX 0.18.9 itself, so apps show formulas without a CDN. Link <link rel="stylesheet" href="/build/vendor/katex/0.18.9/katex.min.css"> (its fonts load from the same place), then import katex from '/build/vendor/katex/0.18.9/katex.js' and call katex.render(tex, element, { displayMode, throwOnError: false }), or import renderMathInElement from '/build/vendor/katex/0.18.9/contrib/auto-render.js' to typeset $...$ and $$...$$ inside existing text. Use it for fractions, roots, exponents, integrals, matrices and other formulas that plain text renders poorly; keep plain text for simple arithmetic. Do not paste KaTeX source into project files or load it from a CDN.
 - Twinkle.land terrain versions: edits are stored as cells over the terrain each client generates, so a release that changes a world's generated terrain must raise that world's number in rewards.json land.terrain and state the same number from the same constant in world.join({ land: { region, terrain } }) and Twinkle.land.edit({ region, terrain, ... }). Twinkle refuses block changes from a tab on a lower number (land_terrain_outdated, details { required, stated }) until it reloads. That code is final for the page load: never retry it, never send the refused changes again after the reload (they were made on the old terrain), and show one short message such as "This world was updated. Reload to keep building." (Twinkle.land.onTerrainOutdated).
 
 ## AI decision design
@@ -437,7 +438,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Local viewer download only; does not upload to Twinkle or consume AI Energy.
   - Use this for generated blobs/data/JSON/bytes or large/remote files that need parent-frame download handling.
   - For URL downloads, the parent frame fetches the file and saves it as a local Blob. Files uploaded to Twinkle (images, audio, PDFs and other files) work as they are; URLs on other sites must allow cross-origin fetches (CORS).
-  - Simple visible same-origin images can still use normal browser anchors with href and download.
+  - Use saveAs for every download. Download links (<a href download>) and target="_blank" links do nothing inside the app frame (platform rule new-windows).
   - Example: await Twinkle.files.saveAs({ fileName: 'fashion-guide.png', dataUrl: imageUrl, mimeType: 'image/png' });
 - async uploadGenerated({ fileName, url, dataUrl, data, text, json, bytes, blob, file, mimeType } = {}) | scopes: files:write
   - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, mediaKind, durationMs, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
@@ -1798,6 +1799,7 @@ if (launch?.target?.kind === 'social') {
 ### Twinkle.users
 - async getUser(userId) | scopes: user:read
   - Returns: { id, username, profilePicUrl, realName } | null
+  - Read one Twinkle member's public profile (username, profile picture, real name) by user ID.
 - async getUsers({ search, userIds, cursor, limit } = {}) | scopes: users:read
   - Returns: { users: [{ id, username, profilePicUrl, realName }], cursor? }
   - Prefer explicit userIds when possible.
