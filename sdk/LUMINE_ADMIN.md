@@ -314,7 +314,7 @@ result instead of running again.
 ### Tradable AI battery: inspect, hold, reverse (Mikey only; on the Energy ledger since 2026-11-22)
 
 Members can give part of today's AI Energy battery, offer it in a chat trade
-or ask for it (behind the API switch `BATTERY_TRADING_ENABLED`, default off).
+or ask for it (behind the owner runtime switch `lumine admin battery trading on|off`, default off; on since 2026-11-22, and only on days the Energy ledger is authoritative, see `lumine admin energy status`).
 It works only from the Energy ledger's cutover day (`lumine admin energy
 status`). The pool owns the battery: one dated balance per Energy pool per
 site day on the ledger (`energy_pool_days`, journal `energy_entries`), with
