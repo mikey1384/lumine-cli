@@ -2,7 +2,7 @@
 
 Version: 1.95.0
 Updated: 2026-11-22
-Generated: 2026-11-22T00:43:15.156Z
+Generated: 2026-11-22T01:27:13.329Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -438,7 +438,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Local viewer download only; does not upload to Twinkle or consume AI Energy.
   - Use this for generated blobs/data/JSON/bytes or large/remote files that need parent-frame download handling.
   - For URL downloads, the parent frame fetches the file and saves it as a local Blob. Files uploaded to Twinkle (images, audio, PDFs and other files) work as they are; URLs on other sites must allow cross-origin fetches (CORS).
-  - Simple visible same-origin images can still use normal browser anchors with href and download.
+  - Use saveAs for every download. Download links (<a href download>) and target="_blank" links do nothing inside the app frame (platform rule new-windows).
   - Example: await Twinkle.files.saveAs({ fileName: 'fashion-guide.png', dataUrl: imageUrl, mimeType: 'image/png' });
 - async uploadGenerated({ fileName, url, dataUrl, data, text, json, bytes, blob, file, mimeType } = {}) | scopes: files:write
   - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, mediaKind, durationMs, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
@@ -1799,6 +1799,7 @@ if (launch?.target?.kind === 'social') {
 ### Twinkle.users
 - async getUser(userId) | scopes: user:read
   - Returns: { id, username, profilePicUrl, realName } | null
+  - Read one Twinkle member's public profile (username, profile picture, real name) by user ID.
 - async getUsers({ search, userIds, cursor, limit } = {}) | scopes: users:read
   - Returns: { users: [{ id, username, profilePicUrl, realName }], cursor? }
   - Prefer explicit userIds when possible.
