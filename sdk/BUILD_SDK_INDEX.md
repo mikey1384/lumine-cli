@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.95.0
+Version: 1.96.0
 Updated: 2026-11-22
-Generated: 2026-11-22T04:25:02.376Z
+Generated: 2026-11-22T06:06:00.304Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -92,9 +92,10 @@ Features every app needs whenever they apply. When you build a new app or make a
 
 ## Meeting other members (Twinkle.social)
 - Twinkle.social lets members meet inside an app: the app says what its viewer is doing and whether others can join (setJoinable), Twinkle shows that on their face in Home's Live now and offers Play, Join or Watch, brings the visitor into the app, keeps the waiting line and its manners, and afterwards can post a neutral notice in the pair's chat (reportTogether). Offer it whenever the creator is making or changing something people do together: a multiplayer or co-op game, a room or lobby, a shared canvas, a study or quiz-me app, any app with a social side. One line is enough (for example: "Want people to be able to walk up and join whoever is playing?"); build it when they say yes or when they already asked for multiplayer, joining friends, watching or playing together. Never add it to a single-player app that has nothing to join, and never present it as required.
-- The states are generic: 'open' (on a menu or idle, a visitor can start now), 'busy-watchable' (in something others can watch), 'busy' (in something private) and 'closed' (nothing to join, the default). Call setJoinable whenever that changes (menu, round start, round end, spectating), with a short label in the creator's words ("Looking for a game", "Drawing, come watch", "Building a town, join me", "Studying vocab, quiz me") and a mode that says what joining means ('1v1' for a head-to-head game, 'coop', 'room', 'watch').
+- The states are generic: 'open' (on a menu or idle, a visitor can start now), 'busy-watchable' (in something others can watch), 'busy' (in something private) and 'closed' (nothing to join, the default). Call setJoinable whenever that changes (menu, round start, round end, spectating), with a short label in the creator's words ("Looking for a game", "Drawing, come watch", "Building a town, join me", "Studying vocab, quiz me") and a mode that says what joining means ('1v1' for a head-to-head game, 'coop', 'room', 'watch'). Choose the mode by what joining is. A queue mode ('1v1', 'coop', ...) is for apps where the member being joined decides when a visitor can start (a head-to-head match, a turn-based game). mode 'room' with a roomKey is a drop-in room: an open lobby or space people can simply walk into, where the visitor needs nobody's go.
 - Twinkle, not the app, owns the manners, so never rebuild them: no request, accept or decline screens, no "declined" message, no invite spam, no blocking popup. Twinkle draws the small "walked up" banner and the waiting chip over the app, enforces one walk-up at a time, the cooldown after an ignored one, the queue limit, blocks and the viewer's "don't let people walk up" setting. The app only decides when it can start: on onVisitor it either accepts at once (state 'open') or keeps playing and accepts when the current round ends or when the visitor arrives again with wantsNow: true (the viewer tapped Play now).
 - accept(visitor.id) gives the host { matchKey, visitor, mode }, and the visitor's app gets the same matchKey through onMatchReady: both then use it as the room, for example Twinkle.world.join({ roomKey: matchKey }). The visitor's app also reads Twinkle.notifications.getLaunchTarget(): target.kind === 'social' carries hostUserId and status ('waiting', 'later', 'watch' or 'unavailable'), so it can show the host's game to watch, or simply let the visitor play alone meanwhile. A visitor must never be stuck on a waiting screen.
+- Drop-in rooms (open lobbies, rooms with a code, shared spaces with free seats): while the viewer sits in an open room, call setJoinable({ state: 'open', mode: 'room', label, roomKey }) with the app's own room key (for example 'room-' + code); switch to 'busy' when the match starts or the room is full, and to 'closed' when they leave it. Then one tap on Join puts a visitor straight into that room: no code, no queue, no accept. The visitor's app gets onMatchReady({ status: 'drop-in', roomKey, matchKey, host }) (and the same fields on the launch target, target.status === 'drop-in') and joins roomKey exactly as its own "join with code" does, falling back to its normal start screen with a gentle note when the room is full or gone. The host's app gets onVisitor({ dropIn: true, matchKey, user }): they are already in, so it draws nothing and only keeps matchKey for reportTogether (the room's own "X joined" is enough). Twinkle never shows the roomKey to anyone else and still applies blocks, the opt-out and its limits. Use a queue mode instead when the host must choose when to start.
 - When the two really did something together, call reportTogether({ matchKey, activity, result }) from EACH member's app once it is finished (both apps run the same finish code). activity is one of 'played', 'built', 'drew', 'made', 'studied', 'explored' (the closest to what they did); result is only for 'played', from the calling member's side: 'won', 'lost', 'draw' or 'none'. Twinkle writes every word of the notice itself from fixed templates ("You and KenGo played Baduk together · KenGo won"), resolves the winner's name, and adds Play again (or Join again) and Report. There is no text, no picture, no link and there are no reply chips: the card shows the app's own published cover and title and opens the app. Twinkle posts it only when BOTH members' apps reported the end, at least two minutes passed from the match start to the earlier of the two reports, within six hours of the accept, and the two may message each other; it never tells the app whether it did. Each app's first report for a match is final, so report once, at the real end, never early. Report only real shared activity, never a walk-up that was only watched or ignored.
 - Everything must still work alone: on a page where social is off (an older tab, the Build editor's preview, a signed-out visitor) setJoinable resolves { supported: false } and the listeners never fire. Do not show an error for that; keep the solo or existing multiplayer flow. Apps that do not adopt Twinkle.social keep today's Join, which just opens the app.
 
@@ -1713,12 +1714,13 @@ world.updatePresence({ x, y, z, facing });
   - Use this when switching maps or resetting a multiplayer game.
 
 ### Twinkle.social
-- async setJoinable({ state, label?, mode? }) | scopes: none
+- async setJoinable({ state, label?, mode?, roomKey? }) | scopes: none
   - Returns: { supported, state }
-  - Say what the viewer is doing and whether others can join them. Shown on their face in Home's Live now with Play, Join or Watch.
+  - Say what the viewer is doing and whether others can join them. Shown on their face in Home's Live now with Play, Join or Watch. With mode 'room' and a roomKey, Join drops a visitor straight into that open room.
   - Always available; no scope.
   - state is 'open' (a visitor can start now), 'busy-watchable' (others can watch and be next), 'busy' (others can be next but not watch) or 'closed' (the default).
   - label: up to 32 characters of plain words in the app's own voice; it is shown next to the member's face. Links, mentions and markup are dropped. mode: a short lowercase word for what joining means ('1v1', 'coop', 'room', 'watch'); Twinkle words its buttons as a game for '1v1', 'versus', 'duel', 'match' and 'pvp'.
+  - roomKey (only with mode 'room'): the app's own key for the room the viewer is in, 1-64 letters, numbers, ., _, : or -, e.g. 'room-' + code. It makes the room a drop-in: while the state is 'open', one tap on Join puts a visitor straight in (onMatchReady with status 'drop-in' on their side, onVisitor with dropIn: true on the host's). Twinkle keeps it private: it is never shown in Live now or sent to anyone but an admitted visitor. Use a queue mode instead when the host should choose when a visitor starts. A room in a match or full should be 'busy' (Live now then offers no Join).
   - It rides on the app's existing presence, so call it only when the state really changes (not every frame); Twinkle sends at most one change every 2 seconds and keeps the latest. It ends by itself when the viewer leaves the app.
   - Resolves { supported: false, state: 'closed' } where social is off (an older tab, the Build editor's preview, a draft, a signed-out visitor), and state 'closed' when the viewer turned walk-ups off. Never treat either as an error.
   - Example: // menu or lobby: a visitor can start right away
@@ -1729,9 +1731,10 @@ await Twinkle.social.setJoinable({ state: 'busy-watchable', label: 'In a match',
 await Twinkle.social.setJoinable({ state: 'closed' });
 - onVisitor(listener) | scopes: none
   - Returns: unsubscribe function
-  - Hear when someone walks up to the viewer. Twinkle already shows the banner; the app decides when it can start.
+  - Hear when someone walks up to the viewer (Twinkle already shows the banner; the app decides when it can start), or walked straight into their open room (dropIn: true; nothing to do).
   - Always available; no scope.
   - Fires once when a visitor arrives, again with wantsNow: true if the viewer taps Play now on Twinkle's banner, and after a reload for everyone still waiting.
+  - Drop-in rooms: when someone joins the viewer's open room from Live now, the listener gets { id, user, dropIn: true, matchKey, queuePosition: 0 }. They are already admitted: do not call accept and draw no accept UI; your room's own "X joined" is enough (Twinkle may show a tiny "X joined from Live now"). Keep matchKey for reportTogether with that member.
   - Do not draw your own request, accept or decline UI and never tell a visitor they were declined: Twinkle shows the banner and the waiting chip and enforces every limit. Ignoring a visitor is fine; their walk-up simply expires.
   - Example: Twinkle.social.onVisitor(async (visitor) => {
   // visitor: { id, user: { id, username, profilePicUrl }, queuePosition, expiresAt, wantsNow }
@@ -1763,19 +1766,27 @@ if (waiting[0]) await startWith(waiting[0]);
 const room = await Twinkle.world.join({ roomKey: matchKey });
 - onMatchReady(listener) | scopes: none
   - Returns: unsubscribe function
-  - On the visitor's side: the member they walked up to let them in. Carries the same matchKey the host got.
+  - On the visitor's side: the member they walked up to let them in, or they dropped straight into an open room (status 'drop-in' with roomKey). Carries the matchKey the host got.
   - Always available; no scope.
-  - Register it at startup. A match that became ready while the app was still loading is delivered as soon as the listener exists.
-  - Until it fires, let the visitor watch or play on their own; Twinkle shows them where they stand ("You're next").
-  - Example: Twinkle.social.onMatchReady(async ({ matchKey, host, mode }) => {
+  - Register it at startup. A match that became ready while the app was still loading is delivered as soon as the listener exists, once per matchKey.
+  - The listener gets { kind: 'social', status, matchKey, mode, host, hostUserId } plus roomKey when status is 'drop-in'. status 'accepted': the host let a waiting visitor in; meet in matchKey. status 'drop-in': the visitor tapped Join on a member in an open room; skip any start screen and join roomKey exactly as your own room-code join does. If the room is full or gone, fall back to the start screen with a gentle note.
+  - Until it fires, let the visitor watch or play on their own; Twinkle shows them where they stand ("You're next"). A drop-in fires at once, with no note over the app.
+  - Delivering it tells Twinkle this side joined, which starts the match for reportTogether; so always register it, also in apps that read the launch target.
+  - Example: Twinkle.social.onMatchReady(async ({ status, matchKey, roomKey, host, mode }) => {
+  if (status === 'drop-in') {
+    // walked straight into the host's open room: join it as "join with code" does
+    if (!(await joinRoom(roomKey))) showStartScreen('That room just filled up.');
+    rememberPair(host.id, matchKey); // for reportTogether
+    return;
+  }
   const room = await Twinkle.world.join({ roomKey: matchKey });
   startMatch(room, host);
 });
 // how this visit began
 const launch = Twinkle.notifications.getLaunchTarget();
 if (launch?.target?.kind === 'social') {
-  // target: { hostUserId, hostUsername, status: 'waiting' | 'later' | 'watch' | 'unavailable', hostJoinable }
-  watchOrPlayAlone(launch.target);
+  // target: { hostUserId, hostUsername, status: 'waiting' | 'later' | 'watch' | 'unavailable' | 'drop-in', hostJoinable, roomKey?, matchKey? }
+  if (launch.target.status !== 'drop-in') watchOrPlayAlone(launch.target);
 }
 - async reportTogether({ matchKey, activity, result? }) | scopes: social:write
   - Returns: { success: true }
