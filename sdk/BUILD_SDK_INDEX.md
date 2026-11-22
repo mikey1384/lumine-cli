@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.90.0
-Updated: 2026-11-14
-Generated: 2026-11-14T07:01:05.061Z
+Version: 1.93.0
+Updated: 2026-11-21
+Generated: 2026-11-21T12:02:02.992Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -23,6 +23,7 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 14. Call setPointerCapture only inside a pointerdown handler with that event's pointerId, wrapped in try/catch, and release only when hasPointerCapture says the element holds it. From click, mouse, timer or synthetic handlers it throws and the control stops working.
 15. Keyboard games call preventDefault for their keys (Space, arrows, WASD) from a window or document keydown listener added with { passive: false }, skipping inputs, textareas, selects and contenteditable, and make the playfield focusable; otherwise those keys scroll or jump the page during play.
 16. On phones a long press on game controls selects text or opens the Copy/Look Up menu unless the whole game area (controls, HUD, menus, empty play space) is marked data-twinkle-no-select and styled user-select: none; -webkit-user-select: none; -webkit-touch-callout: none. A game drawn without a canvas sets data-twinkle-game on <html> too, so Twinkle's phone touch protections apply. Keep inputs and copyable text selectable with data-twinkle-selectable.
+17. Respect the viewer's host sound preference: Twinkle.audio.muted and Twinkle.audio.subscribe(listener) reflect it; keep your own music/effects switches independent, and never override host mute. Standard Web Audio and audio/video elements are silenced automatically.
 
 ## Essential SDK features
 Features every app needs whenever they apply. When you build a new app or make a substantial change, add every one that applies as part of that change, without being asked. On a small, targeted request, add a missing one only when the request touches what it covers (a change to levels, scoring or saving: keep-place; a new screen: back-button); otherwise name it in one line so the creator can ask. Say in one line what you added. Never add one that does not apply.
@@ -34,7 +35,8 @@ Features every app needs whenever they apply. When you build a new app or make a
 5. When: A game, or an app whose taps, answers, wins or other moments would feel better with sound (a quiz's right and wrong answers, a button that does something, a level clear), and the app has no sound yet. Use: The Groove Lab player (import * as groove from '/build/vendor/groove-lab/1.0.0/player.js'): await groove.unlock() inside the first tap, then groove.sfx('click' | 'coin' | 'jump' | 'hit' | 'correct' | 'wrong' | 'win' | 'lose' | 'levelup' ...) at those moments, with a mute toggle kept in Twinkle.privateDb. Offer music too: compose a soundtrack as a Groove Lab song spec in a project module (soundtrack/<name>.js with export default { ...spec }, played with groove.createSoundtrack(spec).play({ fadeIn: 1 }) after unlock), or play the creator's published Groove Lab song with groove.loadPublishedSong(entryId) and show its credit.
 
 ## Notes
-- Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery.
+- For substantial changes, such as a new feature or edits to rewards, save/load or multiplayer, get an independent code review after applying the edits. In Lumine, use request_review. Verify each finding, act on the real issues, and use a second review to confirm serious fixes. Skip review for small tweaks, and continue your own checks if it is unavailable.
+- Reward is part of completion: a reward-paying run must stay pending until awarded:true and its canonical receipt (or getReceipt status awarded). Do not show final solved/completed status, advance rewarded progress, or discard finished proof before that. Preserve the exact challenge/proof and acknowledged progress in a durable per-viewer outbox; reconcile getReceipt after a lost reply and retry the same challenge, never inventing a payment. Explain explicit practice, already collected, exhausted approved limits, preview and disclosed zero-value retry outcomes. Use the start response as a conservative elapsed-time reference, and test delayed start, network failure, lost claim reply, reload, day/viewer change and duplicate recovery. For a prize that is once per contest, level or item rather than once per day, pass a stable onceKey (e.g. "contest-42:1st") to rewards.start and rewards.claim: the server pays each key at most once and answers any repeat with the original receipt, so the app needs no client-side reservation or cross-tab claim bookkeeping for it.
 - This SDK is injected into Build iframes via the Build preview/runtime.
 - Widgets call SDK methods; the parent proxies to the API.
 - When an SDK request never got a reply from Twinkle's server (the device went offline, the network dropped, or the connection was cut first), its rejected error has error.details.isTransportError === true. Its error.status is 500 for older apps, so check this flag before treating a 500 as a server failure. The request may or may not have been applied: retry a write only with the same operationId or requestId, and only after a later user action or decision point, never in a loop. Errors that came back from the server never carry the flag.
@@ -105,6 +107,18 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - The listener receives the current muted boolean immediately by default.
   - Pass { immediate: false } to skip the initial callback.
   - Example: const unsubscribe = Twinkle.onAudioMuteChange((muted) => customMixer.setMuted(muted));
+
+### Twinkle.audio
+- muted | scopes: none
+  - Returns: boolean
+  - Current effective host mute state (read-only property).
+  - Example: if (Twinkle.audio.muted) showSoundOffIndicator();
+- subscribe(listener, options?) | scopes: none
+  - Returns: unsubscribe function
+  - Observe host mute changes; listener receives a boolean immediately unless options.immediate is false.
+  - Host mute changes output gain/muting without pausing or resuming playback. Preserve your own app sound settings; unmuting the host does not enable app-muted music.
+  - The older Twinkle.isAudioMuted() and Twinkle.onAudioMuteChange() aliases remain supported.
+  - Example: const unsubscribe = Twinkle.audio.subscribe((muted) => updateSoundIndicator(muted));
 
 ### Twinkle.capabilities
 - async get() | scopes: none
@@ -240,11 +254,15 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: { success, session } when opened by lumine app-mcp
   - Register the live iframe handlers for the published app's static MCP tool manifest.
   - Tool discovery comes only from /app-tools.json in the pinned published artifact; runtime code cannot add or rename tools.
-  - Every declared tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers, tells Twinkle the app offers tools (so the signed-in viewer can click Connect AI helper and pair this open tab with lumine app-mcp <buildId> --code <code>), and resolves with active:false.
+  - Every browser tool needs a same-named handler. Outside an app-mcp session, registration stores the handlers, tells Twinkle the app offers tools (so the signed-in viewer can click Connect AI helper and pair this open tab with lumine app-mcp <buildId> --code <code>), and resolves with active:false.
   - Mark each tool that only reads with "readOnly": true in /app-tools.json; for a tool whose action argument decides, declare "readOnlyWhen": { "action": ["list", "export"] }. A helper paired through Connect AI helper can use only read-only calls until the viewer switches on Allow edits; undeclared tools count as edits.
   - Include what the viewer has selected or is looking at in the state-reading tool (for example the selected range and active item), so a paired helper can see what the viewer is pointing at.
   - Handlers run serially inside the visible app iframe and should return the confirmed post-action state.
   - Do not synthesize server-owned state; await Twinkle SDK mutations before returning.
+  - Declare effect as inspection, session, media_io, app_data or earned_gameplay. Effects are semantic contracts, never inferred from names. Legacy readOnly/readOnlyWhen tools remain supported; unspecified tools count as edits.
+  - For Zero/Ciel server actions, add server: { kind: "private_db", operation: "get" | "compare_and_set", key: "your.fixed.key" }. get requires effect inspection and empty arguments; compare_and_set requires effect app_data and arguments { expectedValue, value, operationId }. Both use the authenticated viewer’s existing Twinkle.privateDb data, never a supplied user or build id.
+  - Server actions need no iframe handler. They are currently executed by Zero/Ciel open_app_tools/use_app_tool, not the external CLI call queue. Browser tools still require same-named handlers; do not remove normal app controls. Declare a bounded inputSchema for the saved value.
+  - Zero/Ciel pin buildId and publishedArtifactVersionId, require their existing approval card before changes, reject stale published versions and all reward apps (including between approvals), and return canonical private-data save receipts. Reconnect by opening tools again; retry with identical operationId/arguments. Conflicts require a new read. Undo by compare-and-setting the current value back to receipt.previousValue after approval; saved=false on a duplicate means a later edit is now current.
   - Example: await Twinkle.appTools.register({ handlers: { get_state: () => ({ view, data }), open_view: ({ view }) => navigateTo(view) } });
 
 ### Twinkle.preview
@@ -1618,14 +1636,17 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
   - Call the returned function to unsubscribe.
 
 ### Twinkle.world
-- async join({ worldKey = 'default', roomKey = 'main', instanceId = 'main', presence, player, land } = {}) | scopes: none
+- async join({ worldKey = 'default', roomKey = 'main', instanceId = 'main', presence, player, land, takeOver } = {}) | scopes: none
   - Returns: { sessionId, session, room, players, snapshot, subscribe(listener), updatePresence(patch), send(actionOrType, data), edit(cells, { cause }) (land worlds only), leave() }
   - Join a realtime Build world room and receive a snapshot plus a session handle for presence updates, actions, and room events.
   - Always available in the build iframe.
   - World state is ephemeral and heartbeat/TTL based. Use sharedDb/privateDb for durable inventory, XP, quests, ownership, and saved progress — but write those LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick); per-frame/live state stays in world presence or client memory. The server rate-limits sharedDb/privateDb writes and returns 429.
   - Events are room-scoped and include serverTime, seq, eventId, schemaVersion, sessionId, player, and room metadata.
+  - One player per account per room: a signed-in account holds one seat in a room (worldKey + roomKey + instanceId); its newest join wins and replaces the older session. players lists each account once (its highest player.generation), never this account's other sessions; guests are separate players per session. Build avatars, the online list and player counts from that one players list.
+  - Opened in another tab: when a newer join of the same account (another tab) takes the room, this tab's session gets session.ended with reason 'superseded' (requests fail with error.code === 'WORLD_SESSION_SUPERSEDED'; Twinkle.world.isSupersededError(error)). It is terminal: do not rejoin automatically (the two tabs would keep taking the room from each other), and join refuses that room with the same code. Keep the world on screen, say briefly that it was opened in another tab, and offer a button that calls join({ ..., takeOver: true }) when the person chooses to play here. A reload also joins again. Reason 'replaced' means this same tab joined that room again; drop the old handle.
+  - Roster self-healing: the SDK replaces each session's players from Twinkle's canonical roster on its heartbeat (about every 15 s) and emits { type: 'roster.synced', players } when membership changed, so players that left without a leave event (a crashed server, a lost message) disappear. Refresh avatars and lists from event.players on every event.
   - Signed-in player identity comes from the canonical Twinkle user record; player.profilePicUrl is only used for guests and is returned only when it is a valid absolute HTTPS URL.
-  - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles and reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
+  - Subscribe to session.ended and catch updatePresence/send errors. Stop using stale handles; check Twinkle.world.isSupersededError(error) first and offer Play here without reconnecting. For other errors, reconnect only when Twinkle.world.isSessionEndedError(error) is true; for other Twinkle.world.isRecoverableSessionError(error) cases, drop the transient presence/action and keep the handle.
   - Use updatePresence for live avatar snapshots and send for lightweight actions such as emotes, interactions, and chat bubbles.
   - Treat the render/input loop as local-only. Queue presence only after relevant fields change, replace any queued snapshot with the newest one, and flush on a fixed 5-15 updates-per-second schedule with at most one updatePresence request in flight. Never call or await updatePresence every animation frame, resend unchanged snapshots, overlap requests, or build a backlog.
   - Send discrete actions only when they happen; do not poll or automatically retry them. The parent limits updatePresence and send together to protect the website connection. WORLD_EVENT_RATE_LIMITED is recoverable: drop that attempted update without an immediate retry and keep the current session.
@@ -1638,13 +1659,16 @@ world.updatePresence({ x, y, z, facing });
 - isRecoverableSessionError(error) | scopes: none
   - Returns: boolean
   - Return true when a world request error is expected to be handled by app code instead of crashing.
-  - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, rate-limited, preview-updating, and timed-out world session requests.
+  - Recoverable session errors include ended, missing, socket-disconnected, socket-not-ready, room-missing, rate-limited, preview-updating, service-restarting (WORLD_SERVICE_RETIRING) and timed-out world session requests. WORLD_SESSION_SUPERSEDED (opened in another tab) is not recoverable.
   - Only session-ended errors prove that the current handle should be discarded. WORLD_EVENT_RATE_LIMITED, timed-out, or preview-updating presence/action requests must be dropped without reconnecting and without an immediate retry.
   - For durable game state, write through sharedDb/privateDb instead of relying on world presence — but LOW-frequency only (on a user action or an occasional snapshot, never per frame/tick).
   - Example: try {
   await world.updatePresence({ x, y, z, facing });
 } catch (error) {
-  if (Twinkle.world.isSessionEndedError(error)) {
+  if (Twinkle.world.isSupersededError(error)) {
+    world = null;
+    showPlayHereButton();
+  } else if (Twinkle.world.isSessionEndedError(error)) {
     world = null;
     scheduleReconnect();
   } else if (Twinkle.world.isRecoverableSessionError(error)) {
@@ -1656,12 +1680,23 @@ world.updatePresence({ x, y, z, facing });
 - isSessionEndedError(error) | scopes: none
   - Returns: boolean
   - Return true when a world request error means the current session handle is stale and app code should reconnect with a fresh Twinkle.world.join call.
-  - Session-ended errors include ended, missing, room-missing, and socket-disconnected world session failures.
+  - Session-ended errors include ended, missing, room-missing, socket-disconnected and superseded (WORLD_SESSION_SUPERSEDED) world session failures. For superseded, check Twinkle.world.isSupersededError(error) first and do not reconnect on your own.
   - Request timeouts and preview-updating skips are recoverable but not session-ended.
-  - Example: if (Twinkle.world.isSessionEndedError(error)) {
+  - Example: if (Twinkle.world.isSupersededError(error)) {
+  world = null;
+  showPlayHereButton();
+} else if (Twinkle.world.isSessionEndedError(error)) {
   world = null;
   scheduleReconnect();
 }
+- isSupersededError(error) | scopes: none
+  - Returns: boolean
+  - Return true when another tab of the same account took this world room (WORLD_SESSION_SUPERSEDED): stop multiplayer in this tab without reconnecting and offer join({ ..., takeOver: true }) on the person's request.
+  - Never call join with takeOver automatically or on a timer; only from the person's action.
+  - Example: world.subscribe((event) => {
+  if (event.type === 'session.ended' && event.reason === 'superseded') showPlayHereButton();
+});
+// on the button: world = await Twinkle.world.join({ roomKey, presence, takeOver: true });
 - leaveAll() | scopes: none
   - Returns: void
   - Leave every active world session in the current iframe.
@@ -1783,13 +1818,14 @@ world.updatePresence({ x, y, z, facing });
   - Collection progression keeps every approved keyed set available independently of other players' solves. collectionSets lists { setKey, number }; challenges carry collection, practice, completed and completion. Live status includes viewerId for a per-viewer durable outbox. Attempts and completion persist across days/releases; the daily reward allowance does not reset a puzzle's paid tries. Existing receipts (including rematches), Vault solves/practice and studied guides count. Completed puzzles can be revisited; do not treat any receipt for the grade as completing all its puzzles. Collection rules support up to 500 permanent sets per rule; legacy queued/dated rules keep their 62-set limit.
   - missedRematch appears when rewards.json declares missedRematch ({ afterDays, perDay }; it requires userDailyClaims) and the app has collection rules. A collection set may declare variantOf: another set's key, meaning the same puzzle with new numbers (an ordinary puzzle for everyone). A learner who missed any puzzle of a family (an original plus its variants) and has not solved one of its puzzles on the first try gets the family's first unmet puzzle as a rematch afterDays site days after their last answer in the family. ready lists today's rematches (variantOf is the family's original, missed the puzzle this learner got wrong most recently; once perDay are used it only keeps one already opened today): open setKey with start({ ruleId, setKey }) at any time (before or after today's bounties) and the challenge comes back with rematch: { variantOf, answered }: one answer, the rule's full first-try amounts, a receipt (rematch: true) that does not count toward userDailyClaims but does count toward the XP/Coin budgets. usedToday against perDay says how many rematches were opened today; opening one uses it. upcoming and nextReadyDay describe rematches not ready yet.
   - For craft-discovery-v1 rules, live status includes craftDiscovery.pendingByRule: counts of this viewer’s unpaid discoveries eligible for each configured rule. Use these advisory counts to skip empty tier probes; they are not rewards or a promise that a later claim will succeed. claim still checks and consumes canonical proof transactionally. Refresh status after claims. Older servers and preview mode may omit this field.
-- await Twinkle.rewards.getReceipt({ challengeId, includeChallenge? }) | scopes: rewards:claim
-  - Returns: { mode: "live", status: "awarded" | "completed" | "pending" | "expired" | "not_found", receipt: { id, challengeId, ruleId, reviewId, artifactVersionId, dayKey, xp, coins, attempt, createdAt } | null, balances: { xp, coins }, challengeId?, ruleId?, dayKey?, completion?, readyInSeconds?, challengeElapsedSeconds? } | { mode: "preview", status: "not_found", receipt: null, message }
+- await Twinkle.rewards.getReceipt({ challengeId, includeChallenge? } | { ruleId, onceKey }) | scopes: rewards:claim
+  - Returns: { mode: "live", status: "awarded" | "completed" | "pending" | "expired" | "not_found", receipt: { id, challengeId, ruleId, reviewId, artifactVersionId, dayKey, xp, coins, attempt, createdAt, onceKey? } | null, balances: { xp, coins }, challengeId?, ruleId?, dayKey?, completion?, readyInSeconds?, challengeElapsedSeconds? } | { mode: "preview", status: "not_found", receipt: null, message }
   - Read an existing receipt for this app and signed-in viewer by server-issued challengeId, including previous UTC days and previous approved versions. Requires the current approved published release and runtime grant; a stale frame must reload first. Never awards, retries a claim, returns answer keys, or restores removed rewards permission.
   - Reconcile a durable local reward outbox after a lost claim reply: awarded confirms the exact payment; pending means no receipt yet for a current unexpired challenge, so retry the same challengeId. expired or not_found confirms no paid receipt and no claim possible for that ID under the current release. Never refund app items just because getStatus history omitted an older claim or a network request failed. Preview has no durable paid receipts; keep it separate from live recovery.
   - With includeChallenge: true, a pending app-check-v1 challenge also returns challengeId, ruleId, dayKey, completion { profile, puzzle }, readyInSeconds and challengeElapsedSeconds for that same existing challenge. This never creates a challenge or submits a claim. Older runtimes may omit these fields; retain the unfinished proof and wait for recovery instead of starting a replacement challenge.
   - For a paid nonogram-picture-v1 receipt, picture { title, category } may also be returned so the app can recover the reveal after a lost response. It contains no solution cells.
   - For collection practice, status:'completed' confirms a saved unpaid completion and includes completion { ruleId, setKey, at }, practice:true and receipt:null. Another challenge for the same personally completed collection set resolves to its existing receipt/completion, never a second payout.
+  - With { ruleId, onceKey }, returns status:'awarded' and the receipt that key paid (any day or release, including a retired rule ID), or status:'not_found' with receipt:null when that key has not been paid. Never awards.
 - await Twinkle.rewards.startRun({ proofGroup, requestId }) | scopes: rewards:claim
   - Returns: { mode, viewerId, serverTime, run: { id, seed, rngVersion, profile, proofGroup, requestId, dayKey, createdAt, expiresAt } | null, challenges: [{ ruleId, available, reason, challengeId?, targetLines, readyInSeconds, attemptsRemaining, reward }] }
   - Persist a fresh requestId before starting a new game. Retry that exact requestId after a lost response to recover the identical seed/run; use a new id only for a genuine new game. Start reward-bearing play only after the response. Ignore an older asynchronous response after restart or viewer change. Available milestones may exclude rewards already earned; do not block remaining milestones or ordinary practice.
@@ -1800,8 +1836,8 @@ world.updatePresence({ x, y, z, facing });
   - Returns: Local deterministic piece source with next() returning I, O, T, J, L, S or Z
   - Pure local helper; no network, payment or permission. Pass the exact seed and rngVersion returned by startRun. It is the same 128-bit seeded xoshiro128** and unbiased seven-bag implementation the server uses.
   - Draw one piece for the active piece and one for the next preview at spawn, then draw when consuming the next piece (including an empty hold). Keep the consumed piece count with game state; reconstruct after reload by creating the source again and drawing that many pieces. Do not redraw the next preview on rendering or fabricate a reward run for practice.
-- await Twinkle.rewards.start({ ruleId, setKey?, levelIndex?, completionToken? }) | scopes: rewards:claim
-  - Returns: { mode: "live", challengeId, readyInSeconds?, challengeElapsedSeconds?, questions: [{ prompt, hint?, guide? }], setKey, reward: { xp, coins }, retryReward: { xp, coins }, attempts, maxAttempts, attemptsRemaining, firstTryAvailable, expiresAt }
+- await Twinkle.rewards.start({ ruleId, setKey?, levelIndex?, completionToken?, onceKey? }) | scopes: rewards:claim
+  - Returns: { mode: "live", challengeId, readyInSeconds?, challengeElapsedSeconds?, questions: [{ prompt, hint?, guide? }], setKey, reward: { xp, coins }, retryReward: { xp, coins }, attempts, maxAttempts, attemptsRemaining, firstTryAvailable, expiresAt } | { mode: "live", status: "awarded", alreadyEarned: true, onceKey, challengeId, receipt, balances: { xp, coins } }
   - Creates or resumes a server-issued challenge for the signed-in viewer. Render its questions (prompt and optional hint) and collect numeric answers in the same order. One daily challenge per rule/review; repeat starts cannot reset attempts. A challenge stays open until the site's daily reset (UTC midnight, 9:00 AM in Korea) (expiresAt). Resuming after a wrong answer includes each question's guide.
   - Errors: build_reward_not_scheduled when the rule has no questions for today; build_reward_daily_claims_reached when the viewer already earned today’s cap. attemptsRemaining is null for unlimited rules.
   - For a completion rule call start when the activity begins (the moment the stage starts); the challenge's age is what the claim is measured against. In preview mode start also works for the owner (a stateless simulation).
@@ -1813,6 +1849,7 @@ world.updatePresence({ x, y, z, facing });
   - Live completion starts also return challengeElapsedSeconds, the challenge's server-observed age in seconds, including for an already-open challenge after its minimum wait has passed. Anchor it at response arrival as a conservative lower bound when scheduling a proof that compares activity time with challenge age. It is timing metadata, never proof or permission to pay; older servers may omit it.
   - A collection puzzle listed in getStatus().missedRematch.ready starts as a paid rematch, before or after today's bounties: rematch: { variantOf, answered }, attemptsRemaining 1, reward = the rule's full xp/coins, retryReward 0, and its receipt does not count toward userDailyClaims. A wrong answer ends the rematch (the puzzle stays in the collection as an ordinary missed puzzle); a right one pays and completes it.
   - tetris-run-v1 uses startRun({proofGroup, requestId}), not independent start calls per milestone.
+  - onceKey (optional, 1-64 characters: ASCII letters, digits, ":", ".", "_", "-"; case-sensitive) names a one-time prize, e.g. "contest-42:1st" or "level:7". The server pays a rule at most once per app, viewer, rule and onceKey, forever: across days, tabs, devices, releases and app-data resets. Daily caps, budgets, lifetime limits and the rule's once-a-day limit still apply exactly as without a key; a key only removes double payment. A malformed key, including null, is refused with build_reward_once_key_invalid (HTTP 400); collection rules and other reward calls refuse a key with build_reward_once_key_unsupported. With onceKey, a key that already paid returns status:'awarded', alreadyEarned:true and its ORIGINAL receipt (getReceipt shape) instead of a challenge, before any daily check: mark the prize collected and start nothing. An unpaid key starts or resumes the rule's daily challenge as usual; pass the same onceKey again to claim. If the rule already paid today for another key, start refuses with "You already earned this reward today.": that prize waits for another day.
 - await Twinkle.rewards.progress({ challengeId, completionToken?, frames?, record?, requestId? }) | scopes: rewards:claim
   - Returns: { mode: "live" | "preview", completion: { profile, token?, completed, failed?, decision?, message?, maxFrames? }, aiUsagePolicy? }
   - Verify a bounded batch of inputs for an approved server-simulated climb.
@@ -1821,8 +1858,8 @@ world.updatePresence({ x, y, z, facing });
   - On respawn or a return from another world, begin a fresh run at the canonical spawn via start. Preserve other worlds and gameplay. Do not submit positions, scores, secret keys, or a client completion flag. Preview tokens can never be redeemed in the published app.
   - For breadface-v1, breadface-v2 and breadface-v3, send 1–1,000 chronological [dt, inputBits] frames (dt > 0 and <= 0.033). Bits are left=1, right=2, jumpHeld=4, jumpQueued=8, fireHeld=16. The server replays the registered frozen game; only a legitimate goal and any rule-specific bonus qualify. Honor maxFrames and retain unacknowledged inputs for a bounded retry.
   - For study-record-v1, send record { work, learning, nextStep? } and one stable requestId (16–64 ASCII letters, numbers, hyphens or underscores, e.g. crypto.randomUUID()). The combined record is at most 4,000 UTF-8 bytes. Show that each check uses AI Energy before sending; accept, revise and uncertain decisions all incur measured check cost. Reuse the requestId for a lost response; do not poll in a loop. An accepted, billed review returns completion.completed and a bound token; use that token with claim. A preview charges for the check but never awards real XP/Coins. Keep the record and show completion.message on a refusal or uncertain result.
-- await Twinkle.rewards.claim({ challengeId, answers?: [number], completionToken?: string, subject?: { kind?: 'song' | 'item', title, path?, imageUrl? } }) | scopes: rewards:claim
-  - Returns: { awarded: false, attempts, attemptsRemaining, questions: [{ prompt, hint?, guide? }] } | { awarded: true, duplicate, receipt: { ruleId, xp, coins, attempt, firstTry, cappedFrom?: { xp, coins } }, questions: [{ prompt, hint?, guide? }], balances: { xp, coins } }
+- await Twinkle.rewards.claim({ challengeId, answers?: [number], completionToken?: string, subject?: { kind?: 'song' | 'item', title, path?, imageUrl? }, onceKey?: string }) | scopes: rewards:claim
+  - Returns: { awarded: false, attempts, attemptsRemaining, questions: [{ prompt, hint?, guide? }] } | { awarded: true, duplicate, receipt: { ruleId, xp, coins, attempt, firstTry?, onceKey?, cappedFrom?: { xp, coins } }, questions?: [{ prompt, hint?, guide? }], balances: { xp, coins } }
   - Twinkle verifies every answer, approval, current published artifact and budget before atomically recording XP and Coins. The receipt’s xp/coins are what was actually paid: the full amounts on a first try, the retry share after a wrong answer (attempt > 1), clamped to the learner's remaining userDailyXP/userDailyCoins room today (each currency on its own). A clamped receipt carries cappedFrom: { xp, coins }, the amounts the rule would have paid; the rule still counts as earned today and the rest cannot be claimed later. build_reward_budget_reached (HTTP 409) means nothing would be paid: both rooms are used up, or the rule pays only a currency whose room is used up. This includes one-time rules: a capped award on a maxLifetimeClaims rule also pays only what fits and uses up that lifetime claim (e.g. a one-time 5,000 XP reward claimed at 9,999/10,000 XP pays 1 XP and is done). Use cappedFrom to explain it, e.g. "+1 XP (today's limit; this reward was 5,000 XP)". Always show receipt.xp/receipt.coins, never the rule's amounts, as what the learner got, and hide a zero part (a receipt can pay 0 XP and some Coins, or the reverse): show "+50 Coins", not "+0 XP · +50 Coins". Retry the same challengeId after a lost response; a confirmed claim returns its original receipt without another award. Never update balance UI optimistically. Under retry.paidAttempts a correct answer past that attempt returns awarded: true with a zero receipt: solved, not paid.
   - Every claim response, wrong or right, returns the questions with their guides unlocked: show the teaching content right after the first answer. Answer keys are never returned.
   - After a wrong answer, the next answer within two seconds, right or wrong, is refused with build_reward_throttled (HTTP 429): it does not count and says nothing about whether it was right. Keep the question open and let the person send it again after the wait; never treat a 429 as a wrong answer or retry-loop it.
@@ -1834,6 +1871,7 @@ world.updatePresence({ x, y, z, facing });
   - For craft-target-v1 and craft-par-v1, pass completionToken as JSON.stringify({ v: 1, merges: [[a, b], ...] }): the item ids of the run's successful merges in order, starting from the starters (at most 300 merges, 32 KB). The server replays it against this app's known pairs, needs today's target (Twinkle.craft.getState().today) to appear, every result to be in the learner's collection, and at least one second per merge since start; it refuses an unknown pair, an item the run had not made yet, an over-par run (par rule), a par claim on a day the learner revealed a Twinkle.craft.hint (the target rule still pays) or a run on another day. For craft-discovery-v1, pass nothing: the server pays the oldest unpaid World First (receipt slot craft:<itemId>) and puts its name on the bounty story ("discovered <item>"). With tiers, a rule pays only World Firsts of its own tier (refused with a plain reason when the learner has none).
   - For nonogram-picture-v1, pass completionToken: JSON.stringify({ rows: ["01010", ...] }) with the filled grid. Wrong grids consume a try and never reveal answer cells. A correct grid returns picture { title, category } alongside the ordinary canonical reward receipt, including duplicate receipt recovery. Show the title with the solved pixel picture. The approved minimum time, retry throttle, daily limits and release binding all still apply. Preview validates the same private catalog using separate assignments and never pays rewards.
   - A collection claim is for its server-bound set. A first paid solve creates the usual receipt once per viewer/puzzle across days and releases. Free practice returns completed:true, practice:true, awarded:false and completion, with no reward receipt, official rating, Home story or daily bounty count. Do not mistake completed practice for a wrong answer. A wrong answer returns completed:false and canonical attempts/questions. Daily eligibility is rechecked transactionally, including Vault/guide exposure; no client amount or completion flag is trusted.
+  - Optional onceKey (same rules as start): a paid receipt records it, and any later claim with that key, on any challenge or day, returns awarded:true, duplicate:true and the ORIGINAL receipt in getReceipt shape without paying again or revealing another challenge's questions. The challenge must belong to this viewer, app and rule. Use it for prizes that are once per contest, level or item rather than once per day; it replaces a client outbox of reservations. Keep claim and getReceipt reconciliation for lost replies. When the key has no receipt and the challenge has already paid (whether unkeyed or with another key), the claim refuses with build_reward_once_key_conflict (HTTP 409): start the new prize again when it is available.
 - await Twinkle.rewards.getLeaderboard({ metric?: "xp" | "coins", period?: "day" | "week" | "all", limit? }) | scopes: rewards:claim
   - Returns: { mode: "live", metric, period, limit, dayKey, from, available: { xp, coins }, entries: [{ rank, userId, username, profilePicUrl, xp, coins, claims, lastAt }], me: { rank, xp, coins, claims } | null } | { mode: "preview", metric, period, available, entries: [], me: null, message }
   - Standings of who earned the most XP or Coins in THIS app, computed by Twinkle from its own receipts (never from anything the app submits). period 'day' is today (site day, UTC), 'week' the last 7 site days, 'all' (default) every day since approval. limit defaults to 20, max 100.
@@ -2426,7 +2464,10 @@ async function connectWorld() {
     reconnectDelayMs = 1000;
     session.subscribe((event) => {
       renderPlayers(event.players);
-      if (event.type === 'session.ended') handleWorldDrop(session);
+      if (event.type === 'session.ended') {
+        if (event.reason === 'superseded') handleWorldSuperseded(session);
+        else handleWorldDrop(session);
+      }
       if (event.type === 'action.received' && event.action?.type === 'emote') {
         showEmote(event.sessionId, event.action.data.emote);
       }
@@ -2439,7 +2480,9 @@ async function connectWorld() {
 }
 
 function handleWorldConnectError(error) {
-  if (Twinkle.world.isRecoverableSessionError(error)) {
+  if (Twinkle.world.isSupersededError(error)) {
+    handleWorldSuperseded();
+  } else if (Twinkle.world.isRecoverableSessionError(error)) {
     scheduleReconnect();
   } else {
     console.error('World connection failed', error);
@@ -2463,6 +2506,15 @@ function handleWorldDrop(session = world) {
   scheduleReconnect();
 }
 
+function handleWorldSuperseded(session = world) {
+  if (session && world && world !== session) return;
+  world = null;
+  queuedPresence = null;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+  showPlayHereButton(); // Only its click should join with takeOver: true.
+}
+
 function queuePresence(next) {
   const key = JSON.stringify(next);
   if (key === latestPresenceKey) return;
@@ -2480,7 +2532,9 @@ async function flushPresence() {
   try {
     await session.updatePresence(next);
   } catch (error) {
-    if (Twinkle.world.isSessionEndedError(error)) {
+    if (Twinkle.world.isSupersededError(error)) {
+      handleWorldSuperseded(session);
+    } else if (Twinkle.world.isSessionEndedError(error)) {
       handleWorldDrop(session);
     } else if (!Twinkle.world.isRecoverableSessionError(error)) {
       console.error('World update failed', error);
