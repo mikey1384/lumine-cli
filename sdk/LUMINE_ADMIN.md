@@ -47,6 +47,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Review bot conduct / API runtime logs | `bot-output`, `runtime-logs start\|read\|finish\|resume\|abandon` | [Bot conduct review](#bot-conduct-review-standing-duty-every-full-daily-review), [API runtime-log review](#api-runtime-log-review-same-phase-every-full-daily-review) |
 | Costs: AI, Energy, AWS, spending | `ai-costs monthly\|day`, `energy-budget`, `media-costs monthly`, `spending --from … --to …` | [Application AI calendar-month cost](#application-ai-calendar-month-cost-standing-duty-every-full-daily-review), [AI Energy budget health](#ai-energy-budget-health-standing-duty-every-full-daily-review) |
 | Turn JEV images off (no deploy) | `jev-images switch --area all --mode off` | [JEV images](#jev-images-standing-duty-every-full-daily-review-added-2026-11-01) |
+| Do drop-in rooms and walk-ups work? (counts, health flags) | `social report --days 7 --json` (`--build <id>` for one app) | [Drop-in rooms and walk-ups](#drop-in-rooms-and-walk-ups-standing-duty-every-full-daily-review-added-2026-11-22) |
 | Notable suggestions for Mikey | `notable suggestions\|add\|review\|dismiss` | [Notable suggestions](#notable-suggestions-the-site-ranks-mikey-decides-added-2026-10-10) |
 | Mikey's Apprentice applicants | `apprentice applicants\|show\|note` | [Mikey's Apprentice applicants](#mikeys-apprentice-applicants-mikey-decides-added-2026-11-15) |
 | Math Lab inventory | `math-lab queue` | [Math Lab content duty in full daily management](#math-lab-content-duty-in-full-daily-management) |
@@ -3907,6 +3908,8 @@ lumine admin notable add 12647 --note "Top authored-activity kid of the window: 
 lumine admin notable add Minecrarft_guy --note "Helped three new builders debug their projects and gave detailed feedback on five posts." --json
 ```
 
+`data.social` is the compact drop-in rooms and walk-ups summary (status, the last completed day's headline and flag codes, Valkey only); the full counters are in `lumine admin social report` ([Drop-in rooms and walk-ups](#drop-in-rooms-and-walk-ups-standing-duty-every-full-daily-review-added-2026-11-22)).
+
 Read-only management insights, windowed since the operator's last completed full run by default (`--days 1..30` overrides; capped at 30 days). Call it early in every full daily review, right after the newspaper check. End every full-run report with an **"Insights for Mikey"** section, next to the escalation list, carrying only the deltas and anomalies worth his time. Never dump raw sections at him.
 
 ### Jev serving and audits (standing duty, every full daily review; updated 2026-09-23)
@@ -3954,6 +3957,45 @@ Each check carries a small coloured square and asks its colour. A wrong or unsur
 
 **Image decisions in apps (preview).** `Twinkle.ai.decide({ state, questions, images })` lets an app ask about up to four pictures (its own uploads or a canvas). Size limits: an upload at most 5 MB, a snapshot at most 3 MB (5 MB of snapshots), and 10 MB for all pictures of one decision; a larger call is refused with a plain "Image too large" message before it is fully read. It is free for viewers like text decisions. There are no per-app or per-viewer daily caps (a decision costs a fraction of a cent); the area's daily cap and the cost alarm in the daily report are the spending guard. Bursts are limited instead: one image decision in flight per viewer, eight per app, and 600 a minute per app (per API instance, so up to about twice that across the cluster; a class of 30 deciding every ~20 s is about 90 a minute). A throttled call is refused at once as `ai_decision_unavailable` with reason `rate_limited`. It never falls back to a text-only answer: when off, throttled or failing it returns `ai_decision_unavailable` with a reason.
 `switch --area sdk_decide --build <id> --mode off` switches one app off (or `on` to undo it). The report shows its use under `sdk_decide`.
+
+### Drop-in rooms and walk-ups (standing duty, every full daily review; added 2026-11-22)
+
+```bash
+lumine admin social report --days 7 --json            # last 7 completed UTC days + today; --days 1..30
+lumine admin social report --days 7 --build 2809 --json   # one app
+```
+
+Mikey (11-22) skipped a live two-member test of drop-in rooms and walk-ups: "just telemetry it and we'll know during daily website management run if it worked or not." This duty is that check. The report is read-only and needs no run; `daily-run gather` saves it as `social.json`, and `brief --json` carries a compact `social` section (status, the last completed day's headline, flag codes).
+
+The counters are counts only, kept per UTC day in Valkey for 35 days, total and per build. They contain no member ids and no text. They cover:
+- Presence: open events by mode (room or queue), and how a room's key arrived (reported, remembered, none, invalid).
+- Every Join tap's route outcome (`route.outcome.*`; `route.openedAppOnly` means the tap only opened the app).
+- Drop-in attempts and successes, replays and remembered-key drop-ins.
+- Walk-ups queued, repeated and left.
+- Each refusal reason as its own counter (`walkup.refused.*`, `dropin.refused.*`: blocked, opt_out, budget, cooldown, full, restricted, room_busy, room_busy_no_key, room_no_key, host_gone, ...).
+- Host accepts and visitor match-ready acknowledgements (`ack.ok.dropIn`, `ack.ok.walkup`).
+- reportTogether outcomes (ok, waiting, too_short, noticed, not_found by reason, invalid, rateLimited).
+- Notices created, updated, skipped, shown and reported.
+- Valkey health: compare-and-set ok, conflict and exhausted; errors, timeouts, denied.
+
+Give the full report a **Drop-in rooms and walk-ups** item:
+- **Headline `data.lastCompletedDay`** (its `headline` and refusals by reason) against `data.trailing.dailyAverage` (fully measured trailing days only). Keep `data.inProgressDay` separate and never compare a partial day with a full one.
+- **A day with `partial: true` is measured but incomplete:** its first count came after 00:10 UTC (`firstCountAt`), which is the deploy day or a late start. Its early hours are missing, not zero, and it stays out of the trailing average (`data.trailing.partialDays`). When `lastCompletedDay` is partial, say so beside its numbers.
+- Name the top builds (`data.topBuilds`) by drop-ins and walk-ups.
+- **Report every `data.flags` entry** with its scope. These are problems:
+  - `dropins_without_match_ready` or `accepts_without_match_ready`: 3 or more matches started, but the visitor's app never acknowledged one.
+  - `room_host_queued` must be 0.
+  - `reports_mostly_too_short` or `reports_mostly_not_found`.
+  - `settled_without_notice` and `notice_errors`.
+  - `refusals_dominated`: one reason makes up over 70% of 10+ refusals.
+  - `join_mostly_opens_app`.
+  - `store_denied`, `store_errors`, `cas_exhausted` and `cas_conflicts_high`.
+  - `telemetry_flush_failed` and `telemetry_trimmed`.
+  - `telemetry_writes_denied` (scope `inProgressDay`): Valkey reads work but this API process's counter writes are denied (`data.writer.state: denied`). Days without data are then denied, not undeployed. Report it as "not measured (writes denied)".
+  - `notices_reported`: read those reports in `chat-reports`.
+- A busy room without a key (`dropin.refused.room_busy_no_key`) is expected while a room is in a round. It is a problem only if it dominates while the app shows the room as open.
+
+**Absent data is not zero traffic.** `status: unavailable` (no store, Valkey denied, timeout) means nothing was measured, so say "not measured" and give the reason. A day with `status: absent` had nothing written, not even the 10-minute heartbeat: the API was not deployed with this telemetry yet, Valkey was down, or (with `data.writer.state: denied`) the writes were denied. Only a `measured` day with zero counts means nobody used it. A failed gather step is unavailable evidence too. A room-gone fallback inside the visitor's app is invisible to the server. A drop-in followed by a match-ready ack (and, later, a reportTogether ok) is the closest server-side sign that it worked. Remembered-key success is `split.dropin.ok.rememberedKey`, compared with `split.ack.dropIn.rememberedKey` and `split.together.ok.rememberedKey`.
 
 ### Spending by calendar month
 
