@@ -16,13 +16,13 @@ test("sponsored-help status is a run-free read with a bounded day span", () => {
   assert.throws(() => op("sponsored-help", "status", "--days", "40"), /--days/);
 });
 
-test("sponsored-help switch sends only on or off and needs no run", () => {
+test("sponsored-help switch sends only on, owner or off and needs no run", () => {
   const on = op("sponsored-help", "switch", "--mode", "on");
   assert.equal(on.path, "/cli/admin/sponsored-help/switch");
   assert.deepEqual(on.body, { mode: "on" });
   assert.equal(on.mutates, true);
   assert.equal(on.requiresRun, false);
-  assert.throws(() => op("sponsored-help", "switch"), /--mode is on or off/);
+  assert.throws(() => op("sponsored-help", "switch"), /--mode is on, owner or off/);
 });
 
 test("the status report prints per-day events with refunded units", () => {
@@ -66,4 +66,20 @@ test("an unset welcome says new accounts get the plain greeting", () => {
     data: { sponsoredHelpSwitch: "on", welcomeSwitch: "on", audiences: [{ audience: "student", configured: false }] }
   });
   assert.match(lines.join("\n"), /student: no task set/);
+});
+
+test("sponsored-help switches accept owner, and welcome preview takes a user and audience", () => {
+  assert.deepEqual(op("sponsored-help", "switch", "--mode", "owner").body, { mode: "owner" });
+  assert.deepEqual(op("sponsored-help", "welcome", "switch", "--mode", "owner").body, { mode: "owner" });
+  const preview = op("sponsored-help", "welcome", "preview", "--user", "mikey", "--audience", "teacher");
+  assert.equal(preview.path, "/cli/admin/sponsored-help/welcome/preview");
+  assert.deepEqual(preview.body, { user: "mikey", audience: "teacher" });
+  assert.equal(preview.requiresRun, false);
+  assert.throws(() => op("sponsored-help", "welcome", "preview", "--audience", "student"), /--user/);
+  assert.throws(() => op("sponsored-help", "welcome", "preview", "--user", "mikey"), /--audience/);
+  const lines = formatSponsoredHelpResult({
+    operation: { name: "sponsored-help.welcome.preview" },
+    data: { audience: "student", username: "mikey", userId: 5, persona: "zero", task: "Make my first game", requestId: 9, pathId: 123 }
+  });
+  assert.match(lines.join("\n"), /TEST student welcome to mikey/);
 });
