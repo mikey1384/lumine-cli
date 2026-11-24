@@ -2,7 +2,7 @@
 
 Version: 1.101.0
 Updated: 2026-11-25
-Generated: 2026-11-24T23:28:52.731Z
+Generated: 2026-11-24T23:41:22.224Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1623,15 +1623,16 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 
 ### Twinkle.chat
 - async listRooms() | scopes: chat:read
-  - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId }] }
-  - Lists the rooms the viewer created or has posted in, plus the direct rooms (directRoomKey) that name the viewer, so an incoming direct chat shows up (oldest 200). The app's owner lists every room except other members' direct rooms; contributors list like any viewer.
+  - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId, directMemberUserIds }] }
+  - Lists the rooms the viewer created or has posted in, plus the direct rooms (directRoomKey) that name the viewer, so an incoming direct chat shows up (oldest 200). The app's owner lists every room of the app, other members' direct rooms included; contributors list like any viewer.
   - Never use it as a public room browser or to discover other people's rooms: share a room's key through the app's own flow instead (a lobby code, Twinkle.social's roomKey, a key in sharedDb).
   - Anyone who knows an ordinary room key can read and post in that room, so give private group rooms unguessable random keys, never ones built from user ids or other guessable parts. For a chat between two members use directRoomKey.
-  - directPeerUserId is the other member's id for a direct room (null for other rooms). Label a direct room from it, never from room.name: the name stays whatever its creator chose, so a name like 'Chat with @friend' would show the recipient their own name.
+  - directPeerUserId is the other member's id for a direct room the viewer is in (null otherwise); directMemberUserIds is [idA, idB] for any direct room (null for other rooms), e.g. for the owner's moderation view. Label a direct room from it, never from room.name: the name stays whatever its creator chose, so a name like 'Chat with @friend' would show the recipient their own name.
 - async directRoomKey(userId) | scopes: none
   - Returns: string, e.g. 'dm:12-345'
-  - The room key for a direct chat between the viewer and userId. Use it with createRoom, listMessages, sendMessage and subscribe like any key. Only those two members can read, post in or subscribe to it (not even the app's owner), and listRooms lists it to both.
+  - The room key for a direct chat between the viewer and userId. Use it with createRoom, listMessages, sendMessage and subscribe like any key. Only those two members can post in or create it, and listRooms lists it to both. Other members and the app's contributors can't read it. The app's owner can read, follow and delete messages in every direct chat of their app (they run the app), but can't post into one they aren't in.
   - Use it for every one-to-one chat (DMs, private messages, whispers). Never build DM keys from user ids yourself: such keys can be read by anyone who guesses them. Keys starting with 'dm:' are reserved and must come from directRoomKey.
+  - Be honest with members: direct chats are private from other members, not from the app's maker. Show a short line near the chat, for example "The app's maker can see chats in this app." Never call them end-to-end private or secret.
   - Label a direct room from the other member, never from room.name (it stays the creator's choice, so both sides would see the same name): use room.directPeerUserId from listRooms/createRoom, or parse the key: the two ids after 'dm:', the one that isn't the viewer's.
   - Rejects when the viewer is signed out or userId is the viewer's own id.
   - Keys are matched case-insensitively, so any case variant of a dm: key is refused too; pass the key exactly as directRoomKey returns it.
