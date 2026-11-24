@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { testWorkRoot } from "./helpers/work-directory.js";
 import { parseArgs } from "../lib/commands.js";
-import { botBranchCommand, botBranchRequestKey, buildSuggestBody, parseBotIdentity } from "../lib/admin-bot-branch.js";
+import { botBranchCommand, botBranchCreateRequestKey, botBranchRequestKey, buildSuggestBody, parseBotIdentity } from "../lib/admin-bot-branch.js";
 
 const API = "https://api.example.test";
 const options = (...args) => ({
@@ -91,8 +91,18 @@ test("create, edit, save and suggest: the whole promise flow as Ciel", () =>
     assert.equal(meta.filesHash, "hash-main");
     assert.equal(meta.build.canWrite, false, "plain `lumine save` (as the operator) must not treat it as writable");
 
-    // A re-run of the same create into the same workspace is fine.
-    await botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--followup", "9", "--dir", dir), deps(server, lines));
+    // A new create of the same build and bot into this workspace would be a
+    // second branch: refused before anything is sent. Retrying the create
+    // that made it (its key) is fine.
+    const createCalls = () => server.calls.filter((c) => c.method === "POST" && c.route === "/bot-branches").length;
+    await assert.rejects(
+      botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--followup", "9", "--dir", dir), deps(server)),
+      /already holds ciel's branch build 3001.*pull --branch 3001/,
+    );
+    assert.equal(createCalls(), 1);
+    assert.equal(marker.createRequestKey, create.headers["x-lumine-idempotency-key"]);
+    await botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--followup", "9", "--dir", dir, "--request-key", marker.createRequestKey), deps(server, lines));
+    assert.equal(server.calls.filter((c) => c.method === "POST" && c.route === "/bot-branches").at(-1).headers["x-lumine-idempotency-key"], marker.createRequestKey);
     fs.writeFileSync(path.join(dir, "endless.js"), "export const depth = 8;\n");
     fs.writeFileSync(path.join(dir, "AGENTS.md"), "agent notes are never uploaded");
     await assert.rejects(
@@ -157,4 +167,51 @@ test("a folder that is someone else's workspace is never overwritten", () =>
       /not empty/,
     );
     assert.equal(fs.readFileSync(path.join(dir, "index.html"), "utf8"), "mine");
+  }));
+
+test("every create sends its own key; --request-key retries exactly one, and a failed create prints it", () =>
+  withDir(async (root) => {
+    const first = botBranchCreateRequestKey("");
+    const second = botBranchCreateRequestKey("");
+    assert.match(first, /^cli:bb:create:[0-9a-f-]{36}$/);
+    assert.notEqual(first, second, "the same build, bot and title later is a new branch, not a replay");
+    assert.equal(botBranchCreateRequestKey(" cli:bb:create:retry-1 "), "cli:bb:create:retry-1");
+    assert.throws(() => botBranchCreateRequestKey("short"), /--request-key must be 8-80/);
+    assert.throws(() => botBranchCreateRequestKey("has spaces in it"), /--request-key must be 8-80/);
+
+    const server = fakeServer();
+    await botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--dir", path.join(root, "a")), deps(server));
+    await botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--dir", path.join(root, "b")), deps(server));
+    const keys = server.calls.filter((c) => c.method === "POST").map((c) => c.headers["x-lumine-idempotency-key"]);
+    assert.equal(keys.length, 2);
+    assert.notEqual(keys[0], keys[1]);
+
+    const lost = async () => {
+      const error = new Error("socket hang up");
+      error.status = 502;
+      throw error;
+    };
+    let sentKey = "";
+    await assert.rejects(
+      botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--dir", path.join(root, "c")), {
+        ...deps(server),
+        request: async (req) => {
+          sentKey = req.headers["x-lumine-idempotency-key"];
+          return lost();
+        },
+      }),
+      (error) => error.message.includes(`--request-key ${sentKey}`) && sentKey.startsWith("cli:bb:create:"),
+    );
+    const closed = async () => {
+      const error = new Error("This request key already created branch build 3001 of Build #2685, and that branch was already merged.");
+      error.status = 409;
+      error.data = { ok: false, error: { code: "CLI_ADMIN_BOT_BRANCH_CREATE_REPLAY_CLOSED" } };
+      throw error;
+    };
+    await assert.rejects(
+      botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--request-key", "cli:bb:create:retry-1", "--dir", path.join(root, "d")), { ...deps(server), request: closed }),
+      (error) => /already merged/.test(error.message) && !/--request-key/.test(error.message),
+      "a closed replay is not offered as a retry",
+    );
+    assert.equal(options("create", "--request-key", "cli:bb:create:retry-1").adminRequestKey, "cli:bb:create:retry-1");
   }));

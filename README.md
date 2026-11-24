@@ -43,6 +43,17 @@ website. Both commands target the current workspace or selected Build; pass
 `--target <build-url-or-id>` to update another Build you own. Run
 `lumine describe --no-description` to clear a description explicitly.
 
+Use `lumine delete <build-or-branch-url-or-id>` to delete a Build or a branch
+you own. It sends the website's own delete request (`DELETE /build/:id` with
+the exact title as confirmation), so the server applies the same rules: owner
+only, a branch being merged cannot be deleted, and deleting a Main deletes
+every branch of it. Without `--confirm` it is a dry run that shows the title,
+owner, whether it is a branch and of which Build, how many saved versions go
+with it and (for a Main) how many branches, and deletes nothing. Add
+`--confirm --title "<exact title>"` to delete it; the delete is refused if the
+title no longer matches. The target is always explicit: `lumine delete` never
+falls back to the current workspace or selected project.
+
 The configured project-limit reviewer can run
 `lumine upgrade <build-url-or-id>` to grant Main—and therefore every branch—the
 full approved project room of 500 files and 5 MB. The server verifies reviewer

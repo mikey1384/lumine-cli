@@ -4703,7 +4703,7 @@ the member **from that bot**, in the chat where the promise was made (Mikey,
 Never use `lumine suggest branch` for a bot's promise: it sends as you.
 
 ```bash
-lumine admin bot-branch create --build <id> --identity zero|ciel [--followup <id>] [--title "<name>"] [--dir <path>] [--json]
+lumine admin bot-branch create --build <id> --identity zero|ciel [--followup <id>] [--title "<name>"] [--dir <path>] [--request-key <key>] [--json]
 lumine admin bot-branch save [--dir <path>] [--summary "<text>"] [--json]
 lumine admin bot-branch suggest --branch <id> --identity zero|ciel --note-file note.txt \
   [--followup-revision <n> --followup-note-file followup.txt] [--confirm] [--json]
@@ -4713,7 +4713,10 @@ lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity z
 
 - **Authority.** Only the configured administrator's CLI login (writer-checked,
   like every admin route); no daily run is needed and the bot needs no login,
-  session or socket. `--identity` is required on create, pull and suggest
+  session or socket. Create, save and suggest are all **refused from a daily
+  run or delegated session and while you have a daily run active**
+  (`CLI_ADMIN_BOT_BRANCH_DAILY_RUN_FORBIDDEN`): a bot changes a member's app
+  only on Mikey's direct instruction. Finish or fail the run first. `--identity` is required on create, pull and suggest
   (`auto` is refused): a promise belongs to the bot that made it. No member
   can act as a bot. Nothing runs a model or spends AI Energy.
 - **create** cuts an ordinary contribution branch from the build's current
@@ -4722,8 +4725,18 @@ lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity z
   workspace (default `./bot-branch-<branchBuildId>`). `--followup <id>` links
   that bot's personal follow-up; it must be the same bot's and promised to
   this build's owner. The bot holds no team invite; the administrator's
-  authority replaces it. A retry with the same build, bot, follow-up and title
-  returns the same branch; pass a different `--title` for a second one.
+  authority replaces it. **Every create is a new branch**: the CLI sends a
+  fresh request key each time, so a later promise to the same build never
+  gets an old (possibly merged) branch back. If a create fails or its answer
+  is lost, the error prints `--request-key <key>`: run the same create again
+  with it to get that branch instead of a second one. A retried key replays
+  its branch only while it is still the bot's open draft; once that branch
+  was merged, deleted or is mid-merge the server refuses
+  (`CLI_ADMIN_BOT_BRANCH_CREATE_REPLAY_CLOSED`) and you create again without
+  `--request-key`. A crash that printed nothing: `bot-branch list --build
+  <id>` shows the branches that exist. Creating into a `--dir` that already
+  holds that bot's branch of the build is refused (pull it instead, or use a
+  new folder) unless it is the retry of the create that made it.
 - **save** runs from (or `--dir`) the workspace. It uses the normal branch
   save pipeline with the bot as the saver: project limits, runtime checks,
   version history, branch activity. It needs the workspace's base filesHash
@@ -4737,6 +4750,12 @@ lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity z
   note and writes nothing. It is refused with a daily-run or session header
   and while you have a daily run active, and one card per branch revision
   (`CLI_ADMIN_BOT_BRANCH_ALREADY_SUGGESTED`): save a new change to send again.
+  This holds under concurrency: the send keeps the branch's record locked
+  from the last check until its receipt is stored, and the check reads the
+  delivered cards in the chat, so two sends at once, a retry while the first
+  is still running (same key: it waits and returns the first receipt) or a
+  lost bookkeeping write all end with the one card. A request key belongs to
+  one branch (`CLI_ADMIN_IDEMPOTENCY_KEY_MISMATCH` on another).
   With `--followup-revision` and `--followup-note-file`, the linked follow-up
   is set to `completed` (or `--followup-status`) with your note plus the
   card's message and channel ids; read the revision first with `followup get
@@ -4749,7 +4768,8 @@ lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity z
 - **Mikey approves the note** before any `--confirm` (a member-facing send);
   frame it as the bot keeping its promise. Close the loop in the same chat.
 - **Audit:** `bot_branch.create`, `bot_branch.save`, `bot_branch.suggest` in
-  `audit list`, targeting the build (create) or branch build. Apply
+  `audit list`, targeting the build (create) or branch build, with the bot as
+  `publicActorUserId` (no run: these never run inside one). Apply
   `add-build-bot-branches.sql` before deploying this API.
 - An existing branch owned by someone else cannot be moved to a bot: create a
   bot branch from current Main and save the same files to it.
