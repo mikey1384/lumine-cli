@@ -13,6 +13,7 @@ import { LUMINE_AGENT_INSTRUCTIONS } from "../lib/constants.js";
 import {
   buildForumScopeKey,
   isRetryableForumListenerError,
+  printBuildForumSnapshot,
   readCompleteBuildForumSnapshot,
 } from "../lib/forum.js";
 
@@ -323,4 +324,48 @@ test("Forum scope keys reject malformed branch identities", () => {
       }),
     /does not match its contribution workspace/,
   );
+});
+
+test("Forum output lists a teammate's attachments; JSON keeps them verbatim", () => {
+  const imageUrl =
+    "https://d3jvoamd2k4p0s.cloudfront.net/attachments/embed/0f8e3a5c-a9f1-11f0-8de9-0242ac120002/1763950000000-k3j9qz.png";
+  const pdfUrl =
+    "https://d3jvoamd2k4p0s.cloudfront.net/attachments/embed/1a2b3c4d-a9f1-11f0-8de9-0242ac120002/1763950000001-p0d9xa.pdf";
+  const attachments = [
+    { url: imageUrl, name: "level-2 door.png", kind: "image", mimeType: "image/png" },
+    { url: pdfUrl, name: "notes.pdf", kind: "file", mimeType: "application/pdf" },
+  ];
+  const snapshot = {
+    project: { id: 884, title: "Door Game" },
+    requestedBuildId: 884,
+    scope: { mode: "all", rootBuildId: 884, workspaceBuildId: 884 },
+    events: [
+      {
+        type: "thread",
+        id: 7,
+        threadId: 7,
+        threadTitle: "Door bug",
+        body: `The door is stuck\n![level-2 door.png](${imageUrl})\n![notes.pdf](${pdfUrl})`,
+        attachments,
+        author: { username: "minji", role: "user" },
+        createdAt: 1763950000,
+      },
+    ],
+    pagination: { fromActivitySeq: 0, nextActivitySeq: 3 },
+  };
+  const lines = [];
+  const originalLog = console.log;
+  console.log = (line) => lines.push(String(line));
+  try {
+    printBuildForumSnapshot(snapshot, { json: false, kind: "forum.snapshot" });
+    printBuildForumSnapshot(snapshot, { json: true, kind: "forum.snapshot" });
+  } finally {
+    console.log = originalLog;
+  }
+  const text = lines.slice(0, -1).join("\n");
+  assert.match(text, /    The door is stuck\n/);
+  assert.doesNotMatch(text, /!\[/);
+  assert.match(text, new RegExp(`\\[image\\] level-2 door\\.png ${imageUrl.replace(/[.]/g, "\\.")}`));
+  assert.match(text, /\[file\] notes\.pdf https:/);
+  assert.deepEqual(JSON.parse(lines.at(-1)).events[0].attachments, attachments);
 });

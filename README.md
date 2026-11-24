@@ -116,6 +116,9 @@ snapshot. `lumine forum listen --json` then polls from the last server-confirmed
 sequence and emits newline-delimited update batches without advancing through a
 partial or failed read. Pass `--cursor <sequence>` only when intentionally
 resuming a previously confirmed cursor; the default starts at the beginning.
+Pictures and files a teammate attached appear in each event's `attachments`
+(`url`, `name`, `kind` of `image` or `file`, `mimeType`); the plain view lists
+them under the post. The CLI reads the Forum only; it does not post.
 
 Branch contributors can nudge the project owner from their pulled branch with
 `lumine suggest branch [message]` or `lumine suggest thumbnail`. The thumbnail
