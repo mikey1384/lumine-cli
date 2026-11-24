@@ -90,6 +90,20 @@ Use `lumine branches <build-url-or-id>` to list the contribution branches you
 can review, including each contributor, branch number, status, and URL. Then use
 `lumine diff <branch-url>` to inspect one branch.
 
+Only the project owner merges a branch into Main (`lumine suggestions merge`)
+and publishes it. The one exception is Mikey's account:
+`lumine admin builds merge <branch-url-or-id> [--publish]` merges a
+teammate's branch into another creator's Main when the owner cannot, shows the
+owner, branch and diff summary first, and asks before changing anything
+(`--yes` skips the question). The app stays the owner's: the owner's storage
+quota and project limits apply, the branch's suggestion closes as merged, the
+owner gets a notice in the project's chat, and version history says Mikey
+merged it. With `--publish` it runs the publish checks and, for an app with
+XP/Coins, a reward review that Mikey requests and approves in one step with
+the live approved rules and caps (`--reward-rules live` keeps them when the
+new `rewards.json` differs). Every merge and publish is audited. Any other
+account, staff included, is refused.
+
 Use `lumine forum [build-url-or-id]` to read the complete canonical Team Forum
 history visible to the current workspace. A project owner reading Main receives
 Main plus every branch's posts and replies. A branch contributor receives that
@@ -681,6 +695,7 @@ lumine admin subjects candidates --after 2026-08-01T00:00:00Z --json
 lumine admin subjects candidates --effort unassigned --json
 lumine admin builds candidates --all --json
 lumine admin builds review build:884 --output-dir ./build-review --json
+lumine admin builds merge 3045 --publish --json
 lumine admin subject get 123 --include-comments --json
 lumine admin post get https://www.twin-kle.com/ai-stories/88 --json
 lumine admin post comments dailyReflection:99 --json

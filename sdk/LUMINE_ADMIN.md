@@ -34,6 +34,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Withdraw Today's Challenge questions | `arena today-withdraw --user <id> (--keys … \| --file …) --reason "…" [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
 | Allocate new questions for a reviewed Arena paper | `arena allocate-items --file <batch.json> [--confirm]` | [Arena item allocation](#arena-item-allocation) |
 | Correct a live Arena timed paper | `arena revise --file <revisions.json>` | [Arena timed-bank item revisions](#arena-timed-bank-item-revisions) |
+| Merge a teammate's branch into another creator's Main and publish it (Mikey only) | `builds merge <branch-url-or-id> --publish` (shows the diff, asks unless `--yes`) | [Admin merge and publish (Mikey only)](#admin-merge-and-publish-mikey-only-added-2026-11-24) |
 | Approve / reject a Build reward | `reward-review list\|show\|approve\|propose\|reject\|revoke` | [Build XP/Coin reward approvals](#build-xpcoin-reward-approvals-any-time-also-a-full-daily-review-duty) |
 | Approve a Build unlock (storage, files, …) | `review list\|show\|approve\|reject\|revoke`, e.g. `review approve storage:12 --size 1GB` | [Build review requests](#build-review-requests-one-queue-for-every-unlock-any-time-added-2026-09-28) |
 | Management approvals and teacher checks | `approvals list\|show\|approve\|reject`, `teachers review <userId> --decision legit\|revoke`, `teachers revoke`, `teachers audit` | [Management approvals and the teacher audit](#management-approvals-and-the-teacher-audit-any-time-also-a-full-daily-review-duty-added-2026-10-04) |
@@ -4752,6 +4753,58 @@ lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity z
   `add-build-bot-branches.sql` before deploying this API.
 - An existing branch owned by someone else cannot be moved to a bot: create a
   bot branch from current Main and save the same files to it.
+
+## Admin merge and publish (Mikey only; added 2026-11-24)
+
+```bash
+lumine admin builds merge <branch-url-or-id> [--publish] [--reward-rules proposed|live] [--yes] [--json]
+```
+
+Takes a teammate's contribution branch into another creator's Main and, with
+`--publish`, publishes that Main, without the owner acting (Mikey 11-24, for a
+creator who may be offline for a while). `<branch-url-or-id>` is the branch's
+own build id (`3045`, `build:3045`) or a `/build/<main>/<branch-number>` URL.
+
+- **Mikey only, on his direct instruction.** The server requires Mikey's
+  account (MIKEY_USER_ID) on top of the administrator check: staff,
+  supermods, teachers and Zero/Ciel are refused with 403
+  (`CLI_ADMIN_BUILD_MERGE_FORBIDDEN`). It never runs from a daily run or a
+  delegated session (`CLI_ADMIN_BUILD_MERGE_DAILY_RUN_FORBIDDEN`); a daily-run
+  agent must not use it.
+- **Diff first.** The dry run shows Main, its owner, the branch, its
+  contributor, the changed files, whether a suggestion is open, and whose
+  quota is charged. Nothing changes until `--yes` or a typed `y`. Refused: a
+  branch that is not active, no changes, a branch that overlaps Main (its
+  creators resolve it with the Lumine fix), a Main that moved on with no
+  branch base, and an owner who changed since the dry run.
+- **The owner's app.** The owner's storage quota and project limits are
+  charged, as if they had merged and published. The branch closes as merged,
+  so its suggestion leaves the owner's inbox. Version history reads "Merged by
+  <Mikey's username> (admin) from branch #N"; the merge backup, provenance
+  and the branch's merged-by name Mikey. The usual "branch #N was merged into
+  Main" forum card and activity row show Mikey as the actor, and the owner
+  gets one server notice in the project's chat ("… (Twinkle admin) merged
+  branch #N from <contributor> into Main and published it as vN."). The
+  release itself is the owner's, as a reward approval's release is.
+- **Publish.** `--publish` reads the publish dry run (project files,
+  toolchain, conflict markers; for an app with XP/Coins the reward preflight)
+  and publishes that exact snapshot. An app without rewards publishes like
+  the owner's Publish button. An app with rewards publishes through a reward
+  review Mikey requests on the owner's app and approves in the same step:
+  every manual-approval check still runs (rules present, Coin key groups, the
+  person-paying note, the frozen snapshot). The economy is never widened: the
+  new version's rules must equal the live approval's, or `--reward-rules
+  live` approves it with the live approved rules and caps unchanged (for
+  KenGo's Baduk: Coins 1,600/day, XP 2,000). An app with no live approval goes
+  to a normal reward review instead. If the publish is refused, the merge
+  stays done and the command says so.
+- **Audit.** Every merge and publish writes a `lumine_admin_audit_events` row
+  (`build.admin_merge`, `build.admin_publish`) with the build, branch, owner,
+  the versions before and after, and whose quota was charged; a merge's row
+  commits in the merge transaction, and a refused attempt is recorded as
+  `failed`. `lumine admin audit list --actions build.admin_merge,build.admin_publish` shows them.
+  Re-running the same command replays a finished merge or publish from its
+  audit record.
 
 ## Official announcements
 
