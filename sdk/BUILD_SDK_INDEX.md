@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.100.0
-Updated: 2026-11-24
-Generated: 2026-11-24T01:48:39.422Z
+Version: 1.101.0
+Updated: 2026-11-25
+Generated: 2026-11-24T22:42:31.511Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1624,7 +1624,9 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 ### Twinkle.chat
 - async listRooms() | scopes: chat:read
   - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt }] }
-  - Returns chat rooms created by this Build app.
+  - Lists only the rooms the viewer created or has posted in (oldest 200). The app's owner and team members list every room of the app.
+  - Never use it as a public room browser or to discover other people's rooms: share a room's key through the app's own flow instead (a lobby code, Twinkle.social's roomKey, a key in sharedDb).
+  - Anyone who knows a room key can read and post in that room, so give private rooms unguessable random keys, never ones built from user ids or other guessable parts.
 - async createRoom({ roomKey, name }) | scopes: chat:write
   - Returns: { room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt } }
   - Creates a room or returns the existing one.
