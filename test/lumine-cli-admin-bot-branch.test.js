@@ -91,8 +91,15 @@ test("create, edit, save and suggest: the whole promise flow as Ciel", () =>
     assert.equal(meta.filesHash, "hash-main");
     assert.equal(meta.build.canWrite, false, "plain `lumine save` (as the operator) must not treat it as writable");
 
+    // A re-run of the same create into the same workspace is fine.
+    await botBranchCommand(options("create", "--build", "2685", "--identity", "ciel", "--followup", "9", "--dir", dir), deps(server, lines));
     fs.writeFileSync(path.join(dir, "endless.js"), "export const depth = 8;\n");
     fs.writeFileSync(path.join(dir, "AGENTS.md"), "agent notes are never uploaded");
+    await assert.rejects(
+      botBranchCommand(options("pull", "--branch", "3001", "--identity", "ciel", "--dir", dir), deps(server)),
+      /never saved/,
+      "a pull never overwrites unsaved edits",
+    );
     await assert.rejects(
       botBranchCommand(options("save", "--dir", dir, "--identity", "zero"), deps(server)),
       /ciel's branch/,
