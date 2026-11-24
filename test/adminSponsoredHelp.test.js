@@ -42,3 +42,28 @@ test("the status report prints per-day events with refunded units", () => {
   assert.match(lines.join("\n"), /day 100: sent 4, refunded 2 \(90000 units\)/);
   assert.match(lines.join("\n"), /refused: daily_limit 1/);
 });
+
+test("sponsored-help welcome show, set and switch", () => {
+  const show = op("sponsored-help", "welcome");
+  assert.equal(show.name, "sponsored-help.welcome.show");
+  assert.equal(show.path, "/cli/admin/sponsored-help/welcome");
+  assert.equal(show.mutates, false);
+  const set = op("sponsored-help", "welcome", "set", "--audience", "teacher", "--bot", "ciel", "--task", "Open my classes", "--percent", "15", "--holdout", "20");
+  assert.equal(set.method, "POST");
+  assert.deepEqual(set.body, { audience: "teacher", persona: "ciel", task: "Open my classes", percent: 15, holdoutPercent: 20 });
+  assert.throws(() => op("sponsored-help", "welcome", "set", "--bot", "zero", "--task", "x y z"), /--audience/);
+  assert.throws(() => op("sponsored-help", "welcome", "set", "--audience", "student", "--bot", "lumine", "--task", "x y z"), /--bot/);
+  assert.throws(() => op("sponsored-help", "welcome", "set", "--audience", "student", "--bot", "zero"), /--task/);
+  assert.throws(() => op("sponsored-help", "welcome", "set", "--audience", "student", "--bot", "zero", "--task", "abc", "--holdout", "95"), /--holdout/);
+  const sw = op("sponsored-help", "welcome", "switch", "--mode", "on");
+  assert.equal(sw.path, "/cli/admin/sponsored-help/welcome/switch");
+  assert.deepEqual(sw.body, { mode: "on" });
+});
+
+test("an unset welcome says new accounts get the plain greeting", () => {
+  const lines = formatSponsoredHelpResult({
+    operation: { name: "sponsored-help.welcome.show" },
+    data: { sponsoredHelpSwitch: "on", welcomeSwitch: "on", audiences: [{ audience: "student", configured: false }] }
+  });
+  assert.match(lines.join("\n"), /student: no task set/);
+});
