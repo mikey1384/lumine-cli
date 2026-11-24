@@ -2,7 +2,7 @@
 
 Version: 1.101.0
 Updated: 2026-11-25
-Generated: 2026-11-24T23:23:25.799Z
+Generated: 2026-11-24T23:28:52.731Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1641,8 +1641,9 @@ await Twinkle.chat.createRoom({ roomKey });
 // Label it from the other member, not room.name (that stays the creator's):
 const [a, b] = roomKey.slice(3).split('-').map(Number);
 const peerId = a === Number(me.id) ? b : a;
+// users.getUser needs the user:read scope and can return null
 const peer = await Twinkle.users.getUser(peerId);
-showThread(roomKey, 'Chat with @' + peer.username);
+showThread(roomKey, peer?.username ? 'Chat with @' + peer.username : 'Direct chat');
 - async createRoom({ roomKey, name }) | scopes: chat:write
   - Returns: { room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId } }
   - Creates a room or returns the existing one.
