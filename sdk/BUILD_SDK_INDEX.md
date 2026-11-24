@@ -2,7 +2,7 @@
 
 Version: 1.101.0
 Updated: 2026-11-25
-Generated: 2026-11-24T22:42:31.511Z
+Generated: 2026-11-24T23:08:09.143Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1624,9 +1624,17 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 ### Twinkle.chat
 - async listRooms() | scopes: chat:read
   - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt }] }
-  - Lists only the rooms the viewer created or has posted in (oldest 200). The app's owner and team members list every room of the app.
+  - Lists the rooms the viewer created or has posted in, plus the direct rooms (directRoomKey) that name the viewer, so an incoming direct chat shows up (oldest 200). The app's owner lists every room except other members' direct rooms; contributors list like any viewer.
   - Never use it as a public room browser or to discover other people's rooms: share a room's key through the app's own flow instead (a lobby code, Twinkle.social's roomKey, a key in sharedDb).
-  - Anyone who knows a room key can read and post in that room, so give private rooms unguessable random keys, never ones built from user ids or other guessable parts.
+  - Anyone who knows an ordinary room key can read and post in that room, so give private group rooms unguessable random keys, never ones built from user ids or other guessable parts. For a chat between two members use directRoomKey.
+- async directRoomKey(userId) | scopes: none
+  - Returns: string, e.g. 'dm:12-345'
+  - The room key for a direct chat between the viewer and userId. Use it with createRoom, listMessages, sendMessage and subscribe like any key. Only those two members can read, post in or subscribe to it (not even the app's owner), and listRooms lists it to both.
+  - Use it for every one-to-one chat (DMs, private messages, whispers). Never build DM keys from user ids yourself: such keys can be read by anyone who guesses them. Keys starting with 'dm:' are reserved and must come from directRoomKey.
+  - Rejects when the viewer is signed out or userId is the viewer's own id.
+  - Example: const roomKey = await Twinkle.chat.directRoomKey(friend.id);
+await Twinkle.chat.createRoom({ roomKey, name: 'Chat with @' + friend.username });
+const { messages } = await Twinkle.chat.listMessages(roomKey);
 - async createRoom({ roomKey, name }) | scopes: chat:write
   - Returns: { room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt } }
   - Creates a room or returns the existing one.
