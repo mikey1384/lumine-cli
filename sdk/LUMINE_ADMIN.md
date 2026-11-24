@@ -29,6 +29,7 @@ Exact syntax, flags, refusals and output fields are in the linked section. Write
 | Fix a published bot comment | `correction start` … `comment edit <commentId> --file …` … `correction complete` | [Narrow comment-correction sessions](#narrow-comment-correction-sessions) |
 | Message a member directly / post an announcement | `chat send <userId\|username> --file message.md` / `announcement post --file announcement.md` | [Direct bot chat messages](#direct-bot-chat-messages), [Official announcements](#official-announcements) |
 | Post a message from Lumine into a project's Lumine chat (e.g. "that bug is fixed") | `build-message send --manifest messages.json` (dry run), then `--confirm`; `build-message list --campaign <key>` | [Lumine messages in a build's chat](#lumine-messages-in-a-builds-chat-mikey-approves-the-text-added-2026-11-16) |
+| Keep a Zero/Ciel promise to change a member's Lumine app (the suggestion comes from the bot) | `bot-branch create --build <id> --identity zero\|ciel [--followup <id>]`, `bot-branch save`, `bot-branch suggest --note-file note.txt` (dry run), then `--confirm` | [Bot branches](#bot-branches-zerociel-keep-a-promise-on-a-members-app-added-2026-11-24) |
 | Refill a member's Arena Today's Challenge | `arena today-member --user <id>`, `arena today-import --file <reviewed-questions.json> [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
 | Withdraw Today's Challenge questions | `arena today-withdraw --user <id> (--keys … \| --file …) --reason "…" [--confirm]` | [Arena Today's Challenge personal queues](#arena-todays-challenge-personal-queues) |
 | Allocate new questions for a reviewed Arena paper | `arena allocate-items --file <batch.json> [--confirm]` | [Arena item allocation](#arena-item-allocation) |
@@ -4691,6 +4692,66 @@ may use it (writer-checked like every admin route); no daily run is needed.
   `ownerUserId`, so a project that changed hands is refused, not messaged.
 - **Receipts.** `list --campaign <key>` shows every message sent, whether it
   is still in the chat, and when the owner next wrote in that project.
+
+## Bot branches: Zero/Ciel keep a promise on a member's app (added 2026-11-24)
+
+When Zero or Ciel promised a member a change to their Lumine app, the change
+is built on a branch **owned by that bot** and the branch suggestion reaches
+the member **from that bot**, in the chat where the promise was made (Mikey,
+11-24: "next time do it that way why involve me i wasnt in the conversation").
+Never use `lumine suggest branch` for a bot's promise: it sends as you.
+
+```bash
+lumine admin bot-branch create --build <id> --identity zero|ciel [--followup <id>] [--title "<name>"] [--dir <path>] [--json]
+lumine admin bot-branch save [--dir <path>] [--summary "<text>"] [--json]
+lumine admin bot-branch suggest --branch <id> --identity zero|ciel --note-file note.txt \
+  [--followup-revision <n> --followup-note-file followup.txt] [--confirm] [--json]
+lumine admin bot-branch pull --branch <id> --identity zero|ciel [--dir <path>]
+lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity zero|ciel]
+```
+
+- **Authority.** Only the configured administrator's CLI login (writer-checked,
+  like every admin route); no daily run is needed and the bot needs no login,
+  session or socket. `--identity` is required on create, pull and suggest
+  (`auto` is refused): a promise belongs to the bot that made it. No member
+  can act as a bot. Nothing runs a model or spends AI Energy.
+- **create** cuts an ordinary contribution branch from the build's current
+  Main, owned by the bot (`builds.userId` = the bot, title "Ciel's branch"
+  unless `--title`), records it in `build_bot_branches`, and writes a
+  workspace (default `./bot-branch-<branchBuildId>`). `--followup <id>` links
+  that bot's personal follow-up; it must be the same bot's and promised to
+  this build's owner. The bot holds no team invite; the administrator's
+  authority replaces it. A retry with the same build, bot, follow-up and title
+  returns the same branch; pass a different `--title` for a second one.
+- **save** runs from (or `--dir`) the workspace. It uses the normal branch
+  save pipeline with the bot as the saver: project limits, runtime checks,
+  version history, branch activity. It needs the workspace's base filesHash
+  (no `--force`); a stale workspace is refused: pull into a new folder,
+  reapply, save. `lumine save` cannot save this workspace (it acts as you).
+- **suggest** sends the same "Made updates to your project" card as `lumine
+  suggest branch`, from the bot, into the bot's **existing** chat with the
+  owner (it never opens a new chat: `CLI_ADMIN_NO_DM_CHANNEL`). The note
+  (1-1,000 characters, in the bot's voice) is the message text. Without
+  `--confirm` it is a dry run that shows the owner, chat, changed files and
+  note and writes nothing. It is refused with a daily-run or session header
+  and while you have a daily run active, and one card per branch revision
+  (`CLI_ADMIN_BOT_BRANCH_ALREADY_SUGGESTED`): save a new change to send again.
+  With `--followup-revision` and `--followup-note-file`, the linked follow-up
+  is set to `completed` (or `--followup-status`) with your note plus the
+  card's message and channel ids; read the revision first with `followup get
+  <id> --identity <bot>`. If that update fails the card is still delivered and
+  the result says so (`status: partial`).
+- **What the member sees:** the card in their chat with the bot, with the
+  bot's name and picture, and the chat list line "<bot>: <note>". They open,
+  merge, replace Main or decline it exactly as a teammate's suggestion; the
+  bot's later replies in that chat see the note as something it said.
+- **Mikey approves the note** before any `--confirm` (a member-facing send);
+  frame it as the bot keeping its promise. Close the loop in the same chat.
+- **Audit:** `bot_branch.create`, `bot_branch.save`, `bot_branch.suggest` in
+  `audit list`, targeting the build (create) or branch build. Apply
+  `add-build-bot-branches.sql` before deploying this API.
+- An existing branch owned by someone else cannot be moved to a bot: create a
+  bot branch from current Main and save the same files to it.
 
 ## Official announcements
 
