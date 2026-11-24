@@ -4127,6 +4127,14 @@ lumine admin energy cutover --off --reason "<why>" [--confirm]
 
 Only the designated administrator can run these; do not run reset or cutover without Mikey's instruction.
 
+### Sponsored Zero/Ciel help buttons (standing duty, every full daily review while the switch is on)
+
+Members can attach "Have Zero/Ciel do this" to a DM: a task in plain words and 5, 10 or 25% of their own AI Energy. The recipient presses it once; Zero/Ciel plans only allowlisted steps (make a Lumine project and send it the idea, start a chat session, open a viewing page), shows a summary written from the validated plan, and runs exactly that plan on Confirm, billed to the sender. Owner kill switch: `lumine admin sponsored-help switch --mode on|off` (default off, no deploy).
+
+- Read `lumine admin sponsored-help status --days 1` (the read also expires stale requests). Report one line: sent, pressed, confirmed, completed, declined, expired, and refunded units.
+- Look at the senders list and `refused` reasons for abuse: one sender with many recipients and many declines, repeated `blocked` or `daily_limit`, or `plan_failed` spikes. For anything that looks off, read that sender's requests and the DM messages (they are ordinary reportable chat messages) and bring it to Mikey; never message members about it.
+- `planned` rows carry `steps:` (which actions were planned) and `refused:` (a plan that tried a step outside the allowlist was dropped whole). A rising `refused:unknown_action` count means requests are asking for things the button cannot do.
+
 ### AI Energy budget health (standing duty, every full daily review)
 
 Read the report at run start, before any other duty, so the day confirms the AI Energy budget system (one live Lumine run per user, per-run energy ceiling with an exact round cap, settled stops) is still behaving:
