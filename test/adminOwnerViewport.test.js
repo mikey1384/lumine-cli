@@ -5,6 +5,7 @@ import test from "node:test";
 import { summarizeOwnerViewport, formatOwnerViewportReport } from "../lib/admin-owner-viewport.js";
 import { formatOwnerTrace } from "../lib/admin-owner-trace.js";
 import { dailyRunGather } from "../lib/admin-daily.js";
+import { testWorkRoot } from "./helpers/work-directory.js";
 
 function sample(overrides = {}) {
   return { type: "wake-viewport", sessionId: "phone-session", seq: 8, clientTime: 1800000001000, path: "/", data: {
@@ -93,7 +94,7 @@ test("readable owner timeline includes geometry and survives server trimming", (
 });
 
 test("daily gather collects wake/session evidence and creates an explicit report even before rollout", async () => {
-  const root = path.resolve("../work/owner-wake-viewport-20261022");
+  const root = testWorkRoot();
   fs.mkdirSync(root, { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, "gather-test-"));
   const calls = [];
@@ -122,7 +123,7 @@ test("daily gather collects wake/session evidence and creates an explicit report
 });
 
 test("failed wake collection is explicit and cannot reuse a previous run's successful file", async () => {
-  const root = path.resolve("../work/owner-wake-viewport-20261022");
+  const root = testWorkRoot();
   fs.mkdirSync(root, { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, "gather-failure-test-"));
   try {
@@ -245,7 +246,7 @@ test("late activity cannot stand in for a missing scheduled 20-second observatio
 });
 
 test("daily gather automatically carries new diagnostic evidence into its saved review report", async () => {
-  const root = path.resolve("../work/mobile-bottom-gap-20261026/telemetry");
+  const root = testWorkRoot();
   const dir = fs.mkdtempSync(path.join(root, "gather-test-"));
   const events = [
     detailSample({ signals: { "first-touch": 1 } }),
@@ -272,7 +273,7 @@ test("daily gather automatically carries new diagnostic evidence into its saved 
 });
 
 test("a failed session-history fetch keeps expanded daily coverage partial even with fresh inline headers", async () => {
-  const dir = fs.mkdtempSync(path.resolve("../work/mobile-bottom-gap-20261026/telemetry/gather-failure-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "gather-failure-"));
   try {
     await dailyRunGather({ adminOutputDir: dir }, { run(args, { outputFile }) {
       if (args[0] === "owner-trace" && args.includes("session")) return { ok: false, attempts: 1, durationMs: 1, json: { error: { code: "unavailable" } } };

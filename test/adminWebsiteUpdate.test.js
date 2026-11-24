@@ -4,9 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import { parseArgs } from "../lib/commands.js";
 import { parseAdminOperation, assertAdminOperationAllowedForRunScope } from "../lib/admin.js";
+import { testWorkRoot } from "./helpers/work-directory.js";
 
 test("website articles preview without mutation; publishing requires an explicit confirmation and editorial scope", () => {
-  const dir = fs.mkdtempSync(path.resolve("../work/daily-cli-followup-20261028/article-test-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "article-test-"));
   const file = path.join(dir, "article.json");
   const article = { title: "A clearer app", description: "You can now keep your place.", coverageStart: 100, coverageEnd: 200,
     releaseEvidence: [{ repository: "twinkle-vite", commit: "a".repeat(40), deployedAt: 150, summary: "Resume your place" }] };

@@ -4,9 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import { parseArgs } from "../lib/commands.js";
 import { adminCommand } from "../lib/admin.js";
+import { testWorkRoot } from "./helpers/work-directory.js";
 
 test("retained game diagnostics summarize through the real CLI without login or network", async (t) => {
-  const dir = fs.mkdtempSync(path.resolve("../work/daily-cli-followup-20261028/game-reader-test-"));
+  const dir = fs.mkdtempSync(path.join(testWorkRoot(), "game-reader-test-"));
   const file = path.join(dir, "receipts.json");
   const output = path.join(dir, "summary.json");
   t.mock.method(console, "log", () => {});
