@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.100.0
-Updated: 2026-11-24
-Generated: 2026-11-24T01:48:39.422Z
+Version: 1.102.0
+Updated: 2026-11-25
+Generated: 2026-11-24T23:49:31.303Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -10,7 +10,7 @@ Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed f
 1. Every page that draws on a <canvas> (2D, WebGL or Three.js) says what kind of page it is on <html>: data-twinkle-game for a game that fills the screen, data-twinkle-document for a normal scrolling page with a drawing pad, chart, visualizer or background effect. Without it, unless the page lays itself out with Twinkle.preview, Twinkle guesses from the canvas, and any canvas larger than 160 px, even one hidden in a tab, locks the page to one screen so it no longer scrolls. Add the attribute together with the first canvas.
 2. Games (data-twinkle-game) size themselves from Twinkle.preview: subscribe with Twinkle.preview.subscribe(listener, { immediate: true }), size canvases and renderers from layout.stage or layout.viewport, and report the play area with Twinkle.preview.setPlayfield(). Never size a game from 100vh/100vw, window.innerWidth/innerHeight or visualViewport, and never draw a fake phone or browser frame unless the creator asks for a device mockup: those fight the host and leave the game blank, cropped or scrolling on phones. Pages marked data-twinkle-document use ordinary CSS layout instead.
 3. alert(), confirm() and prompt() are silently blocked: alert shows nothing, confirm() always returns false (so the action it guards never happens) and prompt() returns null. Use in-page UI instead: a message element, an in-page confirm step, an <input>.
-4. Apps cannot open new windows or tabs: window.open() and target="_blank" links do nothing, and neither does a download link to an uploaded file. Open Twinkle pages with Twinkle.app.openContent(url) from a tap, save files with Twinkle.files.saveAs({ url, fileName }) (or { blob, fileName } for a file the app made), and show other web addresses as plain text.
+4. Apps cannot open windows or tabs themselves. Open a web link with Twinkle.app.openLink(url) from a tap: Twinkle shows the viewer which site it goes to and opens it in a new tab when they tap Open (a Twinkle page opens in place, like Twinkle.app.openContent). A tap on an ordinary https link, and window.open(url) in a tap, go the same way, but window.open() returns null, so never wait on the window it returns. Never show a web address as text to copy or tell the viewer to paste it into their browser; make it a link or an openLink button. A download link to an uploaded file does nothing: save files with Twinkle.files.saveAs({ url, fileName }) (or { blob, fileName } for a file the app made).
 5. Do not use <form> elements: native form submission is blocked, so a submit button inside a form does nothing. Handle inputs and buttons in JavaScript.
 6. Code loads only from project files and Twinkle's vendor paths (/build/vendor/...). Package imports, CDN scripts, external network calls and app-local /api/* routes fail at runtime; use the Twinkle SDK for data, AI and storage.
 7. Call only Twinkle.* methods documented in the SDK reference. An invented or guessed method name throws and breaks the feature.
@@ -258,6 +258,16 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Only recognized Twinkle content URLs are accepted. The parent preserves its current signed-in origin when opening the content.
   - Use navigate() for routes inside the current Build and openContent() for Twinkle subjects, comments, apps, profiles, and other content pages.
   - Example: await Twinkle.app.openContent('https://www.twin-kle.com/subjects/432');
+- async openLink(url) | scopes: none
+  - Returns: { opened, target }
+  - Open a web link from a viewer tap: Twinkle asks the viewer, then opens the site in a new tab.
+  - Call it directly from a click or tap handler; a call without a tap is rejected with USER_ACTIVATION_REQUIRED.
+  - Twinkle shows its own sheet, outside the app, naming the site ("Open en.wikipedia.org? This link leaves Twinkle.") with Open and Cancel. The new tab opens only when the viewer taps Open, with no referrer. opened is false when they cancel; that is a normal answer, not an error.
+  - Twinkle pages (subjects, apps, profiles and other content) open in place without the sheet, as openContent does, and resolve { opened: true, target: 'twinkle' }.
+  - Only full https:// or http:// addresses (a bare www. address counts as https). javascript:, data:, blob:, file: and other schemes (LINK_SCHEME_NOT_ALLOWED), a user name or password in the address (LINK_HAS_CREDENTIALS), addresses over 2048 characters (LINK_TOO_LONG) and pages of the app itself (use navigate) are rejected.
+  - One sheet at a time and only a few per minute per app (LINK_CONFIRM_IN_PROGRESS, LINK_RATE_LIMITED): never open links in a loop or on load.
+  - A tap on an ordinary <a href="https://..."> link to another site, and window.open(url) inside a tap, take this same path automatically, so plain links work; call openLink when you need the result or the tap is not on a link.
+  - Example: button.addEventListener('click', async () => { const { opened } = await Twinkle.app.openLink('https://en.wikipedia.org/wiki/Moon'); });
 
 ### Twinkle.appTools
 - async register({ handlers }) | scopes: none
@@ -439,7 +449,7 @@ console.log(analysis.bestMove, analysis.evaluation, analysis.mate);
   - Local viewer download only; does not upload to Twinkle or consume AI Energy.
   - Use this for generated blobs/data/JSON/bytes or large/remote files that need parent-frame download handling.
   - For URL downloads, the parent frame fetches the file and saves it as a local Blob. Files uploaded to Twinkle (images, audio, PDFs and other files) work as they are; URLs on other sites must allow cross-origin fetches (CORS).
-  - Use saveAs for every download. Download links (<a href download>) and target="_blank" links do nothing inside the app frame (platform rule new-windows).
+  - Use saveAs for every download. Download links (<a href download>) do nothing inside the app frame (platform rule new-windows); a plain link to a file only opens it in a new tab after Twinkle asks the viewer, and never saves it.
   - Example: await Twinkle.files.saveAs({ fileName: 'fashion-guide.png', dataUrl: imageUrl, mimeType: 'image/png' });
 - async uploadGenerated({ fileName, url, dataUrl, data, text, json, bytes, blob, file, mimeType } = {}) | scopes: files:write
   - Returns: { assets: [{ id, buildId, fileName, originalFileName, mimeType, sizeBytes, filePath, url, thumbUrl, fileType, mediaKind, durationMs, uploadedByUserId, createdAt }], failed?: [{ fileName, message }], canceled }
@@ -1623,10 +1633,29 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 
 ### Twinkle.chat
 - async listRooms() | scopes: chat:read
-  - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt }] }
-  - Returns chat rooms created by this Build app.
+  - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId }] }
+  - Lists the rooms the viewer created or has posted in, plus the direct rooms (directRoomKey) that name the viewer, so an incoming direct chat shows up (oldest 200). The app's owner lists every room except other members' direct rooms; contributors list like any viewer.
+  - Never use it as a public room browser or to discover other people's rooms: share a room's key through the app's own flow instead (a lobby code, Twinkle.social's roomKey, a key in sharedDb).
+  - Anyone who knows an ordinary room key can read and post in that room, so give private group rooms unguessable random keys, never ones built from user ids or other guessable parts. For a chat between two members use directRoomKey.
+  - directPeerUserId is the other member's id for a direct room (null for other rooms). Label a direct room from it, never from room.name: the name stays whatever its creator chose, so a name like 'Chat with @friend' would show the recipient their own name.
+- async directRoomKey(userId) | scopes: none
+  - Returns: string, e.g. 'dm:12-345'
+  - The room key for a direct chat between the viewer and userId. Use it with createRoom, listMessages, sendMessage and subscribe like any key. Only those two members can read, post in or subscribe to it (not even the app's owner), and listRooms lists it to both.
+  - Use it for every one-to-one chat (DMs, private messages, whispers). Never build DM keys from user ids yourself: such keys can be read by anyone who guesses them. Keys starting with 'dm:' are reserved and must come from directRoomKey.
+  - Label a direct room from the other member, never from room.name (it stays the creator's choice, so both sides would see the same name): use room.directPeerUserId from listRooms/createRoom, or parse the key: the two ids after 'dm:', the one that isn't the viewer's.
+  - Rejects when the viewer is signed out or userId is the viewer's own id.
+  - Keys are matched case-insensitively, so any case variant of a dm: key is refused too; pass the key exactly as directRoomKey returns it.
+  - Example: const me = await Twinkle.viewer.get();
+const roomKey = await Twinkle.chat.directRoomKey(friend.id);
+await Twinkle.chat.createRoom({ roomKey });
+// Label it from the other member, not room.name (that stays the creator's):
+const [a, b] = roomKey.slice(3).split('-').map(Number);
+const peerId = a === Number(me.id) ? b : a;
+// users.getUser needs the user:read scope and can return null
+const peer = await Twinkle.users.getUser(peerId);
+showThread(roomKey, peer?.username ? 'Chat with @' + peer.username : 'Direct chat');
 - async createRoom({ roomKey, name }) | scopes: chat:write
-  - Returns: { room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt } }
+  - Returns: { room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId } }
   - Creates a room or returns the existing one.
   - roomKey may include letters, numbers, '.', '_', ':', and '-'.
 - async listMessages(roomKey, { cursor, limit } = {}) | scopes: chat:read
