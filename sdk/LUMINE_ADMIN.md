@@ -4758,6 +4758,7 @@ lumine admin bot-branch status --branch <id> | list [--build <id>] [--identity z
 
 ```bash
 lumine admin builds merge <branch-url-or-id> [--publish] [--reward-rules proposed|live] [--yes] [--json]
+lumine admin builds publish <main-build-url-or-id> [--branch <branch-build-id>] [--reward-rules proposed|live] [--yes] [--json]
 ```
 
 Takes a teammate's contribution branch into another creator's Main and, with
@@ -4769,12 +4770,15 @@ own build id (`3045`, `build:3045`) or a `/build/<main>/<branch-number>` URL.
   account (MIKEY_USER_ID) on top of the administrator check: staff,
   supermods, teachers and Zero/Ciel are refused with 403
   (`CLI_ADMIN_BUILD_MERGE_FORBIDDEN`). It never runs from a daily run or a
-  delegated session (`CLI_ADMIN_BUILD_MERGE_DAILY_RUN_FORBIDDEN`); a daily-run
-  agent must not use it.
+  delegated session (`CLI_ADMIN_BUILD_MERGE_DAILY_RUN_FORBIDDEN`). Any agent
+  runs it only on Mikey's direct instruction for that app and branch: the
+  server cannot tell an agent holding Mikey's CLI login from Mikey.
 - **Diff first.** The dry run shows Main, its owner, the branch, its
   contributor, the changed files, whether a suggestion is open, and whose
-  quota is charged. Nothing changes until `--yes` or a typed `y`. Refused: a
-  branch that is not active, no changes, a branch that overlaps Main (its
+  quota is charged. Nothing changes until `--yes` or a typed `y`. The merge
+  takes exactly the branch content the dry run showed: a save in between is
+  refused (`build_admin_merge_branch_changed`; preview again). Also refused:
+  a branch that is not active, no changes, a branch that overlaps Main (its
   creators resolve it with the Lumine fix), a Main that moved on with no
   branch base, and an owner who changed since the dry run.
 - **The owner's app.** The owner's storage quota and project limits are
@@ -4791,20 +4795,33 @@ own build id (`3045`, `build:3045`) or a `/build/<main>/<branch-number>` URL.
   and publishes that exact snapshot. An app without rewards publishes like
   the owner's Publish button. An app with rewards publishes through a reward
   review Mikey requests on the owner's app and approves in the same step:
-  every manual-approval check still runs (rules present, Coin key groups, the
-  person-paying note, the frozen snapshot). The economy is never widened: the
+  the manual-approval checks still run (rules present, schema, Coin key
+  groups, the frozen snapshot). The person-paying note is the generated admin
+  reason; that is acceptable only because the rules must be the live
+  approval's, whose note carries over. The economy is never widened: the
   new version's rules must equal the live approval's, or `--reward-rules
   live` approves it with the live approved rules and caps unchanged (for
   KenGo's Baduk: Coins 1,600/day, XP 2,000). An app with no live approval goes
-  to a normal reward review instead. If the publish is refused, the merge
-  stays done and the command says so.
+  to a normal reward review instead.
+- **When the publish stops after a merge** (reward rules differ, a failed
+  check): the merge stands and the command ends with "Merged, not
+  published". The owner then gets the notice "… merged branch #N … into Main.
+  It is not published yet." (once). Fix the cause, then publish with the
+  command it prints: `lumine admin builds publish <main> --branch <branch>`
+  (add `--reward-rules live` to keep the live approved rules). Re-running
+  `builds merge` does not work then: the branch is already merged.
+- **`builds publish` on its own** shows the publish checks and asks unless
+  `--yes`. `--branch` names the merged branch in the owner's notice; without
+  it the notice says Mikey published Main.
 - **Audit.** Every merge and publish writes a `lumine_admin_audit_events` row
   (`build.admin_merge`, `build.admin_publish`) with the build, branch, owner,
   the versions before and after, and whose quota was charged; a merge's row
   commits in the merge transaction, and a refused attempt is recorded as
-  `failed`. `lumine admin audit list --actions build.admin_merge,build.admin_publish` shows them.
-  Re-running the same command replays a finished merge or publish from its
-  audit record.
+  `failed`; a failure is never written over a completed row, and an error
+  after the commit is reported as success with a warning. `lumine admin audit
+  list --actions build.admin_merge,build.admin_publish` shows them. A retry
+  of a merge or publish request that already went through (for example after
+  a timeout) returns the completed result instead of doing it again.
 
 ## Official announcements
 

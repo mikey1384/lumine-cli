@@ -22,7 +22,7 @@ const mergePreview = {
   dryRun: true,
   action: "would_merge",
   rootBuild: { id: 2915, title: "Baduk", ownerUserId: 44, ownerUsername: "KenGo", isPublic: true, ownedByOperator: false },
-  branch: { id: 3045, branchNumber: 28, status: "draft", contributorUserId: 5, contributorUsername: "mikey" },
+  branch: { id: 3045, branchNumber: 28, status: "draft", contributorUserId: 5, contributorUsername: "mikey", filesHash: "9".repeat(64) },
   openSuggestionMessageId: 900,
   diff: { summary: { total: 2, added: 1, updated: 1, deleted: 0 }, changedFiles: [{ path: "/walkup.js", status: "added" }, { path: "/index.html", status: "updated" }] },
   conflicts: [],
@@ -33,7 +33,7 @@ const approval = { buildId: 2915, sourceVersionId: 77, sourceHash: "b".repeat(64
 const publishPreview = (rewards) => ({
   dryRun: true,
   action: "would_publish",
-  build: { id: 2915, title: "Baduk", ownerUserId: 44, isPublic: true },
+  build: { id: 2915, title: "Baduk", ownerUserId: 44, ownerUsername: "KenGo", isPublic: true, releaseStatus: { publishedArtifactVersionId: 600 } },
   filesHash: "f".repeat(64),
   checks: { projectFiles: { ok: true }, toolchain: { ok: true }, conflictMarkers: { ok: true } },
   publishPath: rewards ? "reward_review" : "publish",
@@ -116,7 +116,7 @@ test("--yes merges with the previewed owner and a stable key; without --publish 
   });
   assert.equal(result.status, "success");
   assert.equal(api.calls[1].url, "https://api.test/cli/admin/builds/admin-merge");
-  assert.deepEqual(api.calls[1].body, { branchBuildId: 3045, expectedOwnerUserId: 44, notifyOwner: true, dryRun: false });
+  assert.deepEqual(api.calls[1].body, { branchBuildId: 3045, expectedOwnerUserId: 44, expectedBranchHash: "9".repeat(64), notifyOwner: true, dryRun: false });
   assert.equal(api.calls[1].headers["x-lumine-idempotency-key"], adminMergeRequestKey(3045));
 });
 
@@ -146,8 +146,10 @@ test("--publish: merge, publish dry run, then publish that exact snapshot with t
     expectedApproval: approval,
     rewardRules: "proposed",
     branchBuildId: 3045,
+    notifyOwner: true,
   });
-  assert.equal(api.calls[3].headers["x-lumine-idempotency-key"], adminPublishRequestKey(2915, "f".repeat(64)));
+  assert.equal(api.calls[3].headers["x-lumine-idempotency-key"], adminPublishRequestKey(2915, "f".repeat(64), 600));
+  assert.equal(adminPublishRequestKey(2915, "f".repeat(64), 600), `cli:admin-publish:2915:${"f".repeat(16)}:600`);
 });
 
 test("--publish stops before publishing when rewards differ from the live approval, unless --reward-rules live", async () => {
@@ -157,15 +159,23 @@ test("--publish stops before publishing when rewards differ from the live approv
     { ok: true, data: { merged: true, rootBuildId: 2915, branchBuildId: 3045, auditId: 7 } },
     { ok: true, data: publishPreview(rewards) },
   ];
+  const notified = { ok: true, data: { ownerNotified: true } };
   const previousExitCode = process.exitCode;
   try {
     const plain = op("3045", "--publish", "--yes");
-    const api = fakeApi(responses());
+    const api = fakeApi([...responses(), notified]);
     const refused = await runAdminBuildMergeWorkflow({ options: { ...plain.options, apiUrl: "https://api.test" }, operation: plain.operation, authToken: "t", request: api.request });
     assert.equal(refused.ok, false);
     assert.equal(refused.error.code, "build_admin_publish_reward_rules_differ");
     assert.match(refused.error.message, /^Merged, not published/);
-    assert.equal(api.calls.length, 3);
+    // The advice names the command that works after a merge.
+    assert.match(refused.error.message, /lumine admin builds publish 2915 --branch 3045 --reward-rules live$/);
+    assert.equal(refused.data.next, "lumine admin builds publish 2915 --branch 3045 --reward-rules live");
+    // Nothing was published; the owner is told Main changed.
+    assert.equal(api.calls.length, 4);
+    assert.equal(api.calls[3].url, "https://api.test/cli/admin/builds/admin-merge/notify-owner");
+    assert.deepEqual(api.calls[3].body, { branchBuildId: 3045 });
+    assert.equal(refused.data.ownerNotified, true);
 
     const live = op("3045", "--publish", "--yes", "--reward-rules", "live");
     const liveApi = fakeApi([...responses(), { ok: true, data: { published: true, path: "reward_review", auditId: 9 } }]);
@@ -204,4 +214,48 @@ test("a refused preview or a server refusal is reported, never retried as someth
   } finally {
     process.exitCode = previousExitCode;
   }
+});
+
+test("builds publish: parses the Main and --branch; shows the checks, asks unless --yes, then publishes that snapshot", async () => {
+  const parse = (...args) => {
+    const options = parseArgs(["admin", "builds", "publish", ...args]);
+    return { options, operation: parseAdminOperation(options) };
+  };
+  const { options, operation } = parse("https://www.twin-kle.com/build/2915", "--branch", "3045", "--reward-rules", "live");
+  assert.equal(operation.name, "build.admin-publish");
+  assert.equal(operation.rootBuildId, 2915);
+  assert.equal(operation.branchBuildId, 3045);
+  assert.equal(operation.rewardRules, "live");
+  assert.equal(operation.requiresRun, false);
+  assert.equal(parse("2915").operation.branchBuildId, 0);
+  assert.throws(() => parse().operation, /Usage/);
+  assert.throws(() => parse("2915", "--reward-rules", "x").operation, /proposed or live/);
+
+  const rewards = { ready: true, approval, live: { reviewId: 492 }, matchesLive: false };
+  // No terminal and no --yes: only the dry run.
+  const dryApi = fakeApi([{ ok: true, data: publishPreview(rewards) }]);
+  const aborted = await runAdminBuildMergeWorkflow({
+    options: { ...options, apiUrl: "https://api.test" }, operation, authToken: "t", request: dryApi.request, confirm: async () => null,
+  });
+  assert.equal(aborted.status, "aborted");
+  assert.equal(dryApi.calls.length, 1);
+
+  const api = fakeApi([
+    { ok: true, data: publishPreview(rewards) },
+    { ok: true, data: { published: true, buildId: 2915, path: "reward_review", publishedVersion: 43, auditId: 10, ownerNotified: true } },
+  ]);
+  const result = await runAdminBuildMergeWorkflow({
+    options: { ...options, apiUrl: "https://api.test" }, operation, authToken: "t", request: api.request, confirm: async () => true,
+  });
+  assert.equal(result.status, "success", JSON.stringify(result));
+  assert.equal(api.calls[0].url, "https://api.test/cli/admin/builds/2915/admin-publish");
+  assert.deepEqual(api.calls[1].body, {
+    dryRun: false,
+    expectedOwnerUserId: 44,
+    expectedFilesHash: "f".repeat(64),
+    expectedApproval: approval,
+    rewardRules: "live",
+    branchBuildId: 3045,
+    notifyOwner: true,
+  });
 });

@@ -101,8 +101,11 @@ owner gets a notice in the project's chat, and version history says Mikey
 merged it. With `--publish` it runs the publish checks and, for an app with
 XP/Coins, a reward review that Mikey requests and approves in one step with
 the live approved rules and caps (`--reward-rules live` keeps them when the
-new `rewards.json` differs). Every merge and publish is audited. Any other
-account, staff included, is refused.
+new `rewards.json` differs). If the publish stops after the merge, the merge
+stands, the owner is told Main changed, and
+`lumine admin builds publish <main> --branch <branch>` publishes it later.
+Every merge and publish is audited. Any other account, staff included, is
+refused.
 
 Use `lumine forum [build-url-or-id]` to read the complete canonical Team Forum
 history visible to the current workspace. A project owner reading Main receives
