@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.103.0
+Version: 1.104.0
 Updated: 2026-11-25
-Generated: 2026-11-25T03:45:44.148Z
+Generated: 2026-11-25T04:12:07.827Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -371,18 +371,23 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Read whether the current viewer is subscribed to an app-defined notification channel target.
   - channelKey identifies the app-defined notification class, such as room.message or leaderboard.dethroned.
   - targetKey is a stable app-defined string identity, such as room:lobby, board:daily, or user:123.
+  - A targetKey of the form room:<roomKey> follows that Twinkle.chat room. For a direct chat or a members-only room only its people (the pair, the current members) and the app's owner can subscribe, and only they receive its notifications. Every other target is public: anyone using the app can subscribe to it.
   - Example: const { subscription } = await Twinkle.notifications.getSubscription('room.message', { targetKey: 'room:lobby' });
 - async subscribe(channelKey, { targetKey, launchTarget }) | scopes: notifications:write
   - Returns: { subscription }
   - Subscribe the current viewer to an app-defined notification channel target.
   - launchTarget is optional app-defined JSON delivered back through Twinkle.notifications launch targets.
   - target is accepted as a backwards-compatible alias for launchTarget.
+  - Private rooms: targetKey 'room:' + a room's key (or the bare key) for a direct chat (Twinkle.chat.directRoomKey) or a members-only room (createRoom({ name, members })) can be subscribed only by that room's people and the app's owner; anyone else gets 403 (code notification_target_forbidden). Use the key exactly as Twinkle.chat returned it; another spelling gets 400 (notification_target_room_key_invalid).
+  - Someone removed from a members-only room, or who leaves it, loses their subscriptions to it at once, and Twinkle checks access again on every delivery.
+  - Every other targetKey is public, open chat rooms included: anyone using the app can subscribe to it and read what is sent there. Never put private text (message contents, DMs, anything personal) in notifications to a public target.
   - Example: await Twinkle.notifications.subscribe('room.message', { targetKey: 'room:lobby', launchTarget: { view: 'room', roomId: 'lobby' } });
 - async subscribeMany([{ channelKey, targetKey, launchTarget }]) | scopes: notifications:write
   - Returns: { subscriptions }
   - Subscribe the current viewer to multiple app-defined notification channel targets in one request.
   - Accepts up to 100 subscriptions per request.
   - target is accepted as a backwards-compatible alias for launchTarget on each item.
+  - Same target rules as subscribe: if the viewer may not follow any one target (a private room they are not in), the whole request gets 403 and nothing is saved.
   - Example: await Twinkle.notifications.subscribeMany([{ channelKey: 'room.message', targetKey: 'room:lobby', launchTarget: { view: 'room', roomId: 'lobby' } }]);
 - async unsubscribe(channelKey, { targetKey }) | scopes: notifications:write
   - Returns: { subscription: null }
@@ -397,6 +402,8 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: { sent }
   - Notify viewers who opted into an app-defined channel target, without requiring a sharedDb write.
   - Only current subscribers to the same build, channelKey, and targetKey are considered.
+  - For a private room's target (room:<roomKey> of a direct chat or a members-only room), only the room's people can notify (anyone else gets 403, including an app owner who isn't in the room), and only the room's people and the app's owner receive it, whatever subscriptions are stored.
+  - Every other target is public: anyone using the app can subscribe and will see label and summary. Keep message text and other private details out of notifications to public targets; for a private conversation use a direct chat or members-only room and its room:<roomKey> target, or say only 'sent a message'.
   - The actor is never notified about their own emit.
   - title/body are accepted as aliases for label/summary.
   - target is accepted as a backwards-compatible alias for launchTarget.
