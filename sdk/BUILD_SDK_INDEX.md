@@ -2,7 +2,7 @@
 
 Version: 1.106.0
 Updated: 2026-11-26
-Generated: 2026-11-25T23:28:28.981Z
+Generated: 2026-11-25T23:47:06.587Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -2215,9 +2215,10 @@ if (launch?.target?.kind === 'social') {
 
 ### Twinkle.coins
 - await Twinkle.coins.getBalance() | scopes: coins:charge
-  - Returns: { mode: "live" | "preview", coins, prices: [{ id, title, howTo?, coins, destination, uniqueKey, userDailyLimit?, maxLifetime?, offers?: { minCoins, maxCoins } }], spendBudget: { userDailyCoins } | null, spentToday }
+  - Returns: { mode: "live" | "preview", coins, prices: [{ id, title, howTo?, coins, destination, uniqueKey, userDailyLimit?, maxLifetime?, offers?: { minCoins, maxCoins } }], spendBudget: { userDailyCoins } | null, spentToday } | { mode: 'live', coins: 0, prices: [], spendBudget: null, spentToday: 0, signedIn: false, message } (signed out)
   - Read the viewer's Coin balance and this app's approved prices.
   - Show prices from this response, never hard-coded numbers: the reviewer may change them. In a draft preview the prices come from the draft's rewards.json and mode is "preview".
+  - Signed-out players on a published app: getBalance returns { mode: 'live', coins: 0, prices: [], spendBudget: null, spentToday: 0, signedIn: false, message } (message: "Sign in to earn Coins.", in the player's language), getReceipts and getOffers return empty lists with signedIn: false, and recordBlocks records nothing, all with no network call. charge, makeOffer, respondOffer, takeover and withdrawOffer reject with code 'sign_in_required' while the page shows its small sign-in bar. Keep the game playable for them: show message instead of an error.
 - await Twinkle.coins.charge({ priceId, key?, payload?, requestId? }) | scopes: coins:charge
   - Returns: { mode: "live", receipt: { id, priceId, key, kind: "purchase" | "sale" | "takeover", coins, destination: "removed" | "owner" | "holder", buyer: { id, username }, recipient: { id, username } | null, payload, builders?: [{ userId, units, coins }], status: "active" | "transferred" | "released" | "refunded", holds, previousReceiptId, offerId, createdAt, preview? }, balances: { coins }, replayed } | { mode: "preview", receipt: { id: "preview-…", preview: true, … }, balances, message }
   - Buy one approved price. Twinkle asks the player to confirm in its own box first.
@@ -2230,11 +2231,13 @@ if (launch?.target?.kind === 'social') {
   - Pass the same requestId (8 to 64 of A-Z a-z 0-9 _ -) again after a lost reply to get the first receipt back without paying twice. Sales and takeovers get server requestIds ("offer:<offerId>") an app cannot choose.
   - Drafts and previews never charge: the owner's preview returns a receipt with preview: true and id "preview-…" and the balance unchanged. Never treat a preview receipt as ownership.
   - Land prices (Twinkle.land): a price in the land key group may declare "maxPerRegion" (e.g. 1 = the first plot in each world is free, once per world even after a sale; refunds do not count; admin grants count): over it, build_coin_region_limit with details { region, maxPerRegion }. A plot outside land.regions is refused with build_coin_land_region, one near a reserved spot with build_coin_land_reserved (details { x, z, radius, why }). A purchase, Sell, takeover, refund or release changes the land the same second (Twinkle.land events land.changed); a purchase's result also carries land: { region, landVersion }.
+  - Signed out on a published app: rejects with code 'sign_in_required' (no network call; the page shows its small sign-in bar).
 - await Twinkle.coins.getReceipts({ priceId?, key?, mine?, held?, cursor?, limit? }) | scopes: coins:charge
   - Returns: { mode: "live", receipts: [{ id, priceId, key, kind: "purchase" | "sale" | "takeover", coins, destination: "removed" | "owner" | "holder", buyer: { id, username }, recipient: { id, username } | null, payload, builders?: [{ userId, units, coins }], status: "active" | "transferred" | "released" | "refunded", holds, previousReceiptId, offerId, createdAt, preview? }], nextCursor } | { mode: "preview", receipts: [] }
   - Read server-written purchase receipts for this app: who holds which item.
   - Receipts are written only by Twinkle's server inside the charge, so they are the proof of ownership no client can forge. Decide who owns an item from getReceipts({ priceId, held: true }) (holds: true is the current holder of a unique key), not from sharedDb, privateDb or app state. Page with nextCursor (newest first, up to 50).
   - The viewer reads all of their own receipts (as buyer or recipient). Other players' receipts appear only while they hold an item, with only id, priceId, key, kind, coins (the last price), buyer, payload, status, holds and createdAt (no destination, recipient or builder split). A refunded or released receipt no longer holds its item; a sold or taken-over one shows status "transferred" and the new holder has a newer receipt for the same key.
+  - Signed out on a published app: an empty list with signedIn: false, no network call.
 - await Twinkle.coins.recordBlocks({ region, placed?: [[x, y, z], ...], removed?: [[x, y, z], ...] }) | scopes: coins:charge
   - Returns: { mode: "live", recorded: { placed, removed, keptForOthers }, today: { cells, limit } } | { mode: "preview", recorded: { placed: 0, removed: 0, keptForOthers: 0 }, message } | { mode: "server", recorded: { placed: 0, removed: 0, keptForOthers: 0 }, message }
   - Record the blocks this player placed or broke, so builders are paid from Twinkle's own record when land is bought.
@@ -2249,22 +2252,27 @@ if (launch?.target?.kind === 'social') {
   - Offer to buy a unique item another player holds. Twinkle asks the player to confirm first.
   - Only items bought under a price with offers take offers (a keyGroup shares keys, not offers); a builders price may declare offers too, and then its last price is the full total paid (price plus builder Coins). A sale or takeover pays only the previous holder, never the builders again. coins must be at least offers.minCoins and more than the price last paid for that key, but never more than offers.maxCoins: once the last price reaches offers.maxCoins an offer of exactly offers.maxCoins is enough (getReceipts shows the last price; build_coin_offer_too_low returns details.minimumOffer, build_coin_offer_too_high details.maximumOffer). Offers are not limited by spendBudget. No Coins move or are held now, but a player's open offers in the app together cannot exceed their balance (build_coin_insufficient). If the item changed hands after the box opened: build_coin_quote_changed.
   - One open offer per item (build_coin_offer_exists) and one open offer per player in the app unless the price declares offers.maxOpenPerPlayer (build_coin_offer_limit); at most 3 offers per player per app per day (build_coin_offer_rate_limited). The holder always gets a site notification, even if they muted the app, and answers Keep or Sell. After a Keep, a withdraw or a lapse the same player cannot offer on that item for 7 days (build_coin_offer_cooldown, details.retryAt). If the holder does not answer in 30 days, the offerer may buy it with takeover at the offered price between day 30 and day 44 (offer.lapsesAt); the Coins go to the previous holder. If the app's approval is revoked or the app is unpublished (or a release goes live after a time the app was not live), open offers end with status "closed" and a closeReason, no Coins move, and both players are notified.
+  - Signed out on a published app: rejects with code 'sign_in_required' (no network call; the page shows its small sign-in bar).
 - await Twinkle.coins.respondOffer({ offerId, decision: "keep" | "sell" }) | scopes: coins:charge
   - Returns: { mode: "live", status: "kept" | "sold" | "failed" | "closed" | "lapsed", receipt?, balances?, offer? }
   - The holder answers an offer. Twinkle asks the holder to confirm either answer.
   - Sell moves the item to the offerer and pays the holder the offered Coins at once. If the offerer can no longer pay, the status is "failed" and the holder keeps the item. If a newer release stopped this price taking offers (or lowered offers.maxCoins below the offer), the status is "closed" and nothing moves. Keep stops this offer and its 30-day takeover, and the offerer cannot offer on the item again for 7 days. The holder may still Keep after day 30, until the offerer buys; the offerer is then notified that the holder came back and kept it, and when they may offer again.
+  - Signed out on a published app: rejects with code 'sign_in_required' (no network call; the page shows its small sign-in bar).
 - await Twinkle.coins.takeover({ offerId }) | scopes: coins:charge
   - Returns: { mode: "live", status: "taken" | "closed" | "lapsed", receipt?, balances?, replayed }
   - After 30 days without an answer, the offerer buys the item at the offered price.
   - Allowed only when offer.canTakeOver is true (server clock: 30 days after the offer, with no answer). Twinkle asks the player to confirm. The Coins go to the previous holder and the price becomes the item's new last price. Too early: build_coin_takeover_early with details.takeoverAt. An offer nobody acts on for 14 more days lapses (day 44, offer.lapsesAt).
+  - Signed out on a published app: rejects with code 'sign_in_required' (no network call; the page shows its small sign-in bar).
 - await Twinkle.coins.withdrawOffer({ offerId }) | scopes: coins:charge
   - Returns: { mode: "live", offer: { id, priceId, key, coins, status: "open" | "kept" | "sold" | "taken" | "withdrawn" | "closed" | "failed" | "lapsed", offerer: { id, username }, holder: { id, username }, createdAt, respondedAt, takeoverAt, lapsesAt, canTakeOver, saleReceiptId } }
   - Take back your own open offer. Twinkle asks the player to confirm first.
   - A player who says no gets build_coin_cancelled and the offer stays open. After a withdraw the same player cannot offer on that item for 7 days. Withdraw works even after a release stopped the price taking offers; such offers also end when that release goes live and no longer count as the player's open offer.
+  - Signed out on a published app: rejects with code 'sign_in_required' (no network call; the page shows its small sign-in bar).
 - await Twinkle.coins.getOffers({ priceId?, key?, mine?: "received" | "made", cursor? }) | scopes: coins:charge
   - Returns: { mode: "live", offers: [{ id, priceId, key, coins, status: "open" | "kept" | "sold" | "taken" | "withdrawn" | "closed" | "failed" | "lapsed", offerer: { id, username }, holder: { id, username }, createdAt, respondedAt, takeoverAt, lapsesAt, canTakeOver, saleReceiptId }], nextCursor }
   - List offers on one item (key) or the viewer's own offers.
   - Pass key for one item's offers (any status), mine: "received" for open offers waiting for the viewer's answer, or mine: "made" for the viewer's own. On offers the viewer is not part of, offerer, coins, respondedAt, canTakeOver and saleReceiptId are left out. The notification target is { coinOfferId }.
+  - Signed out on a published app: an empty list with signedIn: false, no network call.
 
 ### Twinkle.land
 - await Twinkle.land.edit({ region, cells: [[x, y, z, value, flags?], ...], cause?, at?, terrain? }) | scopes: land:write
