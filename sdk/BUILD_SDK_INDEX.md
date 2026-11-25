@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.104.0
-Updated: 2026-11-25
-Generated: 2026-11-25T04:12:07.827Z
+Version: 1.105.0
+Updated: 2026-11-26
+Generated: 2026-11-25T15:30:14.298Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -81,6 +81,7 @@ Features every app needs whenever they apply. When you build a new app or make a
 - Groove Lab player (/build/vendor/groove-lab/1.0.0/player.js): sound effects and music for any app, built from Groove Lab's own instruments, so a song sounds the same as in Groove Lab. Browsers stay silent until a tap: await unlock() inside a tap or click handler before the first sound. Effects: sfx(name, { pitch, volume }) with name one of SFX (click, select, coin, jump, land, step, hit, hurt, explosion, laser, powerup, win, lose, correct, wrong, levelup, open, close, countdown, go) or your own steps [{ instrument, note, seconds, delay, velocity } | { drum, kit, delay, velocity }]; playNote({ instrument, note, seconds, velocity, delay }); playDrum({ kit, sound, velocity, delay }) with sound a DRUMS name (kick, snare, hat, openHat, crash, clap, rim, lowTom, ...) or GM key; setEffectsVolume(0..1). Music: loadSong(spec) checks a Groove Lab song spec and returns { song, warnings }; createSoundtrack(specOrSong, { loop = true, volume }) returns { play({ fadeIn, from }), stop({ fadeOut }), setVolume(v), preload(), playing, time, duration, onEnd, credit }; setMusicVolume(0..1, seconds) ducks music without touching effects; stopMusic({ fadeOut }); loadPublishedSong(entryId) returns { song, credit } via Twinkle.soundtracks.getSong. One soundtrack plays at a time. Song spec (the same format as Groove Lab's load_song): { title, bpm, bars, key: 'D', scale: 'minor', sound: 'studio' | 'retro', loop: { startBar, endBar }, tracks: [{ kind: 'synth' | 'drums', name, instrument, gain, notes: [[tick, midi, lengthTicks, velocity127]] | phrases: [{ bar, beat, text: 'D4:1 F4:.5 A4:.5 | C5:2' }] | grids: [{ bar, bars, pattern: { kick: 'x...x...x...x...', hat: '..x...x...x...x.' } }] }] }; ticks are 96 per quarter note; drum notes are [tick, gmKey, velocity127]. INSTRUMENTS and KITS list the instrument ids (piano, epiano, organ, strings, guitar, brass, flute, bass303, subbass, supersaw, squarelead, pluck, bell, the Command Nexus nx* and kh* voices; kits kit, kit808, gmkit, nexuskit). Write a real piece for the app's mood (melody, bass, drums, a loop section after any intro), not a two-note loop; keep game music loopable and leave room for effects.
 - KaTeX math typesetting (/build/vendor/katex/0.18.9/): Twinkle serves KaTeX 0.18.9 itself, so apps show formulas without a CDN. Link <link rel="stylesheet" href="/build/vendor/katex/0.18.9/katex.min.css"> (its fonts load from the same place), then import katex from '/build/vendor/katex/0.18.9/katex.js' and call katex.render(tex, element, { displayMode, throwOnError: false }), or import renderMathInElement from '/build/vendor/katex/0.18.9/contrib/auto-render.js' to typeset $...$ and $$...$$ inside existing text. Use it for fractions, roots, exponents, integrals, matrices and other formulas that plain text renders poorly; keep plain text for simple arithmetic. Do not paste KaTeX source into project files or load it from a CDN.
 - Twinkle.land terrain versions: edits are stored as cells over the terrain each client generates, so a release that changes a world's generated terrain must raise that world's number in rewards.json land.terrain and state the same number from the same constant in world.join({ land: { region, terrain } }) and Twinkle.land.edit({ region, terrain, ... }). Twinkle refuses block changes from a tab on a lower number (land_terrain_outdated, details { required, stated }) until it reloads. That code is final for the page load: never retry it, never send the refused changes again after the reload (they were made on the old terrain), and show one short message such as "This world was updated. Reload to keep building." (Twinkle.land.onTerrainOutdated).
+- Sign-in: use Twinkle.auth (signIn, signUp, signOut, onChange, player, surface, describePlayers). Never draw a username/password form inside the app: sign-in always opens on Twinkle's trusted page, in whatever account mode the app's owner chose. A player may be a Twinkle member, an app-only account, or a linked one (Twinkle.auth.player.kind); app-only accounts earn no Twinkle Coins, XP or rewards and get AI only when the maker covers it (Twinkle.ai.getCoverage).
 
 ## AI decision design
 - Twinkle.ai.decide runs JEV, a model for narrow decisions over supplied text or structured state, and it is free for viewers: decisions are covered by Twinkle and never use their AI Energy. Whenever an app makes a judgment that ordinary code can only approximate, consider JEV first. Proven patterns: an opponent or boss coach that reads the player's habits (favourite lane, repeated trick, cheese move) and picks a counter-plan from a fixed list, as in Red Square's boss and Open Football's opponent coach; NPCs that understand what a player types and choose an action; classifying or scoring user submissions; ranking supplied candidates; and picking the next exercise or difficulty from evidence about the learner. Any app with an AI opponent, NPC, or adaptive difficulty should decide explicitly whether JEV improves it. These are examples to reason from, not a keyword checklist or a requirement to add AI to every app.
@@ -152,6 +153,36 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
 - async refresh() | scopes: none
   - Returns: Viewer info
   - Forces a fresh fetch from the parent.
+
+### Twinkle.auth
+- Twinkle.auth.surface | scopes: none
+  - Returns: 'twinkle' | 'address' | 'domain'
+  - Synchronous and available from the first line of code: 'twinkle' on twin-kle.com's app page and in previews, 'address' on <slug>.lumine.app, 'domain' on the app's own domain.
+- Twinkle.auth.player | scopes: none
+  - Returns: { id, name, kind: 'member' | 'app' | 'linked', isTwinkleMember, linked, profilePicUrl } | null
+  - The signed-in player, or null for a guest. kind 'member' is a Twinkle member; 'app' an account for this app only (no Twinkle Coins, XP or rewards; AI only when the maker covers it, see Twinkle.ai.getCoverage); 'linked' an app account linked to a Twinkle member.
+  - Kept current; read it any time, or call get() for the latest.
+- async get() | scopes: none
+  - Returns: player | null
+  - The current player (same shape as Twinkle.auth.player).
+- async signIn() | scopes: none
+  - Returns: { signedIn, player }
+  - Opens the right sign-in for this app's account mode on Twinkle's trusted page (Twinkle's sign-in window, or the app's own account sheet). Resolves when it closes. Call it from a button the player tapped.
+  - Already signed in: resolves at once with alreadySignedIn: true.
+- async signUp() | scopes: none
+  - Returns: { signedIn, player }
+  - Like signIn, but opens on creating an account (a free Twinkle account, or an account for this app). Under-14s get a parent's approval first; that is handled for you.
+- async signOut() | scopes: none
+  - Returns: { signedOut, reason? }
+  - Signs the player out of this app on its own address or domain. On twin-kle.com an app can't sign a member out of the website: resolves { signedOut: false, reason: 'twinkle_session' }, so offer it only when surface !== 'twinkle'.
+- onChange(listener) | scopes: none
+  - Returns: unsubscribe()
+  - listener(player | null) runs whenever the player signs in, signs out or changes. Reload the player's own data (saves, private storage) there.
+- async describePlayers(ids) | scopes: none
+  - Returns: [{ id, name, kind: 'member' | 'app' | 'linked' }]
+  - For players the app shows (leaderboards, replays, any userId it stored): whether each is a Twinkle member, an app account or a linked one, and the name to show. Up to 100 ids a call; batch, cache the answer for the screen, and never call it per frame.
+  - Works for guests (public leaderboards). Nothing private is returned: no email or birth date, and only the display name for app accounts.
+  - Label members 'Twinkle' next to their name. Default filter: All players when surface is 'address' or 'domain', Twinkle members when surface is 'twinkle'; let the player switch.
 
 ### Twinkle.app
 - async getInfo() | scopes: none
@@ -601,6 +632,9 @@ await Twinkle.sharedDb.setKvItems('live', [{ key: 'current', value: session }]);
   - Example: await Twinkle.live.deleteReplay(replayId);
 
 ### Twinkle.ai
+- async getCoverage() | scopes: none
+  - Returns: { payer: 'member' | 'maker' | 'none', message? }
+  - Who pays for this player's AI here: 'member' (their own AI Energy), 'maker' (the app's owner covers AI for players who aren't Twinkle members, within the owner's daily caps), or 'none' (guests, and app accounts the maker doesn't cover right now). For 'none', show message and keep the app working without AI. Ask before showing an AI feature, not before every call: AI calls themselves refuse with code 'app_account_ai_unavailable' and a friendly message when not covered.
 - async getUsagePolicy() | scopes: none
   - Returns: BuildAiUsagePolicy | null
   - Load the signed-in viewer's canonical current AI Energy battery policy.
@@ -2876,4 +2910,34 @@ async function finish(result) {
   const { waiting } = await social.queue();
   if (waiting[0]) startWith(waiting[0]);
 }
+```
+
+### Leaderboard with Twinkle labels and the right default filter
+
+```js
+// Scores from Twinkle.leaderboards (or your sharedDb rows) carry userIds.
+const board = await Twinkle.leaderboards.get('high-scores', { limit: 50 });
+const kinds = new Map((await Twinkle.auth.describePlayers(board.entries.map(e => e.userId).filter(Boolean)))
+  .map(p => [p.id, p]));
+// All players on the app's own address or domain; Twinkle members on twin-kle.com.
+let filter = Twinkle.auth.surface === 'twinkle' ? 'members' : 'all';
+function rows() {
+  return board.entries
+    .map(e => ({ ...e, who: kinds.get(e.userId) }))
+    .filter(e => filter === 'all' || e.who?.kind === 'member' || e.who?.kind === 'linked')
+    .map(e => ({ name: e.who?.name || e.displayName, twinkle: e.who?.kind !== 'app' && !!e.who, score: e.score }));
+}
+// render rows(): show a small "Twinkle" tag when twinkle is true; a toggle sets filter = 'all' | 'members'.
+```
+
+### Sign in, sign up and react to changes
+
+```js
+const player = await Twinkle.auth.get();
+signInButton.hidden = !!player;
+signInButton.onclick = () => Twinkle.auth.signIn();
+signUpButton.onclick = () => Twinkle.auth.signUp();
+signOutButton.hidden = !player || Twinkle.auth.surface === 'twinkle';
+signOutButton.onclick = () => Twinkle.auth.signOut();
+Twinkle.auth.onChange(async (next) => { await loadMySave(); renderHeader(next); });
 ```
