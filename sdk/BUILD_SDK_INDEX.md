@@ -2,7 +2,7 @@
 
 Version: 1.106.0
 Updated: 2026-11-26
-Generated: 2026-11-25T15:41:21.506Z
+Generated: 2026-11-25T16:08:18.598Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -179,9 +179,9 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Returns: unsubscribe()
   - listener(player | null) runs whenever the player signs in, signs out or changes. Reload the player's own data (saves, private storage) there.
 - async describePlayers(ids) | scopes: none
-  - Returns: [{ id, name, kind: 'member' | 'app' | 'linked' }]
-  - For players the app shows (leaderboards, replays, any userId it stored): whether each is a Twinkle member, an app account or a linked one, and the name to show. Up to 100 ids a call; batch, cache the answer for the screen, and never call it per frame.
-  - Works for guests (public leaderboards). Nothing private is returned: no email or birth date, and only the display name for app accounts.
+  - Returns: [{ id, name, kind: 'member' | 'app' | 'linked' | 'unknown' }]
+  - For players the app shows (leaderboards, replays, any userId it stored): whether each is a Twinkle member, one of this app's own accounts or a linked one, and the name to show. Up to 50 ids a call (and a few calls a minute); batch, cache the answer for the screen, and never call it per frame.
+  - Works for guests (public leaderboards). Nothing private is returned: members get their public username, this app's accounts only their display name, and another app's account comes back as kind 'unknown' with no name.
   - Label members 'Twinkle' next to their name. Default filter: All players when surface is 'address' or 'domain', Twinkle members when surface is 'twinkle'; let the player switch.
 
 ### Twinkle.app
