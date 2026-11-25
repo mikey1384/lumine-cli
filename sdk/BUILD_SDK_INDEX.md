@@ -1,8 +1,8 @@
 # Build SDK Index
 
-Version: 1.102.0
+Version: 1.103.0
 Updated: 2026-11-25
-Generated: 2026-11-25T01:28:40.834Z
+Generated: 2026-11-25T01:38:25.835Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -1634,16 +1634,15 @@ const result = await Twinkle.characters.chat({ character: 'zero', thinkingMode: 
 
 ### Twinkle.chat
 - async listRooms() | scopes: chat:read
-  - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId, directMemberUserIds }] }
-  - Lists the rooms the viewer created or has posted in, plus the direct rooms (directRoomKey) that name the viewer, so an incoming direct chat shows up (oldest 200). The app's owner lists every room of the app, other members' direct rooms included; contributors list like any viewer.
+  - Returns: { rooms: [{ id, buildId, key, name, createdByUserId, membersOnly, memberRole, createdAt, updatedAt, directPeerUserId, directMemberUserIds }] }
+  - Lists the members-only rooms the viewer belongs to (even if they never posted), the open rooms they created or posted in, and the direct rooms (directRoomKey) that name them, so a group they were added to and an incoming direct chat both show up (oldest 200). The app's owner lists every room of the app; contributors list like any viewer.
   - Never use it as a public room browser or to discover other people's rooms: share a room's key through the app's own flow instead (a lobby code, Twinkle.social's roomKey, a key in sharedDb).
-  - Anyone who knows an ordinary room key can read and post in that room, so give private group rooms unguessable random keys, never ones built from user ids or other guessable parts. For a chat between two members use directRoomKey.
-  - directPeerUserId is the other member's id for a direct room the viewer is in (null otherwise); directMemberUserIds is [idA, idB] for any direct room (null for other rooms), e.g. for the owner's moderation view. Label a direct room from it, never from room.name: the name stays whatever its creator chose, so a name like 'Chat with @friend' would show the recipient their own name.
+  - Anyone who knows an open room's key can read and post in it. For a private group use createRoom({ name, members }); for a chat between two members use directRoomKey. Never build private keys from user ids or other guessable parts.
+  - membersOnly is true for a members-only room, and memberRole is the viewer's role in it ('admin' or 'member'; null when the viewer isn't a member, e.g. the owner). Label members-only rooms from these. directPeerUserId is the other member's id for a direct room the viewer is in (null otherwise); directMemberUserIds is [idA, idB] for any direct room (null for other rooms), e.g. for the owner's moderation view. Label a direct room from it, never from room.name: the name stays whatever its creator chose, so a name like 'Chat with @friend' would show the recipient their own name.
 - async directRoomKey(userId) | scopes: none
   - Returns: string, e.g. 'dm:12-345'
-  - The room key for a direct chat between the viewer and userId. Use it with createRoom, listMessages, sendMessage and subscribe like any key. Only those two members can post in or create it, and listRooms lists it to both. Other members and the app's contributors can't read it. The app's owner can read, follow and delete messages in every direct chat of their app (they run the app), but can't post into one they aren't in.
+  - The room key for a direct chat between the viewer and userId. Use it with createRoom, listMessages, sendMessage and subscribe like any key. Only those two members can post in or create it, and listRooms lists it to both. Other members and the app's contributors can't read it. The app's owner can read, follow and delete messages in every direct chat of their app, but can't post into one they aren't in.
   - Use it for every one-to-one chat (DMs, private messages, whispers). Never build DM keys from user ids yourself: such keys can be read by anyone who guesses them. Keys starting with 'dm:' are reserved and must come from directRoomKey.
-  - Be honest with members: direct chats are private from other members, not from the app's maker. Show a short line near the chat, for example "The app's maker can see chats in this app." Never call them end-to-end private or secret.
   - Label a direct room from the other member, never from room.name (it stays the creator's choice, so both sides would see the same name): use room.directPeerUserId from listRooms/createRoom, or parse the key: the two ids after 'dm:', the one that isn't the viewer's.
   - Rejects when the viewer is signed out or userId is the viewer's own id.
   - Keys are matched case-insensitively, so any case variant of a dm: key is refused too; pass the key exactly as directRoomKey returns it.
@@ -1656,10 +1655,38 @@ const peerId = a === Number(me.id) ? b : a;
 // users.getUser needs the user:read scope and can return null
 const peer = await Twinkle.users.getUser(peerId);
 showThread(roomKey, peer?.username ? 'Chat with @' + peer.username : 'Direct chat');
-- async createRoom({ roomKey, name }) | scopes: chat:write
-  - Returns: { room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt, directPeerUserId } }
-  - Creates a room or returns the existing one.
-  - roomKey may include letters, numbers, '.', '_', ':', and '-'.
+- async createRoom({ roomKey, name }) | createRoom({ name, members }) | scopes: chat:write
+  - Returns: { room: { id, buildId, key, name, createdByUserId, membersOnly, createdAt, updatedAt, directPeerUserId, memberRole?, members? } }
+  - createRoom({ roomKey, name }) creates an open room or returns the existing one. roomKey may include letters, numbers, '.', '_', ':', and '-'.
+  - createRoom({ name, members: [userId, ...] }) creates a members-only group room. Leave roomKey out: Twinkle makes the key and returns it as room.key; keep it (e.g. with your group data) and pass it exactly as returned. The viewer becomes the room's admin and is always a member; members are the other people to add (at most 50 members in all). members: [] makes a room of one that the admin can add to later.
+  - Only a members-only room's members can read, list, follow (subscribe) and post in it; listRooms lists it to every member, so added members find it without being told the key. The app's owner can read, follow and moderate it but can't post into it unless they are a member.
+  - A members-only room returns members ([{ userId, username, profilePicUrl, role, addedByUserId, addedAt }]) and the viewer's memberRole. Only its admin can rename it.
+  - Example: // A private group: only these members can read or post
+const { room } = await Twinkle.chat.createRoom({ name: 'Study group', members: [friendA.id, friendB.id] });
+const roomKey = room.key; // made by Twinkle; keep it with your group
+await Twinkle.chat.sendMessage(roomKey, 'Welcome!');
+const unsubscribe = Twinkle.chat.subscribe(roomKey, (event) => {
+  if (event.type === 'members.changed') refreshMembers();
+  else showEvent(event);
+});
+// Each member's app finds the group in listRooms:
+const { rooms } = await Twinkle.chat.listRooms();
+const groups = rooms.filter((r) => r.membersOnly);
+- async getRoom(roomKey) | scopes: chat:read
+  - Returns: { room: { id, buildId, key, name, createdByUserId, membersOnly, memberRole, members, directPeerUserId, directMemberUserIds, createdAt, updatedAt } | null }
+  - One room, with its members for a members-only room (members is null for open and direct rooms). null when no room has that key.
+  - A members-only room answers to its members and the app's owner only; a direct room to its two members and the owner; an open room to anyone with the key.
+- async addMembers(roomKey, userIds) | scopes: chat:write
+  - Returns: { room, addedUserIds }
+  - Adds people to a members-only room. Only the room's admin can (its creator, or the member who took over when the admin left); ordinary members and the app's owner can't. At most 50 members in all.
+  - New members can read the room's earlier messages. Subscribers get { type: 'members.changed', addedUserIds, removedUserIds }.
+- async removeMembers(roomKey, userIds) | scopes: chat:write
+  - Returns: { room, removedUserIds }
+  - Removes members from a members-only room. The room's admin can remove other members; the app's owner can remove anyone. To leave, use leaveRoom.
+  - A removed member loses the room at once: they can no longer read it (earlier messages included), post, delete their old messages or follow it, it leaves their listRooms, and their open tabs stop receiving it. Messages they posted stay for the others.
+- async leaveRoom(roomKey) | scopes: chat:write
+  - Returns: { success: true, left }
+  - The viewer leaves a members-only room and loses it like a removed member. If they were its admin, the longest-standing remaining member becomes admin. left is false when they weren't a member.
 - async listMessages(roomKey, { cursor, limit } = {}) | scopes: chat:read
   - Returns: { messages: [{ id, roomId, roomKey, userId, username, profilePicUrl, role, status, text, metadata, clientMessageId, createdAt, updatedAt }], cursor? }
   - Returns messages in chronological order.
@@ -1668,12 +1695,13 @@ showThread(roomKey, peer?.username ? 'Chat with @' + peer.username : 'Direct cha
   - Returns: { message: { id, buildId, roomId, roomKey, userId, username, profilePicUrl, role, status, text, metadata, clientMessageId, createdAt, updatedAt }, room: { id, buildId, key, name, createdByUserId, createdAt, updatedAt }, created }
   - Accepts sendMessage('lobby', 'hi') or sendMessage('lobby', { text, metadata, clientMessageId }).
   - Pass clientMessageId when manually retrying a send; the SDK also includes one per send request.
+  - Posting into a members-only room needs membership (the app's owner included); sending to an open room's key that doesn't exist yet creates it.
 - async deleteMessage(messageId) | scopes: chat:write
   - Returns: { success: true, messageId }
-  - A viewer can delete their own messages; the build owner can delete any message in the build.
+  - A viewer can delete their own messages (in a members-only room, only while they are a member); the build owner can delete any message in the build.
 - subscribe(roomKey, listener) | scopes: chat:read
   - Returns: unsubscribe function
-  - listener receives realtime events like { type: 'message.created', roomKey, message }.
+  - listener receives realtime events like { type: 'message.created', roomKey, message }, 'message.deleted' and, in members-only rooms, 'members.changed'. Members-only rooms deliver to their members and the app's owner only.
   - Call the returned function to unsubscribe.
 
 ### Twinkle.world
@@ -2581,6 +2609,19 @@ console.log('Theme:', item?.value?.mode);
 await Twinkle.chat.createRoom({ roomKey: 'lobby', name: 'Lobby' });
 const unsubscribe = Twinkle.chat.subscribe('lobby', (event) => console.log('chat event', event));
 await Twinkle.chat.sendMessage('lobby', 'hello');
+```
+
+### Private group chat
+A members-only room: Twinkle makes the key, only the listed members read and post, and each member finds it in listRooms.
+Keywords: group chat, private group, members only, invite
+
+```js
+const { room } = await Twinkle.chat.createRoom({ name: 'Squad', members: [friend.id] });
+await Twinkle.chat.sendMessage(room.key, 'hi squad');
+// later, the admin adds someone; any member can leave
+await Twinkle.chat.addMembers(room.key, [newFriend.id]);
+const { rooms } = await Twinkle.chat.listRooms();
+const myGroups = rooms.filter((r) => r.membersOnly);
 ```
 
 ### Realtime MMO town room
