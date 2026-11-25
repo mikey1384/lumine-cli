@@ -32,7 +32,7 @@ test('link-block output says what changed and that subdomains are covered', () =
   assert.match(list.join('\n'), /1 blocked site/);
   assert.match(list.join('\n'), /example\.com .*#5.*scam/);
   assert.match(formatLinkBlockResult({ operation: op('add', 'example.com', '--note', 'x'), data: { dryRun: true, host: 'example.com' } })[0], /Dry run: would block example\.com \(and its subdomains\)/);
-  assert.match(formatLinkBlockResult({ operation: op('add', 'example.com', '--note', 'x', '--confirm'), data: { dryRun: false, changed: true, host: 'example.com', note: 'x' } })[0], /^Blocked example\.com.*within about 15 minutes/);
+  assert.match(formatLinkBlockResult({ operation: op('add', 'example.com', '--note', 'x', '--confirm'), data: { dryRun: false, changed: true, host: 'example.com', note: 'x' } })[0], /^Blocked example\.com \(and its subdomains\) for app links and posted links.*within about 15 minutes/);
   assert.deepEqual(formatLinkBlockResult({ operation: op('list'), data: { hosts: [] } }), ['No blocked sites.']);
 });
 
@@ -52,6 +52,11 @@ test('social report prints the app link counts and the top apps', () => {
         window: { shown: 9, opened: 6, cancelled: 3, rejected: 4, blocked: 1 },
         topBuilds: [{ buildId: 884, shown: 7, opened: 5, cancelled: 2, rejected: 1, blocked: 0 }]
       },
+      postedLinks: {
+        lastCompletedDay: { blocked: 4, unchecked: 1 },
+        inProgressDay: { blocked: 2, unchecked: 0 },
+        window: { blocked: 6, unchecked: 1 }
+      },
       flags: [],
       notes: []
     }
@@ -61,4 +66,5 @@ test('social report prints the app link counts and the top apps', () => {
   assert.match(text, /past 7 day\(s\) 9 shown/);
   assert.match(text, /Top apps by link sheets \(past 7 day\(s\)\)/);
   assert.match(text, /#884: 7 shown, 5 opened/);
+  assert.match(text, /Posted links \(blocked-site list on posts, comments, chat, profiles\): last day 4 blocked taps, 1 unchecked; today so far 2 blocked taps, 0 unchecked; past 7 day\(s\) 6 blocked taps/);
 });
