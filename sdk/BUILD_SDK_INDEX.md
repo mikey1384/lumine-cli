@@ -2,7 +2,7 @@
 
 Version: 1.102.0
 Updated: 2026-11-25
-Generated: 2026-11-25T00:24:12.511Z
+Generated: 2026-11-25T00:38:36.550Z
 
 ## Platform rules
 Each rule below is a way an app breaks once it runs inside Twinkle's sandboxed frame, even when the code itself is correct. They outrank every other guideline: follow them in every change, including small ones, and fix any break of them you see in code you touch.
@@ -266,7 +266,7 @@ files:read, media:read, media:write, live:read, live:write, user:read, users:rea
   - Twinkle pages (subjects, apps, profiles and other content) open in place without the sheet, as openContent does, and resolve { opened: true, target: 'twinkle' }.
   - Only full https:// or http:// addresses (a bare www. address counts as https). javascript:, data:, blob:, file: and other schemes (LINK_SCHEME_NOT_ALLOWED), a user name or password in the address (LINK_HAS_CREDENTIALS), addresses over 2048 characters (LINK_TOO_LONG) and pages of the app itself (use navigate) are rejected.
   - One sheet at a time and only a few per minute per app (LINK_CONFIRM_IN_PROGRESS, LINK_RATE_LIMITED): never open links in a loop or on load.
-  - Sites on Twinkle's blocked list are refused with LINK_BLOCKED after Twinkle tells the viewer "This site can't be opened from Twinkle apps". Never retry or work around it.
+  - Sites on Twinkle's blocked list are refused with LINK_BLOCKED after Twinkle tells the viewer "This site can't be opened from Twinkle apps". Never retry or work around it. LINK_CHECK_UNAVAILABLE means Twinkle could not check the list just then; the viewer can tap again later.
   - A tap on an ordinary <a href="https://..."> link to another site (no target, or _blank, _self, _top, _parent), and window.open(url) inside a tap, take this same path automatically, so plain links work; call openLink when you need the result or the tap is not on a link. Links aimed at a named frame (target="player" loading into an iframe of the app) and links inside editable text are left alone.
   - Example: button.addEventListener('click', async () => { const { opened } = await Twinkle.app.openLink('https://en.wikipedia.org/wiki/Moon'); });
 

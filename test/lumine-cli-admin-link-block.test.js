@@ -42,7 +42,7 @@ test('social report prints the app link counts and the top apps', () => {
       status: 'ok',
       store: 'valkey',
       ttlDays: 35,
-      window: { from: '2026-11-18', lastCompletedDay: '2026-11-24' },
+      window: { days: 7, from: '2026-11-18', lastCompletedDay: '2026-11-24' },
       lastCompletedDay: { day: '2026-11-24', status: 'measured', headline: {}, counters: {} },
       trailing: { days: 6, measuredDays: 6, dailyAverage: null },
       inProgressDay: { day: '2026-11-25', status: 'measured', headline: {} },
@@ -58,6 +58,7 @@ test('social report prints the app link counts and the top apps', () => {
   });
   const text = lines.join('\n');
   assert.match(text, /App links \(Twinkle\.app\.openLink sheet\): last day 5 shown, 3 opened, 2 cancelled, 4 rejected \(1 blocked sites\)/);
-  assert.match(text, /window 9 shown/);
+  assert.match(text, /past 7 day\(s\) 9 shown/);
+  assert.match(text, /Top apps by link sheets \(past 7 day\(s\)\)/);
   assert.match(text, /#884: 7 shown, 5 opened/);
 });
