@@ -117,7 +117,7 @@ test("--yes merges with the previewed owner and a stable key; without --publish 
   assert.equal(result.status, "success");
   assert.equal(api.calls[1].url, "https://api.test/cli/admin/builds/admin-merge");
   assert.deepEqual(api.calls[1].body, { branchBuildId: 3045, expectedOwnerUserId: 44, expectedBranchHash: "9".repeat(64), notifyOwner: true, dryRun: false });
-  assert.equal(api.calls[1].headers["x-lumine-idempotency-key"], adminMergeRequestKey(3045));
+  assert.equal(api.calls[1].headers["x-lumine-idempotency-key"], adminMergeRequestKey(3045, "9".repeat(64)));
 });
 
 test("--publish: merge, publish dry run, then publish that exact snapshot with the reward receipt; one owner notice", async () => {
@@ -258,4 +258,10 @@ test("builds publish: parses the Main and --branch; shows the checks, asks unles
     branchBuildId: 3045,
     notifyOwner: true,
   });
+});
+
+test("admin merge request key changes with the branch content", () => {
+  assert.notEqual(adminMergeRequestKey(3045, "a".repeat(64)), adminMergeRequestKey(3045, "b".repeat(64)));
+  assert.equal(adminMergeRequestKey(3045, "a".repeat(64)), adminMergeRequestKey(3045, "a".repeat(64)));
+  assert.ok(adminMergeRequestKey(3045, "a".repeat(64)).length <= 80);
 });
