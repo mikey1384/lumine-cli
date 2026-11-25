@@ -32,7 +32,7 @@ test('link-block output says what changed and that subdomains are covered', () =
   assert.match(list.join('\n'), /1 blocked site/);
   assert.match(list.join('\n'), /example\.com .*#5.*scam/);
   assert.match(formatLinkBlockResult({ operation: op('add', 'example.com', '--note', 'x'), data: { dryRun: true, host: 'example.com' } })[0], /Dry run: would block example\.com \(and its subdomains\)/);
-  assert.match(formatLinkBlockResult({ operation: op('add', 'example.com', '--note', 'x', '--confirm'), data: { dryRun: false, changed: true, host: 'example.com', note: 'x' } })[0], /^Blocked example\.com/);
+  assert.match(formatLinkBlockResult({ operation: op('add', 'example.com', '--note', 'x', '--confirm'), data: { dryRun: false, changed: true, host: 'example.com', note: 'x' } })[0], /^Blocked example\.com.*within about 15 minutes/);
   assert.deepEqual(formatLinkBlockResult({ operation: op('list'), data: { hosts: [] } }), ['No blocked sites.']);
 });
 
