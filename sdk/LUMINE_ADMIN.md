@@ -1422,6 +1422,8 @@ lumine admin reward-review propose 2 --dir /private/tmp/reward-review-2 \
   --config rules.json --reason "Moved the claim after the stage clears" --json  # …and offer it
 lumine admin reward-review propose 2 --dir /private/tmp/reward-review-2 --config rules.json \
   --title "Word Forge" --thumbnail cover.png --json         # …also offering a new name and thumbnail
+lumine admin reward-review propose 2 --dir /private/tmp/reward-review-2 \
+  --without-rewards --reason "Removed rewards so the app can publish as a normal app" --json  # …or offer a rewards-removed copy
 lumine admin reward-review reject 2 --reason "Rewards fire on game over; nothing is earned" --json
 lumine admin reward-review revoke 2 --reason "Farmable; pausing until redesigned" --json
 ```
@@ -1504,19 +1506,22 @@ values under the build lock before freezing content; a change returns
 Saving a new preflight is read-only and is not approval. These commands require
 the matching API and CLI release.
 
-`propose <id> --dir <edited> --config rules.json [--reason]` sends the edited
-directory (text files only; dotfiles and tool folders skipped) as the
-reviewer's proposal: the review moves to `changes_offered`, the creator's card
-and workspace show the note and every changed line, and the creator's
-**Accept & go live** publishes exactly those files with these rules (their
+`propose <id> --dir <edited> (--config rules.json | --without-rewards) [--reason]`
+sends the edited directory (text files only; dotfiles and tool folders skipped)
+as the reviewer's proposal: the review moves to `changes_offered`, the
+creator's card and workspace show the note and every changed line, and the
+creator's **Accept & go live** publishes exactly those files with these rules
+— or without XP & Coin rewards when `--without-rewards` is passed (their
 workspace is replaced by the accepted version). **No thanks** rejects the
-request (`declinedByCreator: true`). A proposal must still use the rewards
-SDK, must differ from the submitted snapshot, and is refused once the creator
-saves past the submitted version. Offering again replaces the earlier offer;
-approving or rejecting while an offer is out decides the request as
+request (`declinedByCreator: true`). A `--config` proposal must still use the
+rewards SDK; a `--without-rewards` proposal strips XP & Coin rewards (and must
+remove `/rewards.json` from `--dir`) so the app can go live as a normal app.
+Every proposal must differ from the submitted snapshot and is refused once the
+creator saves past the submitted version. Offering again replaces the earlier
+offer; approving or rejecting while an offer is out decides the request as
 submitted. The website equivalent is the Management panel's "Edit a copy to
 propose changes" (a private workspace copy owned by the reviewer) followed by
-"Offer my copy with these rules".
+"Offer my copy with these rules" (or offering it without rewards).
 
 **Try this version.** While an offer is `changes_offered`, the creator and the reviewer (and nobody else) get a **Try this version** button on the chat card, in the creator's reward settings and in the Management approvals panel. It plays the offered `proposalSnapshot` as a normal app preview through `GET /build/preview/build/:buildId/reward-proposal/:reviewId`, with a token of its own scope (`reward-proposal:preview`, bound to viewer, build, review and revision; re-checked on every file request). XP and Coins inside it are simulated against the offered rules and never pay. The app's own SDK data calls (privateDb, sharedDb…) still reach the build's real data as the viewer, like a draft preview, and the modal says so. A newer revision or an answered offer closes the preview (409).
 

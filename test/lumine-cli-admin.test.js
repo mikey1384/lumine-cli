@@ -6613,8 +6613,11 @@ test("sponsor administration commands preserve their audited targets and decisio
 });
 
 test("reward-review commands are run-independent and carry the reviewer's rules on approve only", async (t) => {
-  const { readRewardConfigFile, writeRewardReviewSnapshot } =
-    await import("../lib/admin.js");
+  const {
+    printRewardReviewResult,
+    readRewardConfigFile,
+    writeRewardReviewSnapshot,
+  } = await import("../lib/admin.js");
   // reward-review is an alias of `lumine admin review` fixed to rewards.
   assert.deepEqual(
     parseAdminOperation(parseArgs(["admin", "reward-review", "list"])),
@@ -6881,12 +6884,145 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
       "Removed copied rewards so this fork can publish right away.",
     ]),
   );
+  assert.equal(propose.withoutRewards, false);
   assert.equal(withoutRewardsPropose.name, "reward-review.propose");
+  assert.equal(withoutRewardsPropose.withoutRewards, true);
   assert.deepEqual(withoutRewardsPropose.body.config, {
     userDailyXP: 0,
     userDailyCoins: 0,
     rules: [],
   });
+  const reviewWithoutRewardsPropose = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "review",
+      "propose",
+      "rewards:2",
+      "--dir",
+      editedDir,
+      "--without-rewards=true",
+    ]),
+  );
+  assert.equal(reviewWithoutRewardsPropose.name, "reward-review.propose");
+  assert.equal(reviewWithoutRewardsPropose.withoutRewards, true);
+  assert.deepEqual(reviewWithoutRewardsPropose.body.config, {
+    userDailyXP: 0,
+    userDailyCoins: 0,
+    rules: [],
+  });
+  // Explicit falsey inline values turn --without-rewards off rather than on.
+  for (const offValue of ["false", "0", "no", "off"]) {
+    const parsedOff = parseArgs([
+      "admin",
+      "reward-review",
+      "propose",
+      "2",
+      "--dir",
+      editedDir,
+      `--without-rewards=${offValue}`,
+    ]);
+    assert.equal(parsedOff.adminWithoutRewards, false);
+    assert.throws(() => parseAdminOperation(parsedOff), /--config/);
+    const withConfigAndOff = parseAdminOperation(
+      parseArgs([
+        "admin",
+        "reward-review",
+        "propose",
+        "2",
+        "--dir",
+        editedDir,
+        "--config",
+        rulesPath,
+        `--without-rewards=${offValue}`,
+      ]),
+    );
+    assert.equal(withConfigAndOff.withoutRewards, false);
+    assert.deepEqual(withConfigAndOff.body.config, rules);
+  }
+  // --without-rewards is refused on every non-propose review subcommand.
+  for (const args of [
+    ["admin", "reward-review", "list", "--without-rewards"],
+    ["admin", "reward-review", "show", "2", "--without-rewards"],
+    ["admin", "reward-review", "get", "2", "--without-rewards"],
+    ["admin", "reward-review", "approve", "2", "--without-rewards"],
+    ["admin", "reward-review", "reject", "2", "--without-rewards"],
+    ["admin", "reward-review", "revoke", "2", "--without-rewards"],
+    ["admin", "review", "list", "--without-rewards"],
+    ["admin", "review", "show", "rewards:2", "--without-rewards"],
+    ["admin", "review", "approve", "rewards:2", "--without-rewards"],
+  ]) {
+    assert.throws(
+      () => parseAdminOperation(parseArgs(args)),
+      /--without-rewards is only used with propose/,
+    );
+  }
+  // --without-rewards refuses a directory that still contains /rewards.json
+  // before any remote preparation (e.g. thumbnail upload) runs.
+  const editedWithRewardsDir = path.join(dir, "edited-with-rewards");
+  fs.mkdirSync(editedWithRewardsDir, { recursive: true });
+  fs.writeFileSync(path.join(editedWithRewardsDir, "index.html"), "<h1>Hi</h1>");
+  fs.writeFileSync(
+    path.join(editedWithRewardsDir, "rewards.json"),
+    JSON.stringify({ rules: [] }),
+  );
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "reward-review",
+          "propose",
+          "2",
+          "--dir",
+          editedWithRewardsDir,
+          "--without-rewards",
+          "--thumbnail",
+          coverPath,
+        ]),
+      ),
+    /\/rewards\.json/,
+  );
+  // Inline usage errors mention --without-rewards for both review namespaces.
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "review", "help"])),
+    /--without-rewards/,
+  );
+  assert.throws(
+    () => parseAdminOperation(parseArgs(["admin", "reward-review", "help"])),
+    /--without-rewards/,
+  );
+  // Human-readable proposal confirmation distinguishes rewards-removed offers.
+  const captureRewardReviewPrint = (operation) => {
+    const lines = [];
+    const originalLog = console.log;
+    console.log = (...args) => lines.push(args.join(" "));
+    try {
+      printRewardReviewResult({
+        operation,
+        data: {
+          review: {
+            id: 2,
+            status: "changes_offered",
+            buildId: 10,
+            sourceVersionId: 1,
+            title: "Test App",
+          },
+        },
+      });
+    } finally {
+      console.log = originalLog;
+    }
+    return lines.join("\n");
+  };
+  assert.match(
+    captureRewardReviewPrint(withoutRewardsPropose),
+    /without XP & Coin rewards/,
+  );
+  assert.doesNotMatch(
+    captureRewardReviewPrint(withoutRewardsPropose),
+    /with these rules/,
+  );
+  assert.match(captureRewardReviewPrint(propose), /with these rules/);
   assert.throws(
     () =>
       parseAdminOperation(
