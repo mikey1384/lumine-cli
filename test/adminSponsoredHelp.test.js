@@ -93,7 +93,7 @@ test("the status report prints wand outcomes: per task success and payer, top fa
       events: [],
       outcomes: {
         tasks: [
-          { task: "app_address", presses: 5, done: 2, failed: 1, abandoned: 1, notAvailable: 1, sponsored: 3, selfPaid: 1, twinkle: 0, successRate: 0.67, spentUnits: 50000 },
+          { task: "app_address", presses: 5, done: 2, failed: 1, abandoned: 1, notAvailable: 1, unpressed: 2, sponsored: 3, selfPaid: 1, twinkle: 0, successRate: 0.67, spentUnits: 50000 },
           { task: "chat_session", presses: 1, done: 0, failed: 0, abandoned: 1, notAvailable: 0, successRate: null, spentUnits: 900 }
         ],
         topFailures: [{ task: "app_address", code: "app_not_yours", count: 1 }],
@@ -103,7 +103,7 @@ test("the status report prints wand outcomes: per task success and payer, top fa
     }
   });
   const text = lines.join("\n");
-  assert.match(text, /app_address: 5 pressed, 2 done, 1 failed, 1 abandoned, 1 not available · success 67% · paid by sponsor 3, own Energy 1/);
+  assert.match(text, /app_address: 5 pressed, 2 done, 1 failed, 1 abandoned, 1 not available \(\+2 never pressed\) · success 67% · paid by sponsor 3, own Energy 1/);
   assert.match(text, /chat_session: .* success n\/a/);
   assert.match(text, /top failures: app_address:app_not_yours 1/);
   assert.match(text, /failed steps: action:open_app_address failed:app_not_yours 1/);
