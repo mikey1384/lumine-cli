@@ -83,3 +83,32 @@ test("sponsored-help switches accept owner, and welcome preview takes a user and
   });
   assert.match(lines.join("\n"), /TEST student welcome to mikey/);
 });
+
+test("the status report prints wand outcomes: per task success and payer, top failures, open card spots", () => {
+  const lines = formatSponsoredHelpResult({
+    operation: { name: "sponsored-help.status" },
+    data: {
+      switch: "on",
+      fromDay: 100,
+      events: [],
+      outcomes: {
+        tasks: [
+          { task: "app_address", presses: 5, done: 2, failed: 1, abandoned: 1, notAvailable: 1, unpressed: 2, sponsored: 3, selfPaid: 1, twinkle: 0, successRate: 0.67, spentUnits: 50000 },
+          { task: "chat_session", presses: 1, done: 0, failed: 0, abandoned: 1, notAvailable: 0, successRate: null, spentUnits: 900 }
+        ],
+        topFailures: [{ task: "app_address", code: "app_not_yours", count: 1 }],
+        stepFailures: [{ step: "action:open_app_address failed:app_not_yours", count: 1 }],
+        openCards: [{ openCardId: 7, senderId: 5, taskKind: "app_address", sponsorCap: 10, sponsoredUsed: 3, sponsoredHeld: 1, selfPaid: 4, presses: 8, done: 2, sponsoredUnits: 40000, selfUnits: 9000, closed: false }]
+      }
+    }
+  });
+  const text = lines.join("\n");
+  assert.match(text, /app_address: 5 pressed, 2 done, 1 failed, 1 abandoned, 1 not available \(\+2 never pressed\) · success 67% · paid by sponsor 3, own Energy 1/);
+  assert.match(text, /chat_session: .* success n\/a/);
+  assert.match(text, /top failures: app_address:app_not_yours 1/);
+  assert.match(text, /failed steps: action:open_app_address failed:app_not_yours 1/);
+  assert.match(text, /open card 7 \(sender 5, app_address\): sponsored 3\/10 started \(\+1 waiting\), 4 on their own Energy, 8 pressed, 2 done/);
+  // an API from before the outcome record prints nothing new
+  const old = formatSponsoredHelpResult({ operation: { name: "sponsored-help.status" }, data: { switch: "on", fromDay: 1, events: [] } });
+  assert.doesNotMatch(old.join("\n"), /Wand outcomes/);
+});
