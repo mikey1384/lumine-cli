@@ -83,3 +83,32 @@ test("sponsored-help switches accept owner, and welcome preview takes a user and
   });
   assert.match(lines.join("\n"), /TEST student welcome to mikey/);
 });
+
+test("the status report prints wand outcomes: per task success, top failures, open card slots", () => {
+  const lines = formatSponsoredHelpResult({
+    operation: { name: "sponsored-help.status" },
+    data: {
+      switch: "on",
+      fromDay: 100,
+      events: [],
+      outcomes: {
+        tasks: [
+          { task: "app_address", presses: 5, done: 2, failed: 1, abandoned: 1, notAvailable: 1, successRate: 0.67, spentUnits: 50000 },
+          { task: "chat_session", presses: 1, done: 0, failed: 0, abandoned: 1, notAvailable: 0, successRate: null, spentUnits: 900 }
+        ],
+        topFailures: [{ task: "app_address", code: "app_not_yours", count: 1 }],
+        stepFailures: [{ step: "action:open_app_address failed:app_not_yours", count: 1 }],
+        openCards: [{ openCardId: 7, senderId: 5, taskKind: "app_address", used: 3, cap: 20, done: 2, spentUnits: 40000, closed: false }]
+      }
+    }
+  });
+  const text = lines.join("\n");
+  assert.match(text, /app_address: 5 pressed, 2 done, 1 failed, 1 abandoned, 1 not available · success 67%/);
+  assert.match(text, /chat_session: .* success n\/a/);
+  assert.match(text, /top failures: app_address:app_not_yours 1/);
+  assert.match(text, /failed steps: action:open_app_address failed:app_not_yours 1/);
+  assert.match(text, /open card 7 \(sender 5, app_address\): 3\/20 used, 2 done/);
+  // an API from before the outcome record prints nothing new
+  const old = formatSponsoredHelpResult({ operation: { name: "sponsored-help.status" }, data: { switch: "on", fromDay: 1, events: [] } });
+  assert.doesNotMatch(old.join("\n"), /Wand outcomes/);
+});
