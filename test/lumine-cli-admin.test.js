@@ -6868,6 +6868,42 @@ test("reward-review commands are run-independent and carry the reviewer's rules 
       ),
     /--title/,
   );
+  const withoutRewardsPropose = parseAdminOperation(
+    parseArgs([
+      "admin",
+      "reward-review",
+      "propose",
+      "2",
+      "--dir",
+      editedDir,
+      "--without-rewards",
+      "--reason",
+      "Removed copied rewards so this fork can publish right away.",
+    ]),
+  );
+  assert.equal(withoutRewardsPropose.name, "reward-review.propose");
+  assert.deepEqual(withoutRewardsPropose.body.config, {
+    userDailyXP: 0,
+    userDailyCoins: 0,
+    rules: [],
+  });
+  assert.throws(
+    () =>
+      parseAdminOperation(
+        parseArgs([
+          "admin",
+          "reward-review",
+          "propose",
+          "2",
+          "--dir",
+          editedDir,
+          "--config",
+          rulesPath,
+          "--without-rewards",
+        ]),
+      ),
+    /not both/,
+  );
   assert.throws(
     () =>
       parseAdminOperation(
