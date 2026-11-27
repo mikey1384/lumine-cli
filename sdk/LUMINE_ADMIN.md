@@ -2924,16 +2924,23 @@ permissions are not revoked by a basic recommendation. Then apply and report:
 
 ```bash
 lumine admin featured comments recommend --file featured-decisions.json \
-  --checkpoint featured-recommend.json --json
+  --checkpoint featured-read.json --json
 # Retry exactly this file/checkpoint with --resume after interruption.
 lumine admin featured comments report --checkpoint featured-read.json --json
 ```
 
-Use separate scan and recommendation checkpoints. Selection files are capped at
-20,000 unique comments/2 MiB; split larger work into explicit batches. Each
-target must belong to the reviewed page and an acknowledged Subject chain in
-this same run. The API re-reads it, rejects changed/hidden/deleted comments,
-system notifications and Zero/Ciel's own comments, and uses the normal canonical
+`featured comments recommend` accepts the scan's `--checkpoint` file directly
+(or a new standalone batch checkpoint file). When given the scan checkpoint, the
+CLI locks it, verifies its run, server, `reviewId`, acknowledged `coverageId`,
+and downloaded page chain, and records each recommendation batch under its exact
+selection fingerprint without overwriting the scan snapshot—so
+`featured comments report --checkpoint featured-read.json` keeps working, while
+re-running the same batch still requires `--resume` and a different run, review,
+or coverage is rejected. Selection files are capped at 20,000 unique
+comments/2 MiB; split larger work into explicit batches. Each target must belong
+to the reviewed page and an acknowledged Subject chain in this same run. The API
+re-reads it, rejects changed/hidden/deleted comments, system notifications and
+Zero/Ciel's own comments, and uses the normal canonical
 recommendation/reward/deduplication path. A blocked Subject does not prevent
 encouragement on acknowledged Subjects. Batches stop at a failed decision,
 retain confirmed receipts, and resume without replaying completed decisions.
